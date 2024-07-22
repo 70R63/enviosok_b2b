@@ -1,0 +1,15 @@
+<IfModule mod_rewrite.c>
+
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+    # Rewrite "everything" to the "public" subdirectory if not already
+    # This ignores existing files/dirs in the document root
+    RewriteCond %{REQUEST_URI} ^/(.*)
+    RewriteRule !^public/ public/%1
+
+</IfModule>
+
+
