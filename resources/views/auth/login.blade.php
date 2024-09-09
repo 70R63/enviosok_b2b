@@ -51,7 +51,7 @@
                                             @if (Route::has('password.request'))
                                                 <div class="mb-1"><a href="{{ route('password.request') }}">¿Olvidaste tu contraseña?</a></div>
                                             @endif
-                                            <div>¿No tienes una cuenta? <a href="{{route('register')}}">Regístrate aquí</a></div>
+{{--                                            <div>¿No tienes una cuenta? <a href="{{route('register')}}">Regístrate aquí</a></div>--}}
                                         </div>
                                     </div>
                                 </div>
