@@ -1,13 +1,13 @@
 <div class="" >
-	<b class="tx-18 text-white">HOLA {{ Auth::user()->name }}, BIENVENIDO AL PORTAL DE '{{ Session::get('empresa_nombre') }}'</b> 
+	<span class="tx-18 text-header">Hola {{ Auth::user()->name }}, bienvenido al portal de <strong>{{ Session::get('empresa_nombre') }}</strong></span>
 
 	{!! Form::hidden('empresaIdHeader'
 	    , Auth::user()->empresa_id
 	    ,['class'       => 'form-control'
 	        ,'id'       => 'empresaIdHeader'
-	        
+
 	    ])
 	!!}
 
-		
+
 </div>

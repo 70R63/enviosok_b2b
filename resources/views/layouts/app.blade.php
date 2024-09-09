@@ -73,7 +73,7 @@
         </main>
         <footer class="mt-auto text-center text-lg-start main-footer">
             <div class="text-center">
-                <span>Copyright © 2022 <a href="#">ULALAXPRESS</a>. Designed by <a href="#">TED</a> All rights reserved.</span>
+                <span>Copyright © 2024 <a href="#">ENVIOS OK</a>. Designed by <a href="#">TED</a> All rights reserved.</span>
             </div>
         </footer>
     </div>

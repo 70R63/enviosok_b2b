@@ -8,10 +8,9 @@
     </div>
     <div class="d-flex">
         <div class="justify-content-center">
-            <a type="button" class="btn btn-primary my-2 btn-icon-text" href="{{ route('ltds.create') }}" >
+            <a type="button" class="btn btn-primary my-2 btn-icon-text bg-primary text-white rounded-5 px-3" href="{{ route('ltds.create') }}" >
                 <i class="fe fe-download-cloud mr-2"> Habilitar</i>
             </a>
         </div>
-    </div>                          
+    </div>
 </div>
- 

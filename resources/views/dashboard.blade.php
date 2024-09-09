@@ -13,7 +13,7 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
         <!-- Title -->
-        <title>{{ config('app.name', 'Laravel') }} - Plataforma de envios</title>
+        <title>Envíos nacionales: Cotiza tu envío y manda paquetes de forma segura</title>
 
         <!-- js -->
         <script src="{{ asset('js/chart.js-3.9.1/package/dist/chart.js') }}" ></script>
@@ -81,20 +81,25 @@
             <div class="main-sidebar main-sidebar-sticky side-menu">
 
                 <div class="sidemenu-logo">
-                    <a class="main-logo" href="https://xpertamexico.com/" target="_blank">
-                        <img src="{{ url('spruha/img/brand/xpertaLogoTrans-110x91-2.png') }}" class="header-brand-img desktop-logo" alt="logo">
-                        <img src="{{ url('spruha/img/brand/xperta-50x56-removebg-preview.png') }}" class="header-brand-img icon-logo" alt="logo">
-                        <img src="{{ url('spruha/img/brand/ulalaBco.png') }}" class="header-brand-img desktop-logo theme-logo" alt="logo">
-                        <img src="{{ url('spruha/img/brand/ulalaBco.png') }}" class="header-brand-img icon-logo theme-logo" alt="logo">
+                    <a class="main-logo" href="https://enviosok.com/" target="_blank">
+                        <img src="{{ url('assets/Envios_OK_primario.svg') }}" class="header-brand-img desktop-logo" alt="logo">
+
+                        <img src="{{ url('img/personaje.svg') }}" class="header-brand-img icon-logo" alt="logo">
+
                     </a>
                 </div>
 
                 <div class="main-sidebar-body">
                     <ul class="nav">
                         <li class="nav-header"><span class="nav-label"><br></span></li>
-                        <li class="nav-header"><span class="nav-label">MENU</span></li>
+                        <li class="nav-header">
+                            <span class="nav-label text-blue">MENU</span>
+                        </li>
                         <li class="nav-item ">
-                            <a class="nav-link" href="{{ route('dashboard') }}"><span class="shape1"></span><span class="shape2"></span><i class="ti-home sidemenu-icon"></i><span class="sidemenu-label">DASHBOARD</span></a>
+                            <a class="nav-link" href="{{ route('dashboard') }}">
+                                <img src="{{asset('assets/azul_1.svg')}}" class="ml-1" height="35"  alt="">
+                                <span class="sidemenu-label">Dashboard</span>
+                            </a>
                         </li>
                         @canany(['isSysAdmin'])
                             @include('menu.cfgltds')
@@ -176,7 +181,7 @@
 
             <!-- Main Header-->
             <div class="main-header side-header sticky">
-                <div class="container-fluid">
+                <div class="container-fluid rounded-4">
                     <a class="main-header-menu-icon" href="#" id="mainSidebarToggle"><span></span></a>
                     <div class="main-header-center">
                         <div class="input-group">
@@ -219,7 +224,7 @@
                     <div class="collapse navbar-collapse" id="navbarSupportedContent-4">
 
                         <div class="d-flex order-lg-2 ml-auto">
-                            <b class="tx-18 text">HOLA {{ Auth::user()->name }}, BIENVENIDO AL PORTAL DE '{{ Session::get('empresa_nombre') }}'</b>
+                            <b class="tx-18">Hola {{ ucfirst(Auth::user()->name) }}, bienvenido al portal de '{{ Session::get('empresa_nombre') }}'</b>
                         </div>
 
                         @include('perfil.index')
@@ -231,7 +236,7 @@
 
             <!-- Main Content-->
             <div class="main-content side-content pt-0">
-                <div class="container-fluid">
+                <div class="container-fluid p-4">
                     @include('mensaje.error')
                     @include('mensaje.danger')
                     @include('mensaje.exitoso')
@@ -245,15 +250,15 @@
             <!-- End Main Content-->
 
             <!-- Main Footer-->
-            <div class="main-footer text-center" >
-                <div class="container">
-                    <div class="row row-sm">
-                        <div class="col-md-12">
-                            <span>Copyright © 2022 <a href="https://www.xpertamexico.com/" target="_blank">XPERTAMEXICO</a>. Designed by <a href="#">TED</a> All rights reserved.</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
+{{--            <div class="main-footer text-center" >--}}
+{{--                <div class="container">--}}
+{{--                    <div class="row row-sm">--}}
+{{--                        <div class="col-md-12">--}}
+{{--                            <span>Copyright © 2022 <a href="https://www.xpertamexico.com/" target="_blank">XPERTAMEXICO</a>. Designed by <a href="#">TED</a> All rights reserved.</span>--}}
+{{--                        </div>--}}
+{{--                    </div>--}}
+{{--                </div>--}}
+{{--            </div>--}}
             <!--End Footer-->
         </div>
 

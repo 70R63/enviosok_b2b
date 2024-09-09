@@ -1,11 +1,9 @@
 <li class="nav-item">
-	<a class="nav-link with-sub" href="#">
-		<span class="shape1"></span>
-		<span class="shape2"></span>
-		<i class="ti-wallet sidemenu-icon"></i>
-		<span class="sidemenu-label">F AC T U R A C I O N</span>
-		<i class="angle fe fe-chevron-right"></i>
-	</a>
+    <a class="nav-link with-sub" href="#">
+        <img src="{{asset('assets/azul_5_1.svg')}}" class="ml-1" height="35"  alt="">
+        <span class="sidemenu-label">Facturación</span>
+        <i class="angle fe fe-chevron-right"></i>
+    </a>
 	<ul class="nav-sub">
 		<li class="nav-sub-item">
 			<a class="nav-sub-link" href="crypto-dashbaord.html">Dashboard</a>

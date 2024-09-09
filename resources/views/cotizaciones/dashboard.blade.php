@@ -9,9 +9,9 @@
             <div class="card-body">
                 <div class="card-header border-bottom-0 pt-0 pl-0 pr-0 d-flex">
                     <div>
-                        <label class="main-content-label mb-2">Creacion</label> 
+                        <label class="main-content-label mb-2">Cotizacion</label>
                         <span class="d-block tx-12 mb-3 text-muted">
-                            Seccion para la creacion de una guia con diferentes metodos automatica, semi manual y manual 
+                            Esta sección te permitirá cotizar tus envíos, conocerás el costo de la guía antes de realizarla. Si ya tienes remitentes y destinatarios guardados en tu agenda podrás elegirlos de la lista desplegable y generar la guía de forma automática.
                         </span>
                     </div>
                 </div>
@@ -28,7 +28,7 @@
             <div class="card-body">
                 <div class="col-sm-5 ">
                     <div>
-                        <span class="tx-18 mb-3">PAQUETE</span> 
+                        <span class="tx-18 mb-3">PAQUETE</span>
                     </div>
                 </div>
                  @include('cotizaciones.forma.paquete')
@@ -45,18 +45,18 @@
                          @include('cotizaciones.forma.check_manual')
                     </div>
 
-                    
+
                     <div class="col-sm-5 my-auto text-sm-center">
                         @include('cotizaciones.forma.origen')
-                        
+
                     </div>
                     <div class="col-sm-5 my-auto text-sm-center">
                         @include('cotizaciones.forma.destino')
-                        
+
                     </div>
                     <div class="col-sm-10 my-auto text-sm-center clienteCombo" style="display:none" >
                         @include('cotizaciones.forma.clienteCombo')
-                        
+
                     </div>
 
                 </div>
@@ -68,24 +68,24 @@
 <!-- Row end -->
 
 <div class="col-lg-12">
-    <div class="form-group row justify-content-around">     
+    <div class="form-group row justify-content-around">
         <div>
-            <a id="cotizar" class="btn btn-primary" >Cotizar</a>    
+            <a id="cotizar" class="btn btn-primary" >Cotizar</a>
             <a id="limpiar" class="btn badge-dark" >Limpiar</a>
-            
-        </div>   
-    </div>  
+
+        </div>
+    </div>
 </div>
-{!! Form::close() !!}  
+{!! Form::close() !!}
 <!--Row-->
 <div class="row row-sm">
     <div class="col-lg-12 col-xl-12  col-md-12">
         <div class="card custom-card">
             <div class="card-body">
                 <div class="card-header border-bottom-0 pt-0 pl-0 pr-0 d-flex">
-                    
+
                 </div>
-                @include('cotizaciones.dashboard.tabla')    
+                @include('cotizaciones.dashboard.tabla')
             </div>
         </div>
     </div>
