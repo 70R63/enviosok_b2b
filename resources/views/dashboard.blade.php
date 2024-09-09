@@ -11,7 +11,7 @@
 
         <!-- CSRF Token -->
         <meta name="csrf-token" content="{{ csrf_token() }}">
-        
+
         <!-- Title -->
         <title>{{ config('app.name', 'Laravel') }} - Plataforma de envios</title>
 
@@ -28,10 +28,11 @@
         <link href="{{ url('spruha/plugins/web-fonts/plugin.css') }}"  rel="stylesheet"/>
 
         <!-- Style css-->
-        <link href="{{ url('spruha/css/style.css') }}"  rel="stylesheet">
-        <link href="{{ url('spruha/css/skins.css') }}"  rel="stylesheet">
-        <link id="theme" rel="stylesheet" type="text/css" media="all" href="{{ url('spruha/css/colors/color6.css') }}">
-       
+        <link href="{{ url('spruha/css/style.css?version=1') }}"  rel="stylesheet">
+        <link href="{{ url('spruha/css/custom.css?verion=1') }}"  rel="stylesheet">
+{{--        <link href="{{ url('spruha/css/skins.css') }}"  rel="stylesheet">--}}
+{{--        <link id="theme" rel="stylesheet" type="text/css" media="all" href="{{ url('spruha/css/colors/color6.css') }}">--}}
+
         <!-- Select2 css-->
         <link href="{{ url('spruha/plugins/select2/css/select2.min.css') }}"  rel="stylesheet">
 
@@ -40,7 +41,7 @@
 
         <!-- Sidemenu css-->
         <link href="{{ url('spruha/css/sidemenu/sidemenu.css') }}"  rel="stylesheet">
-        
+
         <!-- Internal DataTables css-->
         <link href="{{ url('spruha/plugins/datatable/dataTables.bootstrap4.min.css') }}" rel="stylesheet" />
         <link href="{{ url('spruha/plugins/datatable/responsivebootstrap4.min.css') }}" rel="stylesheet" />
@@ -54,7 +55,7 @@
         <!-- InternalFileupload css-->
         <link href="{{ url('spruha/plugins/fileuploads/css/fileupload.css') }}" rel="stylesheet" type="text/css"/>
 
-        
+
 
 
 
@@ -73,7 +74,7 @@
             btn.innerText = 'Enviando...'
         }
         </script>
-        
+
         <!-- Page -->
         <div class="page">
             <!-- Sidemenu -->
@@ -95,8 +96,8 @@
                         <li class="nav-item ">
                             <a class="nav-link" href="{{ route('dashboard') }}"><span class="shape1"></span><span class="shape2"></span><i class="ti-home sidemenu-icon"></i><span class="sidemenu-label">DASHBOARD</span></a>
                         </li>
-                        @canany(['isSysAdmin'])  
-                            @include('menu.cfgltds') 
+                        @canany(['isSysAdmin'])
+                            @include('menu.cfgltds')
                             @include('menu.empresas')
                             @include('menu.direcciones')
                             @include('menu.ltd')
@@ -104,11 +105,11 @@
                             @include('menu.guia')
                             @include('menu.roles')
                             @include('menu.reportes')
-                            @include('menu.saldos')  
+                            @include('menu.saldos')
                         @endcanany
 
                         @canany(['isAdmin'])
-                            @include('menu.cfgltds') 
+                            @include('menu.cfgltds')
                             @include('menu.empresas')
                             @include('menu.direcciones')
                             @include('menu.ltd')
@@ -160,14 +161,14 @@
                             @include('menu.direcciones')
                             @include('menu.usuario')
                             @include('menu.guia')
-                            
+
                         @endcanany
 
                         @canany(['isUsuario'])
                             @include('menu.guia')
-                            
-                        @endcanany                      
-                        
+
+                        @endcanany
+
                     </ul>
                 </div>
             </div>
@@ -187,17 +188,17 @@
                     <div class="main-header-right">
 
                         @include("dashboard.header_saldo")
-                        
+
                     </div>
                     <div class="main-header-right">
-                        
+
                         @include('perfil.index')
-                        
+
                         <button class="navbar-toggler navresponsive-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent-4" aria-controls="navbarSupportedContent-4" aria-expanded="false" aria-label="Toggle navigation">
                             <i class="fe fe-more-vertical header-icons navbar-toggler-icon"></i>
                         </button><!-- Navresponsive closed -->
                     </div>
-                    
+
                 </div>
             </div>
 
@@ -206,11 +207,11 @@
             <!-- Mobile-header -->
             <div class="mobile-main-header">
                 <div class="input-group">
-                           
+
                     <div class="tx-left">
-                        Monto : $123.12    
+                        Monto : $123.12
                     </div>
-                    
+
                      <input type="search" class="form-control rounded-0" placeholder="Search for anything...">
                 </div>
 
@@ -220,9 +221,9 @@
                         <div class="d-flex order-lg-2 ml-auto">
                             <b class="tx-18 text">HOLA {{ Auth::user()->name }}, BIENVENIDO AL PORTAL DE '{{ Session::get('empresa_nombre') }}'</b>
                         </div>
-                    
+
                         @include('perfil.index')
-                        
+
                     </div>
                 </div>
             </div>
@@ -237,7 +238,7 @@
                     <div class="inner-body">
                         <!-- Page Content -->
                         @yield('content')
-                        <!-- End Page Content -->     
+                        <!-- End Page Content -->
                     </div>
                 </div>
             </div>
@@ -255,7 +256,7 @@
             </div>
             <!--End Footer-->
         </div>
-        
+
 
         @routes
         <!-- Jquery js-->
@@ -296,7 +297,7 @@
 
         <!-- Internal Parsley js-->
         <script src="{{ url('spruha/plugins/parsleyjs/parsley.min.js') }}"></script>
-        
+
         <!-- Internal Data Table js -->
         <script src="{{ url('spruha/plugins/datatable/jquery.dataTables.min.js') }}"></script>
         <script src="{{ url('spruha/plugins/datatable/dataTables.bootstrap4.min.js') }}"></script>
@@ -327,10 +328,10 @@
         <script src="{{url('spruha/plugins/fileuploads/js/fileupload.js') }}"></script>
         <script src="{{url('spruha/plugins/fileuploads/js/file-upload.js') }}"></script>
 
-        
-        
+
+
         <!-- Personalizacion -->
-        <script src="{{ asset('js/guardar.js') }}" ></script> 
+        <script src="{{ asset('js/guardar.js') }}" ></script>
         <script src="{{ asset('js/tipoEnvio.js') }}" ></script>
         <script src="{{ asset('js/cotizar.js') }}" ></script>
         <script src="{{ asset('js/empresa.js') }}" ></script>
@@ -348,13 +349,13 @@
         <script src="{{ asset('js/saldos/pagos.js') }}" ></script>
         @routes
         <script src="{{ asset('js/saldos/saldos.js') }}" ></script>
-        
-        
 
-{{--INTEGRACION DE ROLES Y USUARIOS--}} 
+
+
+{{--INTEGRACION DE ROLES Y USUARIOS--}}
 @yield('js_user_page')
 @yield('js_rol_page')
 
-        
+
     </body>
 </html>

@@ -4,11 +4,12 @@
 Project        :   SPRUHA - HTML5 Bootstrap Admin Template
 Version        :   V.1
 Create Date    :   03/10/20
-Copyright      :   Spruko Technologies Private Limited 
+Copyright      :   Spruko Technologies Private Limited
 Author         :   SprukoSoft
 Author URL     :   https://themeforest.net/user/sprukosoft
 Support	       :   support@spruko.com
 License        :   Licensed under ThemeForest License
+
 
 -------------------------------------------------------------------*/
 /*
@@ -108,7 +109,7 @@ License        :   Licensed under ThemeForest License
 /* ########## BOOTSTRAP OVERRIDES ########## */
 /* ###### Bootstrap ###### */
 :root {
-    --primary-bg-color: #0068ff;
+    --primary-bg-color: #4fbfa8;
     --primary-transparentcolor: #e4e9ff;
     --primary-bg-color: #0068ff;
     --indigo: #4b0082;
@@ -175,9 +176,10 @@ body {
     font-weight: 400;
     line-height: 1.5;
     text-align: left;
-    background-color: #ffffff;
+    /*background-color: #ffffff;*/
     font-family: "Roboto", sans-serif !important;
-    background: #EDF2F9;
+    /*background: #EDF9F1; */
+    background-color: #f7e1a7;
     color: #1d212f;
     direction: ltr;
     -webkit-font-smoothing: antialiased;
@@ -1618,7 +1620,6 @@ a.badge-dark.focus {
 
 /* ###### Breadcrumb ###### */
 /* ###### Buttons ###### */
-.btn,
 .sp-container button {
     line-height: 1.538;
     padding: 7px 20px;
@@ -4498,7 +4499,7 @@ fieldset:disabled a.btn {
 
 .form-control:disabled,
 .form-control[readonly] {
-    background-color: #f6f6ff;
+    background-color: #EDF9F1; /*chs*/
     opacity: 1;
 }
 
@@ -7573,6 +7574,15 @@ div.dataTables_wrapper div.dataTables_length select {
     margin-right: 10px;
 }
 
+.title::before {
+  font-size: 1em;
+  margin: 1.5em 0 0 0;
+  content: "Selecciona la opcion de tu preferencia";
+}
+
+.filter {
+  float: right;
+}
 /* ######  Datatables ###### */
 /* ###### Toast ###### */
 .toast {
@@ -73028,5 +73038,5 @@ body.horizontalmenu {
 .flex-container > b {
   background-color: #white;
   justify-content:flex-end;
-  
+
 }

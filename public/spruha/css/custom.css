@@ -1,0 +1,69 @@
+.main-header{
+    background-color: #f7e1a7 !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+.main-header>.container-fluid{
+     background-color: #fcda90 !important;
+    border-radius: 25px;
+ }
+
+.text-header{
+    color: #1C75BC !important;
+}
+
+.main-content-title{
+    color: #1C75BC !important;
+}
+.main-sidebar .nav-sub-item.active .nav-sub-link{
+    color: #1C75BC !important;
+}
+.page-header .breadcrumb-item.active{
+    color: #2b83c9 !important;
+}
+.text-blue{
+    color: #1C75BC !important;
+}
+.text-primary{
+    color: #1C75BC !important;
+}
+.card-radio {
+    cursor: pointer;
+}
+.card-radio input[type="radio"] {
+    display: none;
+}
+.card-radio input[type="radio"] + label {
+    border: 2px solid transparent;
+    display: block;
+    border-radius: .375rem;
+    padding: 0;
+}
+.card-radio input[type="radio"]:checked + label {
+    border-color: #1C75BC;
+}
+.card-radio input[type="radio"]:checked + label:before {
+    content: "\2713";
+    z-index: 999;
+    position: absolute;
+    top: 0.1rem;
+    right: 1.2rem;
+    font-size: 14px;
+    color: #ffffff;
+}
+.card-radio input[type="radio"]:checked + label:after {
+    content: "";
+    width: 20px;
+    height: 20px;
+    line-height: 17px;
+    border-style: solid;
+    border-width: 0 35px 35px 0px;
+    border-color: #1C75BC #1C75BC transparent;
+    display: block;
+    position: absolute;
+    top: 0;
+    right: 15px;
+}
+.card-radio .card-body {
+    pointer-events: none;
+}

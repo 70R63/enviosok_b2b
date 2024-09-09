@@ -1,5 +1,4 @@
 @import "../scss/variables";
-
 .dark-theme {
   .tx-inverse {
     color: $white;
@@ -262,7 +261,7 @@
 
   .table-dark {
     color: $white;
-    background-color: #fdfeff; 
+    background-color: #fdfeff;
 	> {
       th, td {
         background-color: #c8ccd3;
@@ -1736,7 +1735,7 @@
       color: $white;
     }
   }
-  
+
   .page-link {
     color: #fdfeff;
     background-color: #0e0e23;
@@ -5220,12 +5219,12 @@
       .media.flex-row-reverse .main-msg-wrapper {
            background-color: rgba(98, 89, 202, 0.2);
            color: #a6a0f1;
-       
+
            &:before, &:after {
              border-left-color: rgb(40, 37 ,85);
            }
       }
-  
+
       .media-body > div:last-child {
         color: #d0d0e2;
       }
@@ -6601,7 +6600,7 @@ body.dark-theme {
         background: rgba(255,255,255,0.05);
       }
       &:hover {
-          border-right: 0 !important; 
+          border-right: 0 !important;
           color:#fff;
       }
     }
@@ -6816,7 +6815,7 @@ body.dark-theme {
 .dark-theme .fc-theme-standard .fc-scrollgrid  {
     border-color: rgba(255, 255 ,255, 0.1);
 }
-.dark-theme .fc-theme-standard td, 
+.dark-theme .fc-theme-standard td,
 .dark-theme .fc-theme-standard th {
     border-color: rgba(255, 255 ,255, 0.1);
 }
@@ -6920,7 +6919,7 @@ body.dark-theme {
 @media (max-width: 599px){
 .dark-theme .mobile-main-header .nav-link.icon {
 		color: #d6d6da !important;
-		
+
 	 }
 }
 .dark-theme .navbar-toggler .header-icons:hover,.dark-theme .option-dots:hover{
@@ -6944,7 +6943,7 @@ body.dark-theme {
           border: 2px solid #46466d;
         }
       }
-  
+
       .main-avatar + {
         .main-img-user, .main-avatar {
           border: 2px solid #46466d;
