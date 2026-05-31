@@ -17,7 +17,7 @@ use App\Http\Controllers\LtdController;
 
 
 Route::get('/', function () {
-    return view('auth.login');
+    return view('welcome');
 });
 
 Route::resource('profile','userProfileController');
