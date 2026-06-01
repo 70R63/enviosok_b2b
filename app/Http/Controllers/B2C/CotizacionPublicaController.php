@@ -5,6 +5,9 @@ namespace App\Http\Controllers\B2C;
 use App\Http\Controllers\Controller;
 use App\Models\B2cCotizacion;
 use Illuminate\Http\Request;
+use MercadoPago\SDK;
+use MercadoPago\Preference;
+use MercadoPago\Item;
 
 class CotizacionPublicaController extends Controller
 {
@@ -115,7 +118,93 @@ public function procesarCheckout(Request $request, B2cCotizacion $cotizacion)
 
 public function pago(B2cCotizacion $cotizacion)
 {
-    return 'Pago pendiente para cotización #' . $cotizacion->id . ' por $' . number_format($cotizacion->precio, 2) . ' MXN';
+    $accessToken = env('MERCADOPAGO_ACCESS_TOKEN');
+
+    if (empty($accessToken)) {
+        abort(500, 'Falta configurar MERCADOPAGO_ACCESS_TOKEN en .env');
+    }
+
+    SDK::setAccessToken($accessToken);
+
+    $item = new Item();
+    $item->title = 'Guía de envío ' . $cotizacion->logistico . ' - ' . $cotizacion->servicio;
+    $item->quantity = 1;
+    $item->unit_price = (float) $cotizacion->precio;
+    $item->currency_id = 'MXN';
+
+    $preference = new Preference();
+    $preference->items = [$item];
+    $preference->external_reference = 'B2C-' . $cotizacion->id;
+
+    $preference->back_urls = [
+    'success' => 'https://veto-emphatic-ahead.ngrok-free.dev/b2c/pago/'.$cotizacion->id.'/success',
+    'failure' => 'https://veto-emphatic-ahead.ngrok-free.dev/b2c/pago/'.$cotizacion->id.'/failure',
+    'pending' => 'https://veto-emphatic-ahead.ngrok-free.dev/b2c/pago/'.$cotizacion->id.'/pending',
+];
+
+    //$preference->auto_return = 'approved';
+    $preference->save();
+
+    if (!$preference->id || !$preference->init_point) {
+    dd([
+        'error' => $preference->error,
+        'preference' => $preference,
+    ]);
+}
+
+    $cotizacion->update([
+        'estatus' => 'PAGO_INICIADO',
+    ]);
+
+    return redirect($preference->init_point);
+}
+
+public function pagoSuccess(B2cCotizacion $cotizacion)
+{
+    $cotizacion->update([
+        'estatus' => 'PAGADA',
+    ]);
+
+    return view('b2c.pago-success', compact('cotizacion'));
+}
+
+public function pagoFailure(B2cCotizacion $cotizacion)
+{
+    $cotizacion->update([
+        'estatus' => 'PAGO_RECHAZADO',
+    ]);
+
+    return 'Pago rechazado para cotización #' . $cotizacion->id;
+}
+
+public function pagoPending(B2cCotizacion $cotizacion)
+{
+    $cotizacion->update([
+        'estatus' => 'PAGO_PENDIENTE',
+    ]);
+
+    return 'Pago pendiente para cotización #' . $cotizacion->id;
+}
+
+public function generarGuia(B2cCotizacion $cotizacion)
+{
+    if ($cotizacion->estatus !== 'PAGADA') {
+        abort(403, 'La cotización aún no está pagada.');
+    }
+
+    if ($cotizacion->logistico === 'Estafeta') {
+        return 'Aquí se generará guía Estafeta para cotización #' . $cotizacion->id;
+    }
+
+    if ($cotizacion->logistico === 'FedEx') {
+        return 'Aquí se generará guía FedEx para cotización #' . $cotizacion->id;
+    }
+
+    if ($cotizacion->logistico === 'DHL') {
+        return 'Aquí se generará guía DHL para cotización #' . $cotizacion->id;
+    }
+
+    abort(400, 'Logístico no soportado.');
 }
 
 }

@@ -47,6 +47,18 @@ Route::post('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, '
 /*provisional pago */
 Route::get('/b2c/pago/{cotizacion}', [CotizacionPublicaController::class, 'pago'])
     ->name('b2c.pago');
+	
+Route::get('/b2c/pago/{cotizacion}/success', [CotizacionPublicaController::class, 'pagoSuccess'])
+    ->name('b2c.pago.success');
+
+Route::get('/b2c/pago/{cotizacion}/failure', [CotizacionPublicaController::class, 'pagoFailure'])
+    ->name('b2c.pago.failure');
+
+Route::get('/b2c/pago/{cotizacion}/pending', [CotizacionPublicaController::class, 'pagoPending'])
+    ->name('b2c.pago.pending');
+	
+Route::post('/b2c/guia/{cotizacion}/generar', [CotizacionPublicaController::class, 'generarGuia'])
+    ->name('b2c.guia.generar');
 
 /*
 |Los roles definidos son 
