@@ -9,5 +9,5 @@ class CP extends Model
 {
     use HasFactory;
 
-    protected $table = 'cps';
+    protected $table = 'sepomex';
 }

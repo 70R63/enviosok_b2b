@@ -207,27 +207,65 @@
             background: #111827;
             color: white;
         }
+		
+		.autocomplete-wrap {
+    position: relative;
+}
+
+.suggestions {
+    display: none;
+    position: absolute;
+    top: 68px;
+    left: 0;
+    width: 520px;
+    max-height: 230px;
+    overflow-y: auto;
+
+    background: #ffffff !important;
+    color: #111827 !important;
+
+    border-radius: 8px;
+    box-shadow: 0 14px 35px rgba(0,0,0,.25);
+    z-index: 9999;
+}
+
+.suggestion-item {
+    padding: 11px 14px;
+    font-size: 14px;
+    cursor: pointer;
+    border-bottom: 1px solid #e5e7eb;
+    white-space: normal;
+}
+
+.suggestion-item:hover {
+    background: #f3f4f6;
+}
 
         @media (max-width: 900px) {
-            .quote-form,
-            .hero,
-            .cards {
-                grid-template-columns: 1fr;
-            }
+    .quote-form,
+    .hero,
+    .cards {
+        grid-template-columns: 1fr;
+    }
 
-            .hero h1 {
-                font-size: 34px;
-            }
+    .hero h1 {
+        font-size: 34px;
+    }
 
-            .nav {
-                flex-direction: column;
-                gap: 16px;
-            }
+    .nav {
+        flex-direction: column;
+        gap: 16px;
+    }
 
-            .nav a {
-                margin: 0 8px;
-            }
-        }
+    .nav a {
+        margin: 0 8px;
+    }
+
+    .suggestions {
+        width: 100%;
+    }
+}
+		
     </style>
 </head>
 <body>
@@ -250,16 +288,33 @@
         <section class="quote-box">
             <div class="quote-title">Cotiza gratis tu envío</div>
 
-            <form class="quote-form" method="GET" action="#">
-                <div class="field">
-                    <label>Código postal origen</label>
-                    <input type="text" name="cp_origen" placeholder="Código postal origen">
-                </div>
+            <form class="quote-form" method="POST" action="{{ route('b2c.cotizar') }}">
+    @csrf
+                <div class="field autocomplete-wrap">
+    <label>Código postal origen</label>
 
-                <div class="field">
-                    <label>Código postal destino</label>
-                    <input type="text" name="cp_destino" placeholder="Código postal destino">
-                </div>
+    <input type="text" id="cp_origen" name="cp_origen" placeholder="Código postal origen" maxlength="120" autocomplete="off">
+
+    <input type="hidden" id="colonia_origen" name="colonia_origen">
+    <div id="colonias_origen_list" class="suggestions"></div>
+
+    <small id="cp_origen_msg" style="display:none; color:#fff; margin-top:6px;">
+        Valida <a href="https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/Descarga.aspx" target="_blank" style="color:#facc15;">aquí</a> tu código postal
+    </small>
+</div>
+
+                <div class="field autocomplete-wrap">
+    <label>Código postal destino</label>
+
+    <input type="text" id="cp_destino" name="cp_destino" placeholder="Código postal destino" maxlength="120" autocomplete="off">
+
+    <input type="hidden" id="colonia_destino" name="colonia_destino">
+    <div id="colonias_destino_list" class="suggestions"></div>
+
+    <small id="cp_destino_msg" style="display:none; color:#fff; margin-top:6px;">
+        Valida <a href="https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/Descarga.aspx" target="_blank" style="color:#facc15;">aquí</a> tu código postal
+    </small>
+</div>
 
                 <div class="field">
                     <label>Tipo de envío</label>
@@ -342,6 +397,74 @@
     </footer>
 
     <a class="whatsapp" href="#" target="_blank">¡¡Estamos aquí para ayudarte!!</a>
+	
+	<script>
+    async function cargarColonias(cpInputId, listId, msgId, hiddenColoniaId) {
+    const cpInput = document.getElementById(cpInputId);
+    const list = document.getElementById(listId);
+    const msg = document.getElementById(msgId);
+    const hiddenColonia = document.getElementById(hiddenColoniaId);
+
+    const cp = cpInput.value.trim();
+
+    list.innerHTML = '';
+    list.style.display = 'none';
+    msg.style.display = 'none';
+    hiddenColonia.value = '';
+
+    if (cp.length !== 5 || !/^\d{5}$/.test(cp)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/b2c/cp/colonias?cp=${encodeURIComponent(cp)}`);
+        const json = await response.json();
+        const colonias = json?.data || json?.success?.data || [];
+
+        if (!Array.isArray(colonias) || colonias.length === 0) {
+            msg.style.display = 'block';
+            return;
+        }
+
+        colonias.forEach(item => {
+            const cp = item.d_codigo || '';
+            const colonia = item.d_asenta || '';
+            const municipio = item.d_mnpio || '';
+            const estado = item.d_estado || '';
+
+            const texto = `${cp} - ${colonia} - ${municipio} - ${estado}`;
+
+            const div = document.createElement('div');
+            div.className = 'suggestion-item';
+            div.textContent = texto;
+
+            div.addEventListener('click', function () {
+    cpInput.value = texto;
+    hiddenColonia.value = texto;
+    list.style.display = 'none';
+});
+
+            list.appendChild(div);
+        });
+
+        list.style.display = 'block';
+    } catch (error) {
+        msg.style.display = 'block';
+    }
+}
+
+document.getElementById('cp_origen').addEventListener('keyup', function () {
+    if (/^\d{5}$/.test(this.value.trim())) {
+        cargarColonias('cp_origen', 'colonias_origen_list', 'cp_origen_msg', 'colonia_origen');
+    }
+});
+
+document.getElementById('cp_destino').addEventListener('keyup', function () {
+    if (/^\d{5}$/.test(this.value.trim())) {
+        cargarColonias('cp_destino', 'colonias_destino_list', 'cp_destino_msg', 'colonia_destino');
+    }
+});
+</script>
 
 </body>
 </html>

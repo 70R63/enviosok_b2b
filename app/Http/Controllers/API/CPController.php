@@ -22,7 +22,7 @@ class CPController extends ApiController
         Log::info(__CLASS__." ".__FUNCTION__." INICIANDO-----------------");
         Log::debug(print_r($request->all(),true));
         try {
-            $resultado = CP::where('cp', 'like', $request['cp'].'%')
+            $resultado = CP::where('d_codigo', 'like', $request['cp'].'%')
                     ->get();
 
             Log::debug(print_r($resultado->toArray(),true));

@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\LtdController;
+use App\Http\Controllers\B2C\CotizacionPublicaController;
+use App\Http\Controllers\API\CPController;
 
 
 /*
@@ -25,6 +27,26 @@ Route::resource('profile','userProfileController');
 Route::get('/dashboard', function () {
     return view('dashboard');
 })->middleware(['auth'])->name('dashboard');
+
+Route::post('/b2c/cotizar', [CotizacionPublicaController::class, 'cotizar'])
+    ->name('b2c.cotizar');
+	
+Route::get('/b2c/cp/colonias', [CPController::class, 'colonias'])
+    ->name('b2c.cp.colonias');
+	
+Route::post('/b2c/cotizacion/{cotizacion}/seleccionar', [CotizacionPublicaController::class, 'seleccionar'])
+    ->name('b2c.cotizacion.seleccionar');
+	
+/*provisional pruebaa */
+Route::get('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'checkout'])
+    ->name('b2c.checkout');
+	
+Route::post('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'procesarCheckout'])
+    ->name('b2c.checkout.procesar');
+
+/*provisional pago */
+Route::get('/b2c/pago/{cotizacion}', [CotizacionPublicaController::class, 'pago'])
+    ->name('b2c.pago');
 
 /*
 |Los roles definidos son 

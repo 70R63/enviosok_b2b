@@ -6,26 +6,33 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     *
-     * @return void
-     */
     public function up()
     {
-        Schema::create('cotizadors', function (Blueprint $table) {
+        Schema::create('b2c_cotizaciones', function (Blueprint $table) {
             $table->id();
+
+            $table->string('cp_origen', 10);
+            $table->string('colonia_origen')->nullable();
+
+            $table->string('cp_destino', 10);
+            $table->string('colonia_destino')->nullable();
+
+            $table->string('tipo_envio', 30);
+            $table->decimal('peso', 10, 2);
+            $table->string('medidas')->nullable();
+
+            $table->string('logistico')->nullable();
+            $table->string('servicio')->nullable();
+            $table->decimal('precio', 10, 2)->nullable();
+
+            $table->string('estatus')->default('COTIZADA');
+
             $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     *
-     * @return void
-     */
     public function down()
     {
-        Schema::dropIfExists('cotizadors');
+        Schema::dropIfExists('b2c_cotizaciones');
     }
 };
