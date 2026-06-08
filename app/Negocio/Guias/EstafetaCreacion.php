@@ -368,7 +368,7 @@ Class EstafetaCreacion {
         );
 
         $data['identification']=$identification;
-        $data['labelDefinition']['serviceConfiguration']['salesOrganization']=$ltdTipoServicio['sales_organization']; 
+        $data['labelDefinition']['serviceConfiguration']['salesOrganization'] = $ltdTipoServicio['sales_organization'];
         
         $data['labelDefinition']['serviceConfiguration']['serviceTypeId'] = $ltdTipoServicio['service_id_ltd'];
 

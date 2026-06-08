@@ -26,6 +26,7 @@ class Estafeta {
     private $secretRastreo;
     private $clientID;
     private $customerNumber;
+    private $salesOrganization;
 
     public $documento = 0; 
     private $resultado = array();
@@ -46,11 +47,11 @@ class Estafeta {
         $this->credenciales( $empresa_id, $plataforma, $recursoId );
 
         $formParams = [
-                'client_id' => $this->keyId,
-                'client_secret' => $this->secret,
-                'grant_type' => 'client_credentials'
-                ,'scope' => 'execute'
-            ];
+                'grant_type' => 'client_credentials',
+                'client_id' => config('ltd.estafeta.api_key'),
+                'client_secret' => config('ltd.estafeta.secret'),
+                'scope' => env('ESTAFETA_SCOPE', 'https://graph.microsoft.com/.default'),
+        ];
 
         $sesion = LtdSesion::where('ltd_id', Config('ltd.estafeta.id') )
                 ->where('servicio',$recursoId)
@@ -72,7 +73,7 @@ class Estafeta {
             Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__." formParams");
             Log::debug(print_r($formParams,true));
 
-            $response = $client->request('POST', 'auth/oauth/v2/token',
+            $response = $client->request('POST', 'oauth2/v2.0/token',
                 ['form_params' => $formParams
                 , 'headers'     => $headers]
             );
@@ -140,41 +141,76 @@ class Estafeta {
      * @return \Illuminate\Http\Response
      */
 
-    public function envio($body,$plataforma= "WEB", $formatoImpresion = "FILE_PDF"){
-        Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__." INICIO ------------------");
-        
-        $client = new Client(['base_uri' => $this->baseUri]);
-        $authorization = sprintf("Bearer %s",$this->token);
+    public function envio($body, $plataforma = "WEB", $formatoImpresion = "FILE_PDF")
+{
+    Log::info(__CLASS__ . " " . __FUNCTION__ . " " . __LINE__ . " INICIO ------------------");
 
-        $headers = [
-            'Authorization' => $authorization
-            ,'Content-Type' => 'application/json'
-            ,'Accept'    => 'application/json'
-            ,'apiKey'   => $this->keyId 
-        ];
-        
-        Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__." body");
-        Log::debug(print_r(json_encode($body),true));
+    $client = new Client(['base_uri' => $this->baseUri]);
+    $authorization = sprintf("Bearer %s", $this->token);
 
-        
-        $uri = sprintf("%sv1/wayBills?outputType=%s&outputGroup=REQUEST&responseMode=SYNC_INLINE&printingTemplate=NORMAL_TIPO7_ZEBRAORI",$this->baseUri,$formatoImpresion);
+    $baseUri = rtrim($this->baseUri, '/');
 
-        Log::debug(print_r("Armando Peticion $formatoImpresion",true));
-        $response = $client->request('POST', $uri, [
-            'headers'   => $headers
-            ,'body'     => json_encode($body)
-        ]);
+    $uri = sprintf(
+        "%s/labelrest/v1/wayBills?outputType=%s&outputGroup=REQUEST&responseMode=SYNC_INLINE&printingTemplate=NORMAL_TIPO7_ZEBRAORI",
+        $baseUri,
+        $formatoImpresion
+    );
 
-        
-        $this->resultado = json_decode($response->getBody()->getContents());
+    $subscriptionKey = env('ESTAFETA_SUBSCRIPTION_KEY', env('ESTAFETA_APIKEY', $this->keyId));
 
-        Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__);
-        $this->documento = $this->resultado->data;
+    $headers = [
+        'Authorization' => $authorization,
+        'Content-Type'  => 'application/json',
+        'Accept'        => 'application/json',
 
-        Log::debug($this->documento);
-        $this->trackingNumber = $this->resultado->labelPetitionResult->result->description;
-        Log::info(__CLASS__." ".__FUNCTION__." FIN ------------------");
-    }
+        // Azure API Management estándar
+        'Ocp-Apim-Subscription-Key' => $subscriptionKey,
+
+        // Compatibilidad con Estafeta si espera apikey
+        'apikey' => $subscriptionKey,
+        'apiKey' => $subscriptionKey,
+    ];
+
+    /* ===== LOGS NUEVOS ===== */
+    Log::info('ESTAFETA SUBSCRIPTION DEBUG', [
+        'subscription_key' => $subscriptionKey,
+        'subscription_key_length' => strlen($subscriptionKey),
+    ]);
+
+    Log::info('ESTAFETA HEADERS DEBUG', [
+        'headers' => array_keys($headers),
+    ]);
+
+    Log::info('ESTAFETA HEADER VALUES', [
+        'apikey' => $headers['apikey'],
+        'subscription' => $headers['Ocp-Apim-Subscription-Key'],
+    ]);
+    /* ===== FIN LOGS NUEVOS ===== */
+
+    Log::info('ESTAFETA BASE URI: ' . $this->baseUri);
+    Log::info('ESTAFETA URI: ' . $uri);
+    Log::info('ESTAFETA KEY ID: ' . $this->keyId);
+    Log::info('ESTAFETA SECRET LENGTH: ' . strlen($this->secret));
+
+    Log::info(__CLASS__ . " " . __FUNCTION__ . " " . __LINE__ . " body");
+    Log::debug(json_encode($body));
+
+    $response = $client->request('POST', $uri, [
+        'headers' => $headers,
+        'body'    => json_encode($body),
+    ]);
+
+    $this->resultado = json_decode($response->getBody()->getContents());
+
+    Log::info(__CLASS__ . " " . __FUNCTION__ . " " . __LINE__);
+
+    $this->documento = $this->resultado->data;
+    Log::debug($this->documento);
+
+    $this->trackingNumber = $this->resultado->labelPetitionResult->result->description;
+
+    Log::info(__CLASS__ . " " . __FUNCTION__ . " FIN ------------------");
+}
 
 
     /**
@@ -348,6 +384,7 @@ class Estafeta {
         $this->secret = $credenciales[0]['secret'];
         $this->clientID = $credenciales[0]['client_id'];
         $this->customerNumber = $credenciales[0]['customer_number'];
+        $this->salesOrganization = $credenciales[0]['organization'];
         $this->user = $credenciales[0]['user'];
         $this->passwd = $credenciales[0]['passwd'];
 
@@ -402,6 +439,11 @@ class Estafeta {
 
     public function getCustomerNumber(){
         return $this->customerNumber;
+    }
+
+    public function getSalesOrganization()
+    {
+        return $this->salesOrganization;
     }
 }
 

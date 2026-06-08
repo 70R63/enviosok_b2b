@@ -95,6 +95,8 @@ class Cliente extends Model
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__." INICIANDO ---------");
 
         $empresa_id = $request['empresa_id'];
+        $cliente = [];
+
         switch ($request['esManual']) {
             case "SI":
                 Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__." esManual = si ");
@@ -113,6 +115,7 @@ class Cliente extends Model
                             ->where('empresa_id',$empresa_id)
                             ->pluck('id')
                             ->toArray();
+                break;
             case "API":
                 Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__." esManual = API ");
                 $canal = "API" ;

@@ -41,6 +41,10 @@ class AuthenticatedSessionController extends Controller
         $empresa = Empresa::findOrFail(auth()->user()->empresa_id);
         $request->session()->put('empresa_nombre', $empresa->nombre);
     
+        if (auth()->user()->roles->first()?->slug === 'cliente') {
+           return redirect('/b2c/dashboard');
+        }
+
         return redirect()->intended(RouteServiceProvider::HOME);
     }
 

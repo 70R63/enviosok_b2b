@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\LtdController;
 use App\Http\Controllers\B2C\CotizacionPublicaController;
 use App\Http\Controllers\API\CPController;
+use App\Http\Controllers\B2cMisEnviosController;
 
 
 /*
@@ -28,15 +29,16 @@ Route::get('/dashboard', function () {
     return view('dashboard');
 })->middleware(['auth'])->name('dashboard');
 
+//Cotizar b2c
 Route::post('/b2c/cotizar', [CotizacionPublicaController::class, 'cotizar'])
     ->name('b2c.cotizar');
+
+Route::post('/b2c/cotizacion/{cotizacion}/seleccionar', [CotizacionPublicaController::class, 'seleccionar'])
+    ->name('b2c.seleccionar');
 	
 Route::get('/b2c/cp/colonias', [CPController::class, 'colonias'])
     ->name('b2c.cp.colonias');
-	
-Route::post('/b2c/cotizacion/{cotizacion}/seleccionar', [CotizacionPublicaController::class, 'seleccionar'])
-    ->name('b2c.cotizacion.seleccionar');
-	
+		
 /*provisional pruebaa */
 Route::get('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'checkout'])
     ->name('b2c.checkout');
@@ -59,6 +61,70 @@ Route::get('/b2c/pago/{cotizacion}/pending', [CotizacionPublicaController::class
 	
 Route::post('/b2c/guia/{cotizacion}/generar', [CotizacionPublicaController::class, 'generarGuia'])
     ->name('b2c.guia.generar');
+
+Route::post('/b2c/guia/{cotizacion}/generar', [CotizacionPublicaController::class, 'generarGuia'])
+    ->name('b2c.guia.generar');
+
+//Opciones de Rastreo
+Route::get('/rastreo', [CotizacionPublicaController::class, 'rastreoPublico'])
+    ->name('b2c.rastreo');
+
+Route::post('/rastreo', [CotizacionPublicaController::class, 'buscarRastreoPublico'])
+    ->name('b2c.rastreo.buscar');
+
+//Registro b2c
+Route::get('/b2c/register', [CotizacionPublicaController::class, 'registroB2c'])
+    ->name('b2c.register');
+
+Route::post('/b2c/register', [CotizacionPublicaController::class, 'guardarRegistroB2c'])
+    ->name('b2c.register.store');
+
+// Dashboard B2C
+Route::get('/b2c/dashboard', [CotizacionPublicaController::class, 'dashboardB2c'])
+    ->middleware('auth')
+    ->name('b2c.dashboard');
+
+//Mis Envios 
+Route::middleware(['auth'])->group(function () {
+
+    Route::get('/b2c/mis-envios', [CotizacionPublicaController::class, 'misEnviosB2c'])
+        ->name('b2c.mis-envios');
+
+//Ver Detalle
+Route::get('/b2c/envios/{cotizacion}', [CotizacionPublicaController::class, 'detalleEnvioB2c'])
+    ->middleware('auth')
+    ->name('b2c.envios.detalle');
+
+//Mis Pagos
+Route::get('/b2c/mis-pagos', [CotizacionPublicaController::class, 'misPagosB2c'])
+    ->middleware('auth')
+    ->name('b2c.mis-pagos');
+
+//Nuevo envio
+Route::get('/b2c/nuevo-envio', [CotizacionPublicaController::class, 'nuevoEnvioB2c'])
+    ->name('b2c.nuevo-envio');
+
+Route::post('/b2c/nuevo-envio', [CotizacionPublicaController::class, 'guardarNuevoEnvioB2c'])
+    ->name('b2c.nuevo-envio.guardar');
+
+Route::get('/b2c/paquete/{cotizacion}', [CotizacionPublicaController::class, 'paqueteB2c'])
+    ->middleware('auth')
+    ->name('b2c.paquete');
+
+//Direcciones
+Route::get('/b2c/mis-direcciones', [CotizacionPublicaController::class, 'misDireccionesB2c'])
+    ->middleware('auth')
+    ->name('b2c.mis-direcciones');
+
+Route::post('/b2c/mis-direcciones', [CotizacionPublicaController::class, 'guardarDireccionB2c'])
+    ->middleware('auth')
+    ->name('b2c.mis-direcciones.guardar');
+
+// Direcciones -- eliminar
+Route::post('/b2c/mis-direcciones/{direccion}/eliminar', [CotizacionPublicaController::class, 'eliminarDireccionB2c'])
+    ->name('b2c.mis-direcciones.eliminar');
+
+});
 
 /*
 |Los roles definidos son 

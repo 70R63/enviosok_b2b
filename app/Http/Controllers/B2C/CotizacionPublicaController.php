@@ -3,11 +3,20 @@
 namespace App\Http\Controllers\B2C;
 
 use App\Http\Controllers\Controller;
+use App\Negocio\Guias\EstafetaCreacion;
 use App\Models\B2cCotizacion;
+use App\Models\User;
+use App\Models\Roles\Roles;
+use App\Models\Guia;
+use App\Models\B2cDireccion;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rules;
 use MercadoPago\SDK;
 use MercadoPago\Preference;
 use MercadoPago\Item;
+use Carbon\Carbon;
 
 class CotizacionPublicaController extends Controller
 {
@@ -21,9 +30,14 @@ class CotizacionPublicaController extends Controller
         'tipo_envio' => ['required', 'in:caja,sobre'],
         'peso' => ['required', 'numeric', 'min:0.1'],
         'medidas' => ['nullable', 'string', 'max:50'],
+        'ciudad_origen' => ['nullable', 'string', 'max:100'],
+        'estado_origen' => ['nullable', 'string', 'max:100'],
+        'ciudad_destino' => ['nullable', 'string', 'max:100'],
+        'estado_destino' => ['nullable', 'string', 'max:100'],
     ]);
 
     $cotizacion = B2cCotizacion::create([
+        'user_id' => auth()->check() ? auth()->id() : null,
         'cp_origen' => $data['cp_origen'],
         'colonia_origen' => $data['colonia_origen'] ?? null,
         'cp_destino' => $data['cp_destino'],
@@ -32,6 +46,10 @@ class CotizacionPublicaController extends Controller
         'peso' => $data['peso'],
         'medidas' => $data['medidas'] ?? null,
         'estatus' => 'COTIZADA',
+        'ciudad_origen' => $data['ciudad_origen'] ?? null,
+        'estado_origen' => $data['estado_origen'] ?? null,
+        'ciudad_destino' => $data['ciudad_destino'] ?? null,
+        'estado_destino' => $data['estado_destino'] ?? null,
     ]);
 
     $opciones = [
@@ -58,10 +76,10 @@ class CotizacionPublicaController extends Controller
         ],
     ];
 
-    return view('b2c.resultados', [
-        'cotizacion' => $cotizacion,
-        'opciones' => $opciones,
-    ]);
+    return redirect('/b2c/dashboard')
+        ->with('cotizacion_id', $cotizacion->id)
+        ->with('opciones', $opciones);
+    
 }
 
 public function seleccionar(Request $request, B2cCotizacion $cotizacion)
@@ -95,6 +113,16 @@ public function procesarCheckout(Request $request, B2cCotizacion $cotizacion)
         'remitente_telefono' => ['required', 'string', 'max:30'],
         'remitente_email' => ['required', 'email', 'max:255'],
         'remitente_direccion' => ['required', 'string', 'max:255'],
+
+        'remitente_num_ext' => 'required|string|max:50',
+        'remitente_num_int' => 'nullable|string|max:50',
+        'ciudad_origen' => 'required|string|max:100',
+        'estado_origen' => 'required|string|max:100',
+
+        'destinatario_num_ext' => 'required|string|max:50',
+        'destinatario_num_int' => 'nullable|string|max:50',
+        'ciudad_destino' => 'required|string|max:100',
+        'estado_destino' => 'required|string|max:100',
 
         'destinatario_nombre' => ['required', 'string', 'max:255'],
         'destinatario_telefono' => ['required', 'string', 'max:30'],
@@ -159,31 +187,43 @@ public function pago(B2cCotizacion $cotizacion)
     return redirect($preference->init_point);
 }
 
-public function pagoSuccess(B2cCotizacion $cotizacion)
+public function pagoSuccess(Request $request, B2cCotizacion $cotizacion)
 {
     $cotizacion->update([
         'estatus' => 'PAGADA',
+        'payment_id' => $request->get('payment_id'),
+        'payment_status' => $request->get('status'),
+        'payment_external_reference' => $request->get('external_reference'),
+        'payment_collection_id' => $request->get('collection_id'),
     ]);
 
     return view('b2c.pago-success', compact('cotizacion'));
 }
 
-public function pagoFailure(B2cCotizacion $cotizacion)
+public function pagoFailure(Request $request, B2cCotizacion $cotizacion)
 {
     $cotizacion->update([
         'estatus' => 'PAGO_RECHAZADO',
+        'payment_id' => $request->get('payment_id'),
+        'payment_status' => $request->get('status'),
+        'payment_external_reference' => $request->get('external_reference'),
+        'payment_collection_id' => $request->get('collection_id'),
     ]);
 
-    return 'Pago rechazado para cotización #' . $cotizacion->id;
+    return view('b2c.pago-failure', compact('cotizacion'));
 }
 
-public function pagoPending(B2cCotizacion $cotizacion)
+public function pagoPending(Request $request, B2cCotizacion $cotizacion)
 {
     $cotizacion->update([
         'estatus' => 'PAGO_PENDIENTE',
+        'payment_id' => $request->get('payment_id'),
+        'payment_status' => $request->get('status'),
+        'payment_external_reference' => $request->get('external_reference'),
+        'payment_collection_id' => $request->get('collection_id'),
     ]);
 
-    return 'Pago pendiente para cotización #' . $cotizacion->id;
+    return view('b2c.pago-pending', compact('cotizacion'));
 }
 
 public function generarGuia(B2cCotizacion $cotizacion)
@@ -192,19 +232,417 @@ public function generarGuia(B2cCotizacion $cotizacion)
         abort(403, 'La cotización aún no está pagada.');
     }
 
-    if ($cotizacion->logistico === 'Estafeta') {
-        return 'Aquí se generará guía Estafeta para cotización #' . $cotizacion->id;
+    if ($cotizacion->logistico !== 'Estafeta') {
+        return 'Por ahora conectaremos primero Estafeta. Logístico actual: ' . $cotizacion->logistico;
     }
 
-    if ($cotizacion->logistico === 'FedEx') {
-        return 'Aquí se generará guía FedEx para cotización #' . $cotizacion->id;
+    $payload = $this->buildEstafetaPayload($cotizacion);
+
+try {
+    $generador = new EstafetaCreacion();
+    $generador->parseoApi($payload);
+} catch (\Throwable $e) {
+    \Log::error('Error generando guía B2C', [
+        'cotizacion_id' => $cotizacion->id,
+        'error' => $e->getMessage(),
+    ]);
+
+    $cotizacion->update([
+        'guia_estatus' => 'ERROR_PROVEEDOR',
+        'estatus' => 'ERROR_GENERACION_GUIA',
+    ]);
+
+    return back()->with('error', 'No fue posible generar la guía. Error proveedor: ' . $e->getMessage());
+}
+
+    $guia = Guia::orderBy('id', 'desc')->first();
+
+    $tracking = $guia->tracking_number ?? null;
+
+    if (!$tracking || str_contains($tracking, 'Exception') || str_contains($tracking, 'SAXParseException')) {
+        $cotizacion->update([
+            'guia_id' => $guia->id ?? null,
+            'tracking_number' => null,
+            'documento' => null,
+            'guia_estatus' => 'ERROR_PROVEEDOR',
+            'estatus' => 'ERROR_GENERACION_GUIA',
+        ]);
+
+        return back()->with('error', 'Estafeta rechazó el payload: ' . ($tracking ?? 'Sin detalle'));
     }
 
-    if ($cotizacion->logistico === 'DHL') {
-        return 'Aquí se generará guía DHL para cotización #' . $cotizacion->id;
+    $cotizacion->update([
+        'guia_id' => $guia->id ?? null,
+        'tracking_number' => $guia->tracking_number ?? null,
+        'documento' => $guia->documento ?? null,
+        'guia_estatus' => 'GENERADA',
+        'estatus' => 'GUIA_GENERADA',
+    ]);
+
+    $pdfUrl = asset('storage/' . basename($cotizacion->documento));
+
+    return redirect()
+        ->route('b2c.mis-envios')
+        ->with('success', 'Guía generada correctamente. Tracking: ' . ($guia->tracking_number ?? 'N/A'))
+        ->with('pdf_url', $pdfUrl);
     }
 
-    abort(400, 'Logístico no soportado.');
+private function buildEstafetaPayload(B2cCotizacion $cotizacion): array
+{
+    $cpOrigen = substr($cotizacion->cp_origen, 0, 5);
+    $cpDestino = substr($cotizacion->cp_destino, 0, 5);
+
+    [$alto, $largo, $ancho] = array_pad(
+        array_map('trim', explode('x', strtolower($cotizacion->medidas ?? '20x20x20'))),
+        3,
+        20
+    );
+
+    return [
+        'user_id' => (int) env('B2C_USER_ID', 9),
+        'empresa_id' => (int) env('B2C_EMPRESA_ID', 1),
+        'ltd_id' => 2,
+        'servicio_id' => (int) env('B2C_ESTAFETA_SERVICIO_ID', 1),
+        'esManual' => 'API',
+        'canal' => 'API',
+        'formatoImpresion' => 'FILE_PDF',
+
+        'labelDefinition' => [
+            'wayBillDocument' => [
+                'content' => $cotizacion->contenido ?? 'Paquete',
+                'aditionalInfo' => $cotizacion->referencia ?: 'SIN REFERENCIA',
+            ],
+            'itemDescription' => [
+                'parcelId' => 4,
+                'weight' => (string) $cotizacion->peso,
+                'height' => (string) $alto,
+                'length' => (string) $largo,
+                'width' => (string) $ancho,
+            ],
+            'serviceConfiguration' => [
+                'quantityOfLabels' => 1,
+                'originZipCodeForRouting' => $cpOrigen,
+                'isInsurance' => false,
+                'insurance' => null,
+                'isReturnDocument' => false,
+                'effectiveDate' => Carbon::now()->format('Ymd'),
+            ],
+            'location' => [
+                'origin' => [
+                    'contact' => [
+                        'corporateName' => $cotizacion->remitente_nombre,
+                        'contactName' => $cotizacion->remitente_nombre,
+                        'cellPhone' => $cotizacion->remitente_telefono,
+                        'email' => filter_var($cotizacion->remitente_email, FILTER_VALIDATE_EMAIL)
+                            ? $cotizacion->remitente_email
+                            : 'no-reply@enviosok.com',
+                        'taxPayerCode' => 'XAXX010101000',
+                    ],
+                    'address' => [
+                        'bUsedCode' => false,
+                        'roadTypeAbbName' => 'Calle',
+                        'roadName' => $cotizacion->remitente_direccion,
+                        'settlementTypeAbbName' => 'Col',
+                        'settlementName' => $cotizacion->colonia_origen,
+                        'zipCode' => $cpOrigen,
+                        'countryName' => 'MEX',
+                        'ciudad' => $cotizacion->ciudad_origen,
+                        'entidad' => $cotizacion->estado_origen,
+                        'addressReference' => $cotizacion->referencia ?: 'SIN REFERENCIA',
+                        'externalNum' => $cotizacion->remitente_num_ext,
+                        'indoorInformation' => $cotizacion->remitente_num_int ?? 'SN',
+                    ],
+                ],
+                'destination' => [
+                    'isDeliveryToPUDO' => false,
+                    'homeAddress' => [
+                        'contact' => [
+                            'corporateName' => $cotizacion->destinatario_nombre,
+                            'contactName' => $cotizacion->destinatario_nombre,
+                            'cellPhone' => $cotizacion->destinatario_telefono,
+                            'email' => filter_var($cotizacion->destinatario_email, FILTER_VALIDATE_EMAIL)
+                                ? $cotizacion->destinatario_email
+                                : 'no-reply@enviosok.com',
+                            'taxPayerCode' => 'XAXX010101000',
+                        ],
+                        'address' => [
+                            'bUsedCode' => false,
+                            'roadTypeAbbName' => 'Calle',
+                            'roadName' => $cotizacion->destinatario_direccion,
+                            'settlementTypeAbbName' => 'Col',
+                            'settlementName' => $cotizacion->colonia_destino,
+                            'zipCode' => $cpDestino,
+                            'countryName' => 'MEX',
+                            'ciudad' => $cotizacion->ciudad_destino,
+                            'entidad' => $cotizacion->estado_destino,
+                            'addressReference' => $cotizacion->referencia ?: 'SIN REFERENCIA',
+                            'externalNum' => $cotizacion->destinatario_num_ext,
+                            'indoorInformation' => $cotizacion->destinatario_num_int ?? 'SN',
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ];
+}
+
+public function rastreoPublico()
+{
+    return view('b2c.rastreo');
+}
+
+public function buscarRastreoPublico(Request $request)
+{
+    $request->validate([
+        'tracking_number' => ['required', 'string', 'max:100'],
+    ]);
+
+    $tracking = trim($request->tracking_number);
+
+    $cotizacion = B2cCotizacion::where('tracking_number', $tracking)
+        ->orWhere('documento', $tracking)
+        ->first();
+
+    return view('b2c.rastreo', [
+        'tracking' => $tracking,
+        'cotizacion' => $cotizacion,
+    ]);
+}
+
+public function registroB2c()
+{
+    return view('b2c.register');
+}
+
+public function guardarRegistroB2c(Request $request)
+{
+    $request->validate([
+        'name' => ['required', 'string', 'max:255'],
+        'apellido_paterno' => ['required', 'string', 'max:255'],
+        'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+        'password' => ['required', 'confirmed', Rules\Password::defaults()],
+    ]);
+
+    $user = User::create([
+        'name' => $request->name,
+        'apellido_paterno' => $request->apellido_paterno,
+        'email' => $request->email,
+        'password' => Hash::make($request->password),
+        'empresa_id' => 1,
+    ]);
+
+    $rolCliente = Roles::where('slug', 'cliente')->first();
+
+      if ($rolCliente) {
+         \DB::table('users_roles')->insertOrIgnore([
+        'user_id' => $user->id,
+        'roles_id' => $rolCliente->id,
+    ]);
+}
+
+    Auth::login($user);
+
+    return redirect()->route('b2c.dashboard')
+    ->with('success', 'Cuenta creada correctamente.');
+}
+
+public function dashboardB2c()
+{
+    $userId = auth()->id();
+
+    $totalCotizaciones = B2cCotizacion::where('user_id', $userId)->count();
+
+    $totalPagadas = B2cCotizacion::where('user_id', $userId)
+        ->where('estatus', 'PAGADA')
+        ->count();
+
+    $totalGuias = B2cCotizacion::where('user_id', $userId)
+        ->whereNotNull('tracking_number')
+        ->count();
+
+    $totalErrores = B2cCotizacion::where('user_id', $userId)
+        ->where('estatus', 'like', '%ERROR%')
+        ->count();
+
+    $ultimosEnvios = B2cCotizacion::where('user_id', $userId)
+        ->latest()
+        ->take(5)
+        ->get();
+
+    return view('b2c.dashboard', compact(
+        'totalCotizaciones',
+        'totalPagadas',
+        'totalGuias',
+        'totalErrores',
+        'ultimosEnvios'
+    ));
+}
+
+public function misEnviosB2c()
+{
+    $envios = B2cCotizacion::where('user_id', auth()->id())
+        ->latest()
+        ->get();
+
+    return view('b2c.mis-envios', compact('envios'));
+}
+
+public function detalleEnvioB2c(B2cCotizacion $cotizacion)
+{
+    if ($cotizacion->user_id !== auth()->id()) {
+        abort(403);
+    }
+
+    return view('b2c.detalle-envio', compact('cotizacion'));
+}
+
+public function misPagosB2c()
+{
+    $pagos = B2cCotizacion::where('user_id', auth()->id())
+        ->whereNotNull('payment_id')
+        ->latest()
+        ->get();
+
+    return view('b2c.mis-pagos', compact('pagos'));
+}
+
+public function nuevoEnvioB2c()
+{
+    return view('b2c.nuevo-envio');
+}
+
+public function guardarNuevoEnvioB2c(Request $request)
+{
+    $data = $request->validate([
+        'remitente_nombre' => ['required', 'string', 'max:255'],
+        'remitente_empresa' => ['nullable', 'string', 'max:255'],
+        'remitente_email' => ['nullable', 'email', 'max:255'],
+        'remitente_telefono' => ['required', 'string', 'max:30'],
+        'remitente_direccion' => ['required', 'string', 'max:255'],
+        'remitente_num_ext' => ['required', 'string', 'max:50'],
+        'remitente_num_int' => ['nullable', 'string', 'max:50'],
+        'remitente_referencias' => ['nullable', 'string', 'max:255'],
+
+        'cp_origen' => ['required', 'string', 'max:120'],
+        'colonia_origen' => ['required', 'string', 'max:255'],
+        'ciudad_origen' => ['required', 'string', 'max:100'],
+        'estado_origen' => ['required', 'string', 'max:100'],
+
+        'destinatario_nombre' => ['required', 'string', 'max:255'],
+        'destinatario_empresa' => ['nullable', 'string', 'max:255'],
+        'destinatario_email' => ['nullable', 'email', 'max:255'],
+        'destinatario_telefono' => ['required', 'string', 'max:30'],
+        'destinatario_direccion' => ['required', 'string', 'max:255'],
+        'destinatario_num_ext' => ['required', 'string', 'max:50'],
+        'destinatario_num_int' => ['nullable', 'string', 'max:50'],
+        'destinatario_referencias' => ['nullable', 'string', 'max:255'],
+
+        'cp_destino' => ['required', 'string', 'max:120'],
+        'colonia_destino' => ['required', 'string', 'max:255'],
+        'ciudad_destino' => ['required', 'string', 'max:100'],
+        'estado_destino' => ['required', 'string', 'max:100'],
+    ]);
+
+    $cotizacion = B2cCotizacion::create([
+        'user_id' => auth()->id(),
+
+        'cp_origen' => $data['cp_origen'],
+        'colonia_origen' => $data['colonia_origen'],
+        'ciudad_origen' => $data['ciudad_origen'],
+        'estado_origen' => $data['estado_origen'],
+
+        'cp_destino' => $data['cp_destino'],
+        'colonia_destino' => $data['colonia_destino'],
+        'ciudad_destino' => $data['ciudad_destino'],
+        'estado_destino' => $data['estado_destino'],
+
+        'remitente_nombre' => $data['remitente_nombre'],
+        'remitente_email' => $data['remitente_email'] ?? null,
+        'remitente_telefono' => $data['remitente_telefono'],
+        'remitente_direccion' => $data['remitente_direccion'],
+        'remitente_num_ext' => $data['remitente_num_ext'],
+        'remitente_num_int' => $data['remitente_num_int'] ?? null,
+
+        'destinatario_nombre' => $data['destinatario_nombre'],
+        'destinatario_email' => $data['destinatario_email'] ?? null,
+        'destinatario_telefono' => $data['destinatario_telefono'],
+        'destinatario_direccion' => $data['destinatario_direccion'],
+        'destinatario_num_ext' => $data['destinatario_num_ext'],
+        'destinatario_num_int' => $data['destinatario_num_int'] ?? null,
+
+        'tipo_envio' => 'caja',
+        'peso' => 1,
+        'medidas' => '20x20x20',
+        'estatus' => 'DIRECCION_CAPTURADA',
+    ]);
+
+    return redirect()->route('b2c.paquete', $cotizacion->id);
+}
+
+public function paqueteB2c(B2cCotizacion $cotizacion)
+{
+    if ($cotizacion->user_id !== auth()->id()) {
+        abort(403);
+    }
+
+    return view('b2c.paquete', compact('cotizacion'));
+}
+
+public function misDireccionesB2c()
+{
+    $direcciones = B2cDireccion::where('user_id', auth()->id())
+        ->where('activo', true)
+        ->orderByDesc('favorita')
+        ->latest()
+        ->get();
+
+    return view('b2c.mis-direcciones', compact('direcciones'));
+}
+
+public function guardarDireccionB2c(Request $request)
+{
+    $data = $request->validate([
+        'tipo' => ['required', 'in:ORIGEN,DESTINO'],
+        'alias' => ['nullable', 'string', 'max:100'],
+        'nombre' => ['required', 'string', 'max:255'],
+        'empresa' => ['nullable', 'string', 'max:255'],
+        'email' => ['nullable', 'email', 'max:255'],
+        'telefono' => ['required', 'string', 'max:30'],
+        'calle' => ['required', 'string', 'max:255'],
+        'num_ext' => ['required', 'string', 'max:50'],
+        'num_int' => ['nullable', 'string', 'max:50'],
+        'referencias' => ['nullable', 'string', 'max:255'],
+        'cp' => ['required', 'string', 'max:10'],
+        'colonia' => ['required', 'string', 'max:255'],
+        'ciudad' => ['required', 'string', 'max:100'],
+        'estado' => ['required', 'string', 'max:100'],
+    ]);
+
+    B2cDireccion::create([
+        ...$data,
+        'user_id' => auth()->id(),
+        'favorita' => $request->has('favorita'),
+        'activo' => true,
+    ]);
+
+    return redirect()
+        ->route('b2c.mis-direcciones')
+        ->with('success', 'Dirección guardada correctamente.');
+}
+
+public function eliminarDireccionB2c(B2cDireccion $direccion)
+{
+    if ($direccion->user_id !== auth()->id()) {
+        abort(403);
+    }
+
+    $direccion->update([
+        'activo' => false,
+    ]);
+
+    return redirect()
+        ->route('b2c.mis-direcciones')
+        ->with('success', 'Dirección eliminada correctamente.');
 }
 
 }

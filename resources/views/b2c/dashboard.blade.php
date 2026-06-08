@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Mi cuenta - EnvíosOK</title>
+    <style>
+        body{margin:0;font-family:Arial,sans-serif;background:#f4f7fb;color:#111827}
+        .layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+        .sidebar{background:#2563eb;color:white;padding:30px}
+        .logo{font-size:26px;font-weight:900;margin-bottom:35px}
+        .menu a,.logout-btn{display:block;color:white;text-decoration:none;font-weight:800;margin:18px 0;background:rgba(255,255,255,.12);padding:14px;border-radius:12px}
+        .logout-btn{width:100%;border:none;text-align:left;cursor:pointer;font-size:16px}
+        .content{padding:40px}
+        .title{font-size:38px;font-weight:900;margin-bottom:8px}
+        .subtitle{color:#64748b;margin-bottom:30px}
+        .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:30px}
+        .card{background:white;border-radius:18px;padding:24px;box-shadow:0 10px 24px rgba(0,0,0,.08)}
+        .label{color:#64748b;font-size:14px}
+        .value{font-size:32px;font-weight:900;margin-top:8px}
+        .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+        .action{background:white;border-radius:18px;padding:28px;text-decoration:none;color:#111827;box-shadow:0 10px 24px rgba(0,0,0,.08);font-weight:900}
+        .action span{display:block;color:#64748b;font-weight:500;margin-top:8px}
+        table{width:100%;border-collapse:collapse;margin-top:15px}
+        th,td{padding:12px;border-bottom:1px solid #e5e7eb;text-align:left;font-size:14px}
+        th{background:#f8fafc;font-weight:900;color:#334155}
+        input,select{padding:14px;border:1px solid #cbd5e1;border-radius:12px;font-size:15px}
+        .field{position:relative}
+        .field label{display:block;font-size:13px;font-weight:800;margin-bottom:6px;color:#334155}
+        .autocomplete-wrap{position:relative}
+        .suggestions{position:absolute;top:74px;left:0;right:0;background:white;color:#111827;border-radius:8px;box-shadow:0 12px 28px rgba(0,0,0,.18);z-index:100;overflow:hidden}
+        .suggestion-item{padding:12px;cursor:pointer;border-bottom:1px solid #e5e7eb}
+        .suggestion-item:hover{background:#f1f5f9}
+
+        .cotizador-box{
+            background:#3867f6;
+            color:white;
+            border-radius:14px;
+            padding:24px;
+            margin-bottom:30px;
+            box-shadow:0 10px 24px rgba(0,0,0,.12)
+        }
+
+        .cotizador-box h2{
+            text-align:center;
+            margin:0 0 18px 0;
+            font-size:20px;
+            color:white
+        }
+
+        .cotizador-grid{
+            display:grid;
+            grid-template-columns:1.4fr 1.4fr 1fr .8fr 1fr .8fr;
+            gap:14px;
+            align-items:end
+        }
+
+        .field{
+            position:relative
+        }
+
+        .field label{
+            display:block;
+            font-size:13px;
+            font-weight:800;
+            margin-bottom:6px;
+            color:white
+        }
+
+        .field input,
+        .field select{
+            width:100%;
+            box-sizing:border-box;
+            border:none;
+            border-radius:9px;
+            padding:13px;
+            font-size:14px
+        }
+
+        .cotizador-btn{
+            width:100%;
+            background:#f97316;
+            color:white;
+            border:none;
+            border-radius:9px;
+            padding:13px 20px;
+            font-weight:900;
+            font-size:16px;
+            cursor:pointer
+        }
+
+        .autocomplete-wrap{
+            position:relative
+        }
+
+        .suggestions{
+            position:absolute;
+            top:66px;
+            left:0;
+            right:0;
+            background:white;
+            color:#111827;
+            border-radius:8px;
+            box-shadow:0 12px 28px rgba(0,0,0,.18);
+            z-index:9999;
+            overflow:hidden
+        }
+
+        .suggestion-item{
+            padding:12px;
+            cursor:pointer;
+            border-bottom:1px solid #e5e7eb
+        }
+
+        .suggestion-item:hover{
+            background:#f1f5f9
+        }
+
+        .opciones-cotizacion{
+            margin-bottom:30px
+        }
+
+        .opcion-row{
+            display:grid;
+            grid-template-columns:1.5fr 1fr .7fr .7fr;
+            gap:20px;
+            align-items:center;
+            padding:18px;
+            border:2px solid #e5e7eb;
+            border-radius:16px;
+            margin-top:15px;
+            background:white
+        }
+
+        .opcion-row:first-of-type{
+            border-color:#22c55e
+        }
+
+        .precio-opcion{
+            font-size:24px;
+            font-weight:900;
+            color:#111827
+        }
+
+        .comprar-btn{
+            background:#2563eb;
+            color:white;
+            border:none;
+            border-radius:12px;
+            padding:13px 20px;
+            font-weight:900;
+            cursor:pointer
+        }
+    </style>
+</head>
+<body>
+
+<div class="layout">
+    <aside class="sidebar">
+        <div class="logo">EnvíosOK</div>
+
+        <div class="menu">
+            <a href="{{ route('b2c.dashboard') }}">Inicio</a>
+            <a href="{{ route('b2c.nuevo-envio') }}">Nuevo envío</a>
+            <a href="{{ route('b2c.mis-envios') }}">Mis envíos</a>
+            <a href="#">Incidencias</a>
+            <a href="{{ route('b2c.mis-pagos') }}">Mis pagos</a>
+            <a href="{{ route('b2c.mis-direcciones') }}">Mis direcciones</a>
+            <a href="#">Prepago</a>
+            <a href="#">Adeudos</a>
+            <a href="#">Configuración</a>
+
+            <form method="POST" action="{{ route('logout') }}">
+                @csrf
+                <button class="logout-btn" type="submit">Cerrar sesión</button>
+            </form>
+        </div>
+    </aside>
+
+    <main class="content">
+        <div class="title">Hola, {{ auth()->user()->name }}</div>
+        <div class="subtitle">Panel B2C para administrar tus envíos.</div>
+
+        <div class="cards">
+            <div class="card">
+                <div class="label">Cotizaciones</div>
+                <div class="value">{{ $totalCotizaciones }}</div>
+            </div>
+            <div class="card">
+                <div class="label">Pagadas</div>
+                <div class="value">{{ $totalPagadas }}</div>
+            </div>
+            <div class="card">
+                <div class="label">Guías generadas</div>
+                <div class="value">{{ $totalGuias }}</div>
+            </div>
+            <div class="card">
+                <div class="label">Con error</div>
+                <div class="value">{{ $totalErrores }}</div>
+            </div>
+        </div>
+
+        <div id="cotizador" class="cotizador-box">
+            <h2>Cotizador rápido </h2>
+
+            <form method="POST" action="/b2c/cotizar">
+                @csrf
+
+                <div class="cotizador-grid">
+
+                    <div class="field autocomplete-wrap">
+                        <label>Origen</label>
+                        <input type="text" id="cp_origen" name="cp_origen" placeholder="Código postal origen" maxlength="120" autocomplete="off" required>
+                        <input type="hidden" id="colonia_origen" name="colonia_origen">
+                        <input type="hidden" id="ciudad_origen" name="ciudad_origen">
+                        <input type="hidden" id="estado_origen" name="estado_origen">
+                        <div id="colonias_origen_list" class="suggestions"></div>
+                    </div>
+
+                    <div class="field autocomplete-wrap">
+                        <label>Destino</label>
+                        <input type="text" id="cp_destino" name="cp_destino" placeholder="Código postal destino" maxlength="120" autocomplete="off" required>
+                        <input type="hidden" id="colonia_destino" name="colonia_destino">
+                        <input type="hidden" id="ciudad_destino" name="ciudad_destino">
+                        <input type="hidden" id="estado_destino" name="estado_destino">
+                        <div id="colonias_destino_list" class="suggestions"></div>
+                    </div>
+
+                    <div class="field">
+                        <label>Tipo envío</label>
+                        <select name="tipo_envio" required>
+                            <option value="caja">Caja</option>
+                            <option value="sobre">Sobre</option>
+                        </select>
+                    </div>
+
+                    <div class="field">
+                        <label>Peso</label>
+                        <input name="peso" type="number" step="0.1" min="0.1" placeholder="Peso kg" required>
+                    </div>
+
+                    <div class="field">
+                        <label>Medidas</label>
+                        <input name="medidas" placeholder="20x20x20">
+                    </div>
+
+                    <div class="field">
+                        <label>&nbsp;</label>
+                        <button type="submit" class="cotizador-btn">Cotizar</button>
+                    </div>
+
+                </div>
+            </form>
+        </div>
+
+        @if(session('cotizacion_id') && session('opciones'))
+            <div class="card opciones-cotizacion">
+                <h2>Opciones disponibles</h2>
+
+                @foreach(session('opciones') as $opcion)
+                    <form method="POST" action="/b2c/cotizacion/{{ session('cotizacion_id') }}/seleccionar" class="opcion-row">
+                        @csrf
+
+                        <input type="hidden" name="logistico" value="{{ $opcion['logistico'] }}">
+                        <input type="hidden" name="servicio" value="{{ $opcion['servicio'] }}">
+                        <input type="hidden" name="precio" value="{{ $opcion['precio'] }}">
+
+                        <div>
+                            <strong>{{ $opcion['logistico'] }}</strong>
+                            <div>{{ $opcion['servicio'] }}</div>
+                        </div>
+
+                        <div>{{ $opcion['entrega'] }}</div>
+
+                        <div class="precio-opcion">
+                            ${{ number_format($opcion['precio'], 2) }}
+                        </div>
+
+                        <button type="submit" class="comprar-btn">Comprar</button>
+                    </form>
+                @endforeach
+            </div>
+        @endif
+
+        <div class="actions">
+            <a class="action" href="{{ route('b2c.nuevo-envio') }}">
+                Nuevo envío
+                <span>Captura origen, destino y paquete.</span>
+            </a>
+
+            <a class="action" href="{{ url('/rastreo') }}">
+                Rastrear envío
+                <span>Consulta el estado de tu paquete.</span>
+            </a>
+
+            <a class="action" href="{{ route('b2c.mis-envios') }}">
+                Mis envíos
+                <span>Consulta tus cotizaciones y guías.</span>
+            </a>
+        </div>
+
+        <div class="card" style="margin-top:30px">
+            <h2>Últimos envíos</h2>
+
+            @if($ultimosEnvios->isEmpty())
+                <p>Aún no tienes envíos registrados.</p>
+            @else
+                <table style="width:100%;border-collapse:collapse">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Paquetería</th>
+                            <th>Servicio</th>
+                            <th>Precio</th>
+                            <th>Estatus</th>
+                            <th>Tracking</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($ultimosEnvios as $envio)
+                            <tr>
+                                <td>{{ $envio->id }}</td>
+                                <td>{{ $envio->logistico ?? '-' }}</td>
+                                <td>{{ $envio->servicio ?? '-' }}</td>
+                                <td>${{ number_format($envio->precio ?? 0, 2) }}</td>
+                                <td>{{ $envio->estatus ?? '-' }}</td>
+                                <td>{{ $envio->tracking_number ?? '-' }}</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            @endif
+        </div>
+            </main>
+        </div>
+<script src="/js/b2c-cp-autocomplete.js"></script>
+</body>
+</html>

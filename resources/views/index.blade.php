@@ -264,6 +264,27 @@
     .suggestions {
         width: 100%;
     }
+
+    .nav nav {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+}
+
+.nav nav a,
+.nav-logout {
+    color: #fff;
+    font-weight: 800;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.nav-logout {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+}
 }
 		
     </style>
@@ -277,12 +298,24 @@
             </a>
 
             <nav>
-                <a href="#nosotros">Nosotros</a>
-                <a href="#paqueterias">Paquetería</a>
-                <a href="#faq">FAQ'S</a>
-                <a href="{{ url('/login') }}">Iniciar sesión</a>
-                <a href="{{ url('/register') }}">Registro</a>
-            </nav>
+    <a href="#nosotros">Nosotros</a>
+    <a href="#paqueterias">Paquetería</a>
+    <a href="#faq">FAQ'S</a>
+
+    @auth
+        <a href="{{ url('/dashboard') }}">Mi cuenta</a>
+
+        <form method="POST" action="{{ route('logout') }}" style="display:inline;">
+            @csrf
+            <button type="submit" class="nav-logout">
+                Cerrar sesión
+            </button>
+        </form>
+    @else
+        <a href="{{ url('/login') }}">Iniciar sesión</a>
+        <a href="{{ route('b2c.register') }}">Registro</a>
+    @endauth
+</nav>
         </header>
 
         <section class="quote-box">
@@ -337,6 +370,30 @@
                 <button class="btn-yellow" type="submit">Cotizar envío</button>
             </form>
         </section>
+
+        <section style="padding: 70px 20px; background:#ffffff; text-align:center;">
+    <h2 style="font-size:42px; margin-bottom:25px; color:#111827;">
+        Rastrea tu envío
+    </h2>
+
+    <form method="POST" action="{{ route('b2c.rastreo.buscar') }}"
+          style="max-width:820px; margin:auto; display:flex; background:white; border-radius:14px; overflow:hidden; box-shadow:0 10px 24px rgba(0,0,0,.16); border:1px solid #e5e7eb;">
+        @csrf
+
+        <input
+            type="text"
+            name="tracking_number"
+            placeholder="Ingresa tu número de rastreo"
+            required
+            style="flex:1; padding:22px; border:none; font-size:20px; outline:none;"
+        >
+
+        <button type="submit"
+                style="background:#dc2626; color:white; border:none; padding:0 38px; font-size:20px; font-weight:800; cursor:pointer;">
+            Rastrear
+        </button>
+    </form>
+</section>
 
         <section class="hero">
             <div>
