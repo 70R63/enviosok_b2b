@@ -2,12 +2,66 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Checkout | EnvíosOK</title>
+    <title>Checkout | ZIGO</title>
     <style>
         body{margin:0;font-family:Arial,sans-serif;background:#f4f7fb;color:#111827}
-        .layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+        .layout{
+            display:grid;
+            grid-template-columns:260px 1fr;
+            min-height:100vh;
+        }
+
+        body.guest .layout{
+            display:block;
+        }
+
+        body.guest .content{
+            max-width:1200px;
+            margin:0 auto;
+        }
         .sidebar{background:#2563eb;color:white;padding:30px}
-        .logo{font-size:26px;font-weight:900;margin-bottom:35px}
+        .logo{margin-bottom:25px;}
+        .zigo-logo{
+            text-align:center;
+            padding:8px;
+        }
+
+        .zigo-img{
+            width:180px;
+            max-width:100%;
+            display:block;
+            margin:0 auto;
+            animation:zigoEntrance 1s ease-out;
+            transition:all .35s ease;
+        }
+
+        .zigo-logo:hover .zigo-img{
+            transform:scale(1.03);
+            filter:
+                drop-shadow(0 0 8px rgba(0,255,255,.45))
+                drop-shadow(0 0 14px rgba(0,128,255,.35));
+        }
+
+        .zigo-tagline{
+            margin-top:8px;
+            font-size:10px;
+            letter-spacing:2px;
+            color:#dce7f7;
+            text-transform:uppercase;
+            font-weight:600;
+            line-height:1.5;
+        }
+
+        @keyframes zigoEntrance{
+            from{
+                opacity:0;
+                transform:translateX(-35px);
+            }
+            to{
+                opacity:1;
+                transform:translateX(0);
+            }
+        }
         .menu a,.logout-btn{display:block;color:white;text-decoration:none;font-weight:800;margin:18px 0;background:rgba(255,255,255,.12);padding:14px;border-radius:12px}
         .logout-btn{width:100%;border:none;text-align:left;cursor:pointer;font-size:16px}
         .content{padding:40px}
@@ -26,21 +80,117 @@
         .btn{width:100%;border:none;background:#f97316;color:white;padding:15px;border-radius:12px;font-weight:900;cursor:pointer;font-size:16px;margin-top:18px}
         .muted{color:#64748b;font-size:13px}
         @media(max-width:900px){.layout{grid-template-columns:1fr}.sidebar{display:none}.grid,.form-grid{grid-template-columns:1fr}}
+
+        .saldo-box {
+            margin-top: 20px;
+            padding: 18px;
+            border: 1px solid #dbe2ea;
+            border-radius: 14px;
+            background: #f8fafc;
+        }
+
+        .saldo-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .saldo-line span {
+            font-size: 15px;
+            font-weight: 600;
+            color: #334155;
+        }
+
+        .saldo-line strong {
+            font-size: 22px;
+            font-weight: 900;
+            color: #0f172a;
+        }
+
+        .saldo-btn {
+            width: 100%;
+            margin-top: 14px;
+            background: #16a34a !important;
+            color: white !important;
+            font-weight: 900;
+            font-size: 16px;
+            height: 48px;
+            border-radius: 12px;
+        }
+
+        .saldo-error {
+            margin-top: 12px;
+            color: #991b1b;
+            font-weight: 800;
+        }
+
+        .saldo-recargar {
+            display: block;
+            margin-top: 12px;
+            text-align: center;
+            background: #2563eb;
+            color: white;
+            padding: 12px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 900;
+        }
+
+        .summary-row{
+            display:grid;
+            grid-template-columns:95px 1fr;
+            gap:10px;
+            align-items:start;
+            margin-bottom:12px;
+        }
+
+        .summary-row span{
+            color:#111827;
+        }
+
+        .summary-row strong{
+            text-align:right;
+            line-height:1.25;
+        }
+
+        .summary-item {
+            display:flex;
+            justify-content:space-between;
+            gap:12px;
+            margin-bottom:12px;
+        }
+
+        body.guest .content{
+            max-width:1200px;
+            margin:0 auto;
+            padding:40px 24px;
+        }
+
     </style>
 </head>
-<body>
+<body class="{{ auth()->check() ? 'auth' : 'guest' }}">
 
 <div class="layout">
+    @auth
     <aside class="sidebar">
-        <div class="logo">EnvíosOK</div>
+        <div class="logo zigo-logo">
+            <img src="{{ asset('img/zigo-logo.png') }}" alt="ZIGO" class="zigo-img">
+
+            <div class="zigo-tagline">
+                Tecnología • Logística • Conexión
+            </div>
+        </div>
 
         <div class="menu">
             <a href="{{ route('b2c.dashboard') }}">Inicio</a>
-            <a href="{{ route('b2c.dashboard') }}#cotizador">Nuevo envío</a>
+            <a href="{{ route('b2c.nuevo-envio') }}">Nuevo envío</a>
             <a href="{{ route('b2c.mis-envios') }}">Mis envíos</a>
             <a href="#">Incidencias</a>
             <a href="{{ route('b2c.mis-pagos') }}">Mis pagos</a>
-            <a href="#">Mis direcciones</a>
+            <a href="{{ route('b2c.mis-direcciones') }}">Mis direcciones</a>
+            <a href="{{ route('b2c.prepago') }}">Prepago</a>
+            <a href="#">Adeudos</a>
             <a href="#">Configuración</a>
 
             <form method="POST" action="{{ route('logout') }}">
@@ -49,6 +199,7 @@
             </form>
         </div>
     </aside>
+    @endauth
 
     <main class="content">
         <div class="title">Completa los datos de tu guía</div>
@@ -189,7 +340,7 @@
                     <div class="summary-row"><span>Mensajería</span><strong>{{ $cotizacion->logistico }}</strong></div>
                     <div class="summary-row"><span>Servicio</span><strong>{{ $cotizacion->servicio }}</strong></div>
                     <div class="summary-row"><span>Origen</span><strong>{{ $cotizacion->cp_origen }}</strong></div>
-                    <div class="summary-row"><span>Destino</span><strong>{{ $cotizacion->cp_destino }}</strong></div>
+                    <div class="summary-row"><span>Destino </span><strong>{{ $cotizacion->cp_destino }}</strong></div>
                     <div class="summary-row"><span>Peso</span><strong>{{ $cotizacion->peso }} kg</strong></div>
                     <div class="summary-row"><span>Medidas</span><strong>{{ $cotizacion->medidas ?? 'N/A' }}</strong></div>
 
@@ -203,11 +354,53 @@
                     </p>
 
                     <button class="btn" type="submit">Continuar a pago</button>
+
+                    @auth
+                    <div class="saldo-box">
+
+                        <div class="saldo-line">
+                            <span>Saldo disponible</span>
+                            <strong>${{ number_format($saldo->saldo ?? 0, 2) }}</strong>
+                        </div>
+
+                        <div class="saldo-line">
+                            <span>Costo guía</span>
+                            <strong>${{ number_format($cotizacion->precio ?? 0, 2) }}</strong>
+                        </div>
+
+                        @if(($saldo->saldo ?? 0) >= ($cotizacion->precio ?? 0))
+
+                            <button
+                                type="submit"
+                                form="pagar-saldo-form"
+                                class="btn saldo-btn"
+                            >
+                                Pagar con saldo prepago
+                            </button>
+
+                        @else
+
+                            <div class="saldo-error">
+                                Saldo insuficiente para pagar esta guía.
+                            </div>
+
+                            <a href="{{ route('b2c.prepago') }}" class="saldo-recargar">
+                                Recargar saldo
+                            </a>
+
+                        @endif
+
+                    </div>
+                    @endauth
                 </aside>
             </div>
         </form>
     </main>
 </div>
-
+@auth
+<form id="pagar-saldo-form" method="POST" action="{{ route('b2c.pago.saldo', $cotizacion->id) }}">
+    @csrf
+</form>
+@endauth
 </body>
 </html>

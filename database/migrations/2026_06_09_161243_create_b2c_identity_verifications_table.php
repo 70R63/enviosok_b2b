@@ -1,0 +1,46 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up(): void
+{
+    Schema::create('b2c_identity_verifications', function (Blueprint $table) {
+        $table->id();
+
+        $table->foreignId('user_id')
+            ->constrained()
+            ->cascadeOnDelete();
+
+        $table->string('ine_front')->nullable();
+        $table->string('ine_back')->nullable();
+        $table->string('selfie_with_ine')->nullable();
+
+        $table->string('status')->default('SIN_VERIFICAR');
+        $table->text('comments')->nullable();
+
+        $table->timestamp('reviewed_at')->nullable();
+        $table->unsignedBigInteger('reviewed_by')->nullable();
+
+        $table->timestamps();
+    });
+}
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('b2c_identity_verifications');
+    }
+};

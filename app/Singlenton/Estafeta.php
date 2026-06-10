@@ -78,24 +78,31 @@ class Estafeta {
                 , 'headers'     => $headers]
             );
 
-            if ($response->getStatusCode() == "200"){
+            if ($response->getStatusCode() == "200") {
                 Log::info(__CLASS__." ".__FUNCTION__."".__LINE__." StatusCode 200");
+
                 $json = json_decode($response->getBody()->getContents());
 
                 $this->token = $json->access_token;
 
-                $insert = array('empresa_id' => $empresa_id
-                    ,'ltd_id'   => Config('ltd.estafeta.id')
-                    ,'token'    => $this->token
-                    ,'servicio'    => $recursoId
-                    ,'expira_en'=> Carbon::now()->addMinutes(1380)
-                     );
+                $expiresIn = isset($json->expires_in)
+                    ? (int) $json->expires_in
+                    : 3600;
+
+                $insert = [
+                    'empresa_id' => $empresa_id,
+                    'ltd_id'     => Config('ltd.estafeta.id'),
+                    'token'      => $this->token,
+                    'servicio'   => $recursoId,
+                    'expira_en'  => Carbon::now()->addSeconds($expiresIn - 300),
+                ];
+
                 Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__." insert token");
-                Log::debug(print_r($insert,true));
+                Log::debug(print_r($insert, true));
+
                 $id = LtdSesion::create($insert)->id;
+
                 Log::info(__CLASS__." ".__FUNCTION__." ID LTD SESION $id");
-            } else {
-                Log::info(__CLASS__." ".__FUNCTION__."".__LINE__." ");
             }
             
         }

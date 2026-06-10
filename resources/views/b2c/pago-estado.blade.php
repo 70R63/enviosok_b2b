@@ -185,12 +185,12 @@
 
         <div class="card">
             <div class="label">ID de pago</div>
-            <div class="value">{{ $cotizacion->payment_id ?? 'No disponible' }}</div>
+            <div class="value">{{ $cotizacion->payment_id ?? ($cotizacion->payment_status === 'saldo_prepago' ? 'No aplica' : 'No disponible') }}</div>
         </div>
 
         <div class="card">
             <div class="label">Estatus Mercado Pago</div>
-            <div class="value">{{ $cotizacion->payment_status ?? 'No disponible' }}</div>
+            <div class="value">{{ $cotizacion->payment_status === 'saldo_prepago' ? 'Saldo prepago' : ($cotizacion->payment_status ?? 'No disponible') }}</div>
         </div>
 
         <div class="card">
@@ -255,13 +255,21 @@
             </form>
         @endif
 
-        <a href="/b2c/dashboard" class="btn-secondary">
-            Ir a mi dashboard
-        </a>
+        @auth
+            <a href="{{ route('b2c.dashboard') }}" class="btn-secondary">
+                Ir a mi dashboard
+            </a>
 
-        <a href="{{ route('b2c.mis-envios') }}" class="btn-secondary">
-            Mis envíos
-        </a>
+            <a href="{{ route('b2c.mis-envios') }}" class="btn-secondary">
+                Mis envíos
+            </a>
+        @endauth
+
+        @guest
+            <a href="/" class="btn-secondary">
+                Volver al inicio
+            </a>
+        @endguest
 
     </div>
 

@@ -31,22 +31,34 @@ class AuthenticatedSessionController extends Controller
      * @return \Illuminate\Http\RedirectResponse
      */
     public function store(LoginRequest $request)
-    {
+{
+    Log::debug("store Login");
 
-        Log::debug("store Login");
-        $request->authenticate();
+    $request->authenticate();
+    $request->session()->regenerate();
 
-        $request->session()->regenerate();
+    $user = auth()->user();
 
-        $empresa = Empresa::findOrFail(auth()->user()->empresa_id);
-        $request->session()->put('empresa_nombre', $empresa->nombre);
-    
-        if (auth()->user()->roles->first()?->slug === 'cliente') {
-           return redirect('/b2c/dashboard');
+    if ($user->empresa_id) {
+        $empresa = Empresa::find($user->empresa_id);
+
+        if ($empresa) {
+            $request->session()->put('empresa_nombre', $empresa->nombre);
         }
-
-        return redirect()->intended(RouteServiceProvider::HOME);
     }
+
+    $adminRoles = ['sysadmin', 'admin', 'adminops', 'operaciones'];
+
+    if ($user->roles->whereIn('slug', $adminRoles)->isNotEmpty()) {
+        return redirect()->intended('/admin/incidencias');
+    }
+
+    if ($user->roles->where('slug', 'cliente')->isNotEmpty()) {
+        return redirect()->intended('/b2c/dashboard');
+    }
+
+    return redirect()->intended(RouteServiceProvider::HOME);
+}
 
     /**
      * Destroy an authenticated session.

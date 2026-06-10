@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Iniciar sesión - EnvíosOK</title>
+    <title>Iniciar sesión - ZIGO</title>
     <style>
         body{margin:0;font-family:Arial,sans-serif;background:#f4f7fb;color:#111827}
         .container{max-width:980px;margin:60px auto;padding:0 20px}
@@ -29,6 +29,13 @@
         <div class="side">
             <h1>Bienvenido</h1>
             <p>Inicia sesión para consultar tus envíos y agilizar futuras cotizaciones.</p>
+
+            <div style="margin-top:55px;text-align:center;">
+                <img src="{{ asset('img/zigo-logo.png') }}" alt="ZIGO" style="width:260px;max-width:90%;height:auto;">
+                <div style="margin-top:12px;font-size:11px;letter-spacing:2px;text-transform:uppercase;font-weight:900;color:#eaf2ff;">
+                    Tecnología • Logística • Conexión
+                </div>
+            </div>
         </div>
 
         <div class="form">

@@ -24,12 +24,18 @@ class Guia extends Model
     {
         parent::boot();        
         static::addGlobalScope('guia_empresa', function (Builder $builder) {
-            $empresas = EmpresaEmpresas::where('id',auth()->user()->empresa_id)
-                ->pluck('empresa_id')->toArray();
 
-            $builder->whereIN('guias.empresa_id',$empresas);
-            $builder->orderBy('guias.id', 'desc');
-        });
+        if (!auth()->check()) {
+            return;
+        }
+
+        $empresas = EmpresaEmpresas::where('id', auth()->user()->empresa_id)
+            ->pluck('empresa_id')
+            ->toArray();
+
+        $builder->whereIn('guias.empresa_id', $empresas);
+        $builder->orderBy('guias.id', 'desc');
+    });
     }
 
     public function scopeJoinSucursalAjuste($query) {

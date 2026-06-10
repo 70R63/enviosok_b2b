@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Resultados de cotización | EnviosOK</title>
+    <title>Resultados de cotización | ZIGO</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <style>
@@ -145,7 +145,7 @@
 <header class="header">
     <div class="header-inner">
         <a href="/">
-            <img src="{{ asset('img/Envios_OK_variante_C4x.png') }}" alt="EnviosOK">
+            <img src="{{ asset('img/Envios_OK_variante_C4x.png') }}" alt="ZIGO">
         </a>
 
         <nav>

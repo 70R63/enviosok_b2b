@@ -4,15 +4,20 @@ namespace App\Http\Controllers\B2C;
 
 use App\Http\Controllers\Controller;
 use App\Negocio\Guias\EstafetaCreacion;
+use App\Models\B2cSaldo;
+use App\Models\B2cMovimientoSaldo;
 use App\Models\B2cCotizacion;
 use App\Models\User;
 use App\Models\Roles\Roles;
 use App\Models\Guia;
 use App\Models\B2cDireccion;
+use App\Models\B2cIdentityVerification;
+use App\Models\B2cIncidencia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rules;
+use Illuminate\Support\Facades\DB;
 use MercadoPago\SDK;
 use MercadoPago\Preference;
 use MercadoPago\Item;
@@ -38,9 +43,9 @@ class CotizacionPublicaController extends Controller
 
     $cotizacion = B2cCotizacion::create([
         'user_id' => auth()->check() ? auth()->id() : null,
-        'cp_origen' => $data['cp_origen'],
+        'cp_origen' => substr($data['cp_origen'], 0, 5),
         'colonia_origen' => $data['colonia_origen'] ?? null,
-        'cp_destino' => $data['cp_destino'],
+        'cp_destino' => substr($data['cp_destino'], 0, 5),
         'colonia_destino' => $data['colonia_destino'] ?? null,
         'tipo_envio' => $data['tipo_envio'],
         'peso' => $data['peso'],
@@ -76,9 +81,17 @@ class CotizacionPublicaController extends Controller
         ],
     ];
 
-    return redirect('/b2c/dashboard')
-        ->with('cotizacion_id', $cotizacion->id)
-        ->with('opciones', $opciones);
+    if (auth()->check()) {
+        return redirect()
+            ->route('b2c.dashboard')
+            ->with('cotizacion_id', $cotizacion->id)
+            ->with('opciones', $opciones);
+    }
+
+    return view('index', [
+        'cotizacion_id' => $cotizacion->id,
+        'opciones' => $opciones,
+]);
     
 }
 
@@ -103,7 +116,11 @@ public function seleccionar(Request $request, B2cCotizacion $cotizacion)
 
 public function checkout(B2cCotizacion $cotizacion)
 {
-    return view('b2c.checkout', compact('cotizacion'));
+    $saldo = auth()->check()
+        ? B2cSaldo::firstOrCreate(['user_id' => auth()->id()], ['saldo' => 0])
+        : null;
+
+    return view('b2c.checkout', compact('cotizacion', 'saldo'));
 }
 
 public function procesarCheckout(Request $request, B2cCotizacion $cotizacion)
@@ -189,13 +206,17 @@ public function pago(B2cCotizacion $cotizacion)
 
 public function pagoSuccess(Request $request, B2cCotizacion $cotizacion)
 {
-    $cotizacion->update([
-        'estatus' => 'PAGADA',
-        'payment_id' => $request->get('payment_id'),
-        'payment_status' => $request->get('status'),
-        'payment_external_reference' => $request->get('external_reference'),
-        'payment_collection_id' => $request->get('collection_id'),
-    ]);
+    if ($cotizacion->estatus !== 'GUIA_GENERADA') {
+        $cotizacion->update([
+            'estatus' => 'PAGADA',
+            'payment_id' => $request->get('payment_id') ?? $cotizacion->payment_id,
+            'payment_status' => $request->get('status') ?? $cotizacion->payment_status,
+            'payment_external_reference' => $request->get('external_reference') ?? $cotizacion->payment_external_reference,
+            'payment_collection_id' => $request->get('collection_id') ?? $cotizacion->payment_collection_id,
+        ]);
+    }
+
+    $cotizacion->refresh();
 
     return view('b2c.pago-success', compact('cotizacion'));
 }
@@ -255,7 +276,7 @@ try {
     return back()->with('error', 'No fue posible generar la guía. Error proveedor: ' . $e->getMessage());
 }
 
-    $guia = Guia::orderBy('id', 'desc')->first();
+    $guia = Guia::withoutGlobalScopes()->orderBy('id', 'desc')->first();
 
     $tracking = $guia->tracking_number ?? null;
 
@@ -282,7 +303,7 @@ try {
     $pdfUrl = asset('storage/' . basename($cotizacion->documento));
 
     return redirect()
-        ->route('b2c.mis-envios')
+        ->route('b2c.pago.success', $cotizacion->id)
         ->with('success', 'Guía generada correctamente. Tracking: ' . ($guia->tracking_number ?? 'N/A'))
         ->with('pdf_url', $pdfUrl);
     }
@@ -343,7 +364,7 @@ private function buildEstafetaPayload(B2cCotizacion $cotizacion): array
                         'roadTypeAbbName' => 'Calle',
                         'roadName' => $cotizacion->remitente_direccion,
                         'settlementTypeAbbName' => 'Col',
-                        'settlementName' => $cotizacion->colonia_origen,
+                        'settlementName' => substr($cotizacion->colonia_origen ?: 'CENTRO', 0, 35),
                         'zipCode' => $cpOrigen,
                         'countryName' => 'MEX',
                         'ciudad' => $cotizacion->ciudad_origen,
@@ -370,7 +391,7 @@ private function buildEstafetaPayload(B2cCotizacion $cotizacion): array
                             'roadTypeAbbName' => 'Calle',
                             'roadName' => $cotizacion->destinatario_direccion,
                             'settlementTypeAbbName' => 'Col',
-                            'settlementName' => $cotizacion->colonia_destino,
+                            'settlementName' => substr($cotizacion->colonia_destino ?: 'CENTRO', 0, 35),
                             'zipCode' => $cpDestino,
                             'countryName' => 'MEX',
                             'ciudad' => $cotizacion->ciudad_destino,
@@ -442,8 +463,9 @@ public function guardarRegistroB2c(Request $request)
 
     Auth::login($user);
 
-    return redirect()->route('b2c.dashboard')
-    ->with('success', 'Cuenta creada correctamente.');
+    return redirect()
+        ->route('b2c.dashboard')
+        ->with('success', 'Cuenta creada correctamente.');
 }
 
 public function dashboardB2c()
@@ -643,6 +665,135 @@ public function eliminarDireccionB2c(B2cDireccion $direccion)
     return redirect()
         ->route('b2c.mis-direcciones')
         ->with('success', 'Dirección eliminada correctamente.');
+}
+
+public function pagarConSaldo(B2cCotizacion $cotizacion)
+{
+    if ($cotizacion->user_id !== auth()->id()) {
+        abort(403);
+    }
+
+    $total = (float) $cotizacion->precio;
+
+    $saldo = B2cSaldo::firstOrCreate(
+        ['user_id' => auth()->id()],
+        ['saldo' => 0]
+    );
+
+    if ($saldo->saldo < $total) {
+        return back()->with('error', 'Saldo insuficiente. Recarga saldo o paga con Mercado Pago.');
+    }
+
+    DB::transaction(function () use ($saldo, $cotizacion, $total) {
+        $saldoAnterior = $saldo->saldo;
+        $saldoNuevo = $saldoAnterior - $total;
+
+        $saldo->update([
+            'saldo' => $saldoNuevo,
+        ]);
+
+        B2cMovimientoSaldo::create([
+            'user_id' => auth()->id(),
+            'tipo' => 'COMPRA_GUIA',
+            'monto' => $total,
+            'saldo_anterior' => $saldoAnterior,
+            'saldo_nuevo' => $saldoNuevo,
+            'referencia' => 'COTIZACION-' . $cotizacion->id,
+            'estatus' => 'APLICADO',
+        ]);
+
+        $cotizacion->update([
+            'estatus' => 'PAGADA',
+            'payment_status' => 'saldo_prepago',
+            'payment_external_reference' => 'SALDO-' . $cotizacion->id,
+        ]);
+    });
+
+    return redirect()
+        ->route('b2c.pago.success', $cotizacion->id)
+        ->with('success', 'Guía pagada con saldo prepago.');
+}
+
+public function configuracionB2c()
+{
+    $identity = B2cIdentityVerification::firstOrCreate(
+        ['user_id' => auth()->id()],
+        ['status' => 'SIN_VERIFICAR']
+    );
+
+    return view('b2c.configuracion', compact('identity'));
+}
+
+public function guardarIdentidadB2c(Request $request)
+{
+    $data = $request->validate([
+        'ine_front' => ['required', 'image', 'max:5120'],
+        'ine_back' => ['required', 'image', 'max:5120'],
+        'selfie_with_ine' => ['required', 'image', 'max:5120'],
+    ]);
+
+    $identity = B2cIdentityVerification::firstOrCreate(
+        ['user_id' => auth()->id()],
+        ['status' => 'SIN_VERIFICAR']
+    );
+
+    $identity->update([
+        'ine_front' => $request->file('ine_front')->store('b2c/identity', 'public'),
+        'ine_back' => $request->file('ine_back')->store('b2c/identity', 'public'),
+        'selfie_with_ine' => $request->file('selfie_with_ine')->store('b2c/identity', 'public'),
+        'status' => 'EN_REVISION',
+        'comments' => null,
+    ]);
+
+    return redirect()
+        ->route('b2c.configuracion')
+        ->with('success', 'Documentos enviados correctamente. Tu identidad quedó en revisión.');
+}
+
+public function incidenciasB2c()
+{
+    $incidencias = B2cIncidencia::where('user_id', auth()->id())
+        ->latest()
+        ->get();
+
+    return view('b2c.incidencias', compact('incidencias'));
+}
+
+public function guardarIncidenciaB2c(Request $request)
+{
+    $data = $request->validate([
+        'cotizacion_id' => ['nullable', 'exists:b2c_cotizaciones,id'],
+        'tracking_number' => ['nullable', 'string', 'max:100'],
+        'tipo' => ['required', 'string', 'max:100'],
+        'asunto' => ['required', 'string', 'max:150'],
+        'descripcion' => ['required', 'string', 'max:2000'],
+        'evidencia' => ['nullable', 'file', 'max:5120'],
+    ]);
+
+    $folio = 'INC-' . str_pad((B2cIncidencia::max('id') ?? 0) + 1, 5, '0', STR_PAD_LEFT);
+
+    $evidencia = null;
+
+    if ($request->hasFile('evidencia')) {
+        $evidencia = $request->file('evidencia')->store('b2c/incidencias', 'public');
+    }
+
+    B2cIncidencia::create([
+        'folio' => $folio,
+        'user_id' => auth()->id(),
+        'cotizacion_id' => $data['cotizacion_id'] ?? null,
+        'tracking_number' => $data['tracking_number'] ?? null,
+        'tipo' => $data['tipo'],
+        'asunto' => $data['asunto'],
+        'descripcion' => $data['descripcion'],
+        'evidencia' => $evidencia,
+        'estatus' => 'ABIERTA',
+        'prioridad' => 'MEDIA',
+    ]);
+
+    return redirect()
+        ->route('b2c.incidencias')
+        ->with('success', 'Incidencia registrada correctamente.');
 }
 
 }

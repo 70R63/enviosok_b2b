@@ -2,12 +2,53 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Mi cuenta - EnvíosOK</title>
+    <title>Mi cuenta - ZIGO</title>
     <style>
         body{margin:0;font-family:Arial,sans-serif;background:#f4f7fb;color:#111827}
         .layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
         .sidebar{background:#2563eb;color:white;padding:30px}
-        .logo{font-size:26px;font-weight:900;margin-bottom:35px}
+        .logo{margin-bottom:25px;}
+        .zigo-logo{
+            text-align:center;
+            padding:8px;
+        }
+
+        .zigo-img{
+            width:180px;
+            max-width:100%;
+            display:block;
+            margin:0 auto;
+            animation:zigoEntrance 1s ease-out;
+            transition:all .35s ease;
+        }
+
+        .zigo-logo:hover .zigo-img{
+            transform:scale(1.03);
+            filter:
+                drop-shadow(0 0 8px rgba(0,255,255,.45))
+                drop-shadow(0 0 14px rgba(0,128,255,.35));
+        }
+
+        .zigo-tagline{
+            margin-top:8px;
+            font-size:10px;
+            letter-spacing:2px;
+            color:#dce7f7;
+            text-transform:uppercase;
+            font-weight:600;
+            line-height:1.5;
+        }
+
+        @keyframes zigoEntrance{
+            from{
+                opacity:0;
+                transform:translateX(-35px);
+            }
+            to{
+                opacity:1;
+                transform:translateX(0);
+            }
+        }
         .menu a,.logout-btn{display:block;color:white;text-decoration:none;font-weight:800;margin:18px 0;background:rgba(255,255,255,.12);padding:14px;border-radius:12px}
         .logout-btn{width:100%;border:none;text-align:left;cursor:pointer;font-size:16px}
         .content{padding:40px}
@@ -156,18 +197,24 @@
 
 <div class="layout">
     <aside class="sidebar">
-        <div class="logo">EnvíosOK</div>
+        <div class="logo zigo-logo">
+            <img src="{{ asset('img/zigo-logo.png') }}" alt="ZIGO" class="zigo-img">
+
+            <div class="zigo-tagline">
+                Tecnología • Logística • Conexión
+            </div>
+        </div>
 
         <div class="menu">
             <a href="{{ route('b2c.dashboard') }}">Inicio</a>
             <a href="{{ route('b2c.nuevo-envio') }}">Nuevo envío</a>
             <a href="{{ route('b2c.mis-envios') }}">Mis envíos</a>
-            <a href="#">Incidencias</a>
+            <a href="{{ route('b2c.incidencias') }}">Incidencias</a>
             <a href="{{ route('b2c.mis-pagos') }}">Mis pagos</a>
             <a href="{{ route('b2c.mis-direcciones') }}">Mis direcciones</a>
-            <a href="#">Prepago</a>
+            <a href="{{ route('b2c.prepago') }}">Prepago</a>
             <a href="#">Adeudos</a>
-            <a href="#">Configuración</a>
+            <a href="{{ route('b2c.configuracion') }}">Configuración</a>
 
             <form method="POST" action="{{ route('logout') }}">
                 @csrf

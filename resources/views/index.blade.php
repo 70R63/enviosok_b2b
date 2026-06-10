@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EnviosOK | Cotiza y genera tus guías</title>
+    <title>ZIGO | Cotiza y genera tus guías</title>
 
     <style>
         body {
@@ -21,14 +21,15 @@
         .nav {
             max-width: 1180px;
             margin: auto;
-            padding: 18px 24px;
+            padding: 8px 24px 4px;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
         .nav img {
-            height: 42px;
+            width: auto;
+            object-fit: contain;
         }
 
         .nav a {
@@ -42,14 +43,14 @@
         .quote-box {
             max-width: 1180px;
             margin: auto;
-            padding: 18px 24px 34px;
+            padding: 4px 24px 30px;
         }
 
         .quote-title {
             text-align: center;
-            font-size: 22px;
-            font-weight: 800;
-            margin-bottom: 18px;
+            font-size: 24px;
+            font-weight: 900;
+            margin-bottom: 16px;
         }
 
         .quote-form {
@@ -110,10 +111,11 @@
         }
 
         .hero-card {
-            background: white;
+            background: rgba(255,255,255,.08);
+            border: 1px solid rgba(255,255,255,.15);
             border-radius: 32px;
-            padding: 28px;
-            box-shadow: 0 20px 50px rgba(0,0,0,.18);
+            padding: 40px;
+            backdrop-filter: blur(8px);
         }
 
         .hero-card img {
@@ -241,7 +243,68 @@
     background: #f3f4f6;
 }
 
-        @media (max-width: 900px) {
+.hero-logo{
+    width:100%;
+    max-width:500px;
+    display:block;
+    margin:auto;
+    object-fit:contain;
+}
+
+.hero-logo{
+    animation:zigoFloat 5s ease-in-out infinite;
+}
+
+@keyframes zigoFloat{
+    0%{transform:translateY(0)}
+    50%{transform:translateY(-8px)}
+    100%{transform:translateY(0)}
+}
+
+.brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-decoration: none;
+}
+
+.brand-logo {
+    height: 92px;
+    width: auto;
+    object-fit: contain;
+    animation: zigoEnter .8s ease-out;
+    transition: transform .35s ease, filter .35s ease;
+}
+
+.brand:hover .brand-logo {
+    transform: translateX(4px) scale(1.03);
+    filter:
+        drop-shadow(0 0 8px rgba(56,189,248,.8))
+        drop-shadow(0 0 14px rgba(37,99,235,.6));
+}
+
+.brand-tagline {
+    margin-top: -8px;
+    font-size: 10px;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    color: #eaf2ff;
+    font-weight: 900;
+    line-height: 1.2;
+}
+
+@keyframes zigoEnter {
+    from {
+        opacity: 0;
+        transform: translateX(-28px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+ @media (max-width: 900px) {
     .quote-form,
     .hero,
     .cards {
@@ -285,6 +348,8 @@
     cursor: pointer;
     padding: 0;
 }
+
+
 }
 		
     </style>
@@ -293,8 +358,11 @@
 
     <div class="top">
         <header class="nav">
-            <a href="/">
-                <img src="{{ asset('img/Envios_OK_variante_C4x.png') }}" alt="EnviosOK">
+            <a href="/" class="brand">
+                <img src="{{ asset('img/zigo-logo.png') }}" alt="ZIGO" class="brand-logo">
+                <div class="brand-tagline">
+                    Tecnología • Logística • Conexión
+                </div>
             </a>
 
             <nav>
@@ -306,48 +374,52 @@
         <a href="{{ url('/dashboard') }}">Mi cuenta</a>
 
         <form method="POST" action="{{ route('logout') }}" style="display:inline;">
-            @csrf
-            <button type="submit" class="nav-logout">
-                Cerrar sesión
-            </button>
-        </form>
-    @else
-        <a href="{{ url('/login') }}">Iniciar sesión</a>
-        <a href="{{ route('b2c.register') }}">Registro</a>
-    @endauth
-</nav>
-        </header>
+                        @csrf
+                        <button type="submit" class="nav-logout">
+                            Cerrar sesión
+                        </button>
+                    </form>
+                @else
+                    <a href="{{ url('/login') }}">Iniciar sesión</a>
+                    <a href="{{ route('b2c.register') }}">Registro</a>
+                @endauth
+            </nav>
+            </header>
 
-        <section class="quote-box">
-            <div class="quote-title">Cotiza gratis tu envío</div>
+            <section class="quote-box">
+                 <div class="quote-title">Cotiza gratis tu envío</div>
 
-            <form class="quote-form" method="POST" action="{{ route('b2c.cotizar') }}">
-    @csrf
+                            <form class="quote-form" method="POST" action="{{ route('b2c.cotizar') }}">
+                    @csrf
+                                <div class="field autocomplete-wrap">
+                    <label>Código postal origen</label>
+
+                    <input type="text" id="cp_origen" name="cp_origen" placeholder="Código postal origen" maxlength="120" autocomplete="off">
+
+                    <input type="hidden" id="colonia_origen" name="colonia_origen">
+                    <input type="hidden" id="ciudad_origen" name="ciudad_origen">
+                    <input type="hidden" id="estado_origen" name="estado_origen">
+                    <div id="colonias_origen_list" class="suggestions"></div>
+
+                    <small id="cp_origen_msg" style="display:none; color:#fff; margin-top:6px;">
+                        Valida <a href="https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/Descarga.aspx" target="_blank" style="color:#facc15;">aquí</a> tu código postal
+                    </small>
+                </div>
+
                 <div class="field autocomplete-wrap">
-    <label>Código postal origen</label>
+                    <label>Código postal destino</label>
 
-    <input type="text" id="cp_origen" name="cp_origen" placeholder="Código postal origen" maxlength="120" autocomplete="off">
+                    <input type="text" id="cp_destino" name="cp_destino" placeholder="Código postal destino" maxlength="120" autocomplete="off">
 
-    <input type="hidden" id="colonia_origen" name="colonia_origen">
-    <div id="colonias_origen_list" class="suggestions"></div>
+                    <input type="hidden" id="colonia_destino" name="colonia_destino">
+                    <input type="hidden" id="ciudad_destino" name="ciudad_destino">
+                    <input type="hidden" id="estado_destino" name="estado_destino">
+                    <div id="colonias_destino_list" class="suggestions"></div>
 
-    <small id="cp_origen_msg" style="display:none; color:#fff; margin-top:6px;">
-        Valida <a href="https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/Descarga.aspx" target="_blank" style="color:#facc15;">aquí</a> tu código postal
-    </small>
-</div>
-
-                <div class="field autocomplete-wrap">
-    <label>Código postal destino</label>
-
-    <input type="text" id="cp_destino" name="cp_destino" placeholder="Código postal destino" maxlength="120" autocomplete="off">
-
-    <input type="hidden" id="colonia_destino" name="colonia_destino">
-    <div id="colonias_destino_list" class="suggestions"></div>
-
-    <small id="cp_destino_msg" style="display:none; color:#fff; margin-top:6px;">
-        Valida <a href="https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/Descarga.aspx" target="_blank" style="color:#facc15;">aquí</a> tu código postal
-    </small>
-</div>
+                    <small id="cp_destino_msg" style="display:none; color:#fff; margin-top:6px;">
+                        Valida <a href="https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/Descarga.aspx" target="_blank" style="color:#facc15;">aquí</a> tu código postal
+                    </small>
+                </div>
 
                 <div class="field">
                     <label>Tipo de envío</label>
@@ -369,6 +441,48 @@
 
                 <button class="btn-yellow" type="submit">Cotizar envío</button>
             </form>
+
+            @if(isset($cotizacion_id) && isset($opciones))
+                <div style="max-width:1180px;margin:25px auto 0;padding:0 24px;">
+                    <div style="background:white;color:#111827;border-radius:20px;padding:24px;box-shadow:0 12px 30px rgba(0,0,0,.12);">
+                        <h2 style="margin-top:0;color:#111827;text-align:center;">Opciones disponibles</h2>
+
+                        @foreach($opciones as $opcion)
+                            <form method="POST" action="{{ route('b2c.seleccionar', $cotizacion_id) }}"
+                                style="display:grid;grid-template-columns:1.5fr 1fr 1fr auto;gap:18px;align-items:center;border:1px solid #e5e7eb;border-radius:14px;padding:16px;margin-top:12px;">
+                                @csrf
+
+                                <input type="hidden" name="logistico" value="{{ $opcion['logistico'] }}">
+                                <input type="hidden" name="servicio" value="{{ $opcion['servicio'] }}">
+                                <input type="hidden" name="precio" value="{{ $opcion['precio'] }}">
+
+                               <div style="display:flex;align-items:center;gap:15px;">
+                                    <img
+                                        src="{{ asset($opcion['logo']) }}"
+                                        alt="{{ $opcion['logistico'] }}"
+                                        style="width:90px;height:auto;object-fit:contain;"
+                                    >
+                                    <div>
+                                        <strong>{{ $opcion['logistico'] }}</strong>
+                                        <div>{{ $opcion['servicio'] }}</div>
+                                    </div>
+                                </div>
+
+                                <div>{{ $opcion['entrega'] }}</div>
+
+                                <div style="font-size:22px;font-weight:900;">
+                                    ${{ number_format($opcion['precio'], 2) }}
+                                </div>
+
+                                <button type="submit"
+                                        style="background:#f97316;color:white;border:none;border-radius:10px;padding:12px 22px;font-weight:900;cursor:pointer;">
+                                    Comprar
+                                </button>
+                            </form>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
         </section>
 
         <section style="padding: 70px 20px; background:#ffffff; text-align:center;">
@@ -397,7 +511,7 @@
 
         <section class="hero">
             <div>
-                <p>En EnviosOK podrás cotizar envíos nacionales en sencillos pasos.</p>
+                <p>En ZIGO podrás cotizar envíos nacionales en sencillos pasos.</p>
                 <h1>Envía paquetes de forma segura y rápida</h1>
                 <p>
                     Somos una plataforma de autoservicio digital para cotizar, pagar y generar guías
@@ -406,7 +520,9 @@
             </div>
 
             <div class="hero-card">
-                <img src="{{ asset('img/enviosok.jpeg') }}" alt="Envía paquetes con EnviosOK">
+                <img src="{{ asset('img/zigo-logo.png') }}"
+                    alt="ZIGO"
+                    class="hero-logo">
             </div>
         </section>
     </div>
@@ -450,7 +566,7 @@
     </section>
 
     <footer>
-        EnviosOK © {{ date('Y') }}. Plataforma de envíos B2C y B2B.
+        ZIGO © {{ date('Y') }}. Plataforma de envíos B2C y B2B.
     </footer>
 
     <a class="whatsapp" href="#" target="_blank">¡¡Estamos aquí para ayudarte!!</a>
@@ -496,10 +612,21 @@
             div.textContent = texto;
 
             div.addEventListener('click', function () {
-    cpInput.value = texto;
-    hiddenColonia.value = texto;
-    list.style.display = 'none';
-});
+                cpInput.value = texto;          // visible como antes
+                hiddenColonia.value = colonia;  // limpio para Estafeta
+
+                if (cpInputId === 'cp_origen') {
+                    document.getElementById('ciudad_origen').value = municipio;
+                    document.getElementById('estado_origen').value = estado;
+                }
+
+                if (cpInputId === 'cp_destino') {
+                    document.getElementById('ciudad_destino').value = municipio;
+                    document.getElementById('estado_destino').value = estado;
+                }
+
+                list.style.display = 'none';
+            });
 
             list.appendChild(div);
         });

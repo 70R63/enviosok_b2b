@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Detalle de envío - EnvíosOK</title>
+    <title>Detalle de envío - ZIGO</title>
     <style>
         body{margin:0;font-family:Arial,sans-serif;background:#f4f7fb;color:#111827}
         .layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
@@ -27,13 +27,19 @@
 
 <div class="layout">
     <aside class="sidebar">
-        <div class="logo">EnvíosOK</div>
+        <div class="logo zigo-logo">
+            <img src="{{ asset('img/zigo-logo.png') }}" alt="ZIGO" class="zigo-img">
+
+            <div class="zigo-tagline">
+                Tecnología • Logística • Conexión
+            </div>
+        </div>
 
         <div class="menu">
             <a href="{{ route('b2c.dashboard') }}">Inicio</a>
             <a href="{{ route('b2c.dashboard') }}#cotizador">Nuevo envío</a>
             <a href="{{ route('b2c.mis-envios') }}">Mis envíos</a>
-            <a href="#">Incidencias</a>
+            <a href="{{ route('b2c.incidencias') }}">Incidencias</a>
             <a href="{{ route('b2c.mis-pagos') }}">Mis pagos</a>
             <a href="#">Mis direcciones</a>
             <a href="#">Configuración</a>

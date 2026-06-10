@@ -1,10 +1,13 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\LtdController;
 use App\Http\Controllers\B2C\CotizacionPublicaController;
 use App\Http\Controllers\API\CPController;
 use App\Http\Controllers\B2cMisEnviosController;
+use App\Http\Controllers\Admin\B2cIncidenciaAdminController;
+
 
 
 /*
@@ -28,10 +31,6 @@ Route::resource('profile','userProfileController');
 Route::get('/dashboard', function () {
     return view('dashboard');
 })->middleware(['auth'])->name('dashboard');
-
-//Cotizar b2c
-Route::post('/b2c/cotizar', [CotizacionPublicaController::class, 'cotizar'])
-    ->name('b2c.cotizar');
 
 Route::post('/b2c/cotizacion/{cotizacion}/seleccionar', [CotizacionPublicaController::class, 'seleccionar'])
     ->name('b2c.seleccionar');
@@ -59,9 +58,6 @@ Route::get('/b2c/pago/{cotizacion}/failure', [CotizacionPublicaController::class
 Route::get('/b2c/pago/{cotizacion}/pending', [CotizacionPublicaController::class, 'pagoPending'])
     ->name('b2c.pago.pending');
 	
-Route::post('/b2c/guia/{cotizacion}/generar', [CotizacionPublicaController::class, 'generarGuia'])
-    ->name('b2c.guia.generar');
-
 Route::post('/b2c/guia/{cotizacion}/generar', [CotizacionPublicaController::class, 'generarGuia'])
     ->name('b2c.guia.generar');
 
@@ -124,7 +120,63 @@ Route::post('/b2c/mis-direcciones', [CotizacionPublicaController::class, 'guarda
 Route::post('/b2c/mis-direcciones/{direccion}/eliminar', [CotizacionPublicaController::class, 'eliminarDireccionB2c'])
     ->name('b2c.mis-direcciones.eliminar');
 
+// Saldo / Prepago
+Route::get('/b2c/prepago', [B2cMisEnviosController::class, 'prepago'])
+    ->name('b2c.prepago');
+
+Route::post('/b2c/prepago/recargar', [B2cMisEnviosController::class, 'crearRecarga'])
+    ->name('b2c.prepago.recargar');
+
+Route::get('/b2c/prepago/{recarga}/success', [B2cMisEnviosController::class, 'recargaSuccess'])
+    ->name('b2c.prepago.success');
+
+Route::get('/b2c/prepago/{recarga}/failure', [B2cMisEnviosController::class, 'recargaFailure'])
+    ->name('b2c.prepago.failure');
+
+Route::get('/b2c/prepago/{recarga}/pending', [B2cMisEnviosController::class, 'recargaPending'])
+    ->name('b2c.prepago.pending');
+
+Route::post('/b2c/pago/{cotizacion}/saldo', [CotizacionPublicaController::class, 'pagarConSaldo'])
+    ->name('b2c.pago.saldo');
+
+//Configuracion
+Route::get('/b2c/configuracion', [CotizacionPublicaController::class, 'configuracionB2c'])
+    ->name('b2c.configuracion');
+
+Route::post('/b2c/configuracion/identidad', [CotizacionPublicaController::class, 'guardarIdentidadB2c'])
+    ->name('b2c.configuracion.identidad.guardar');
+
+//Incidencias
+Route::get('/b2c/incidencias', [CotizacionPublicaController::class, 'incidenciasB2c'])
+    ->name('b2c.incidencias');
+
+Route::post('/b2c/incidencias', [CotizacionPublicaController::class, 'guardarIncidenciaB2c'])
+    ->name('b2c.incidencias.guardar');
+
 });
+
+// Admin - Incidencias B2C
+Route::middleware(['auth', 'roles:sysadmin,admin,adminops,operaciones'])
+    ->prefix('admin')
+    ->group(function () {
+
+        Route::get('/incidencias', [B2cIncidenciaAdminController::class, 'index'])
+            ->name('admin.incidencias.index');
+
+        Route::get('/incidencias/{incidencia}', [B2cIncidenciaAdminController::class, 'show'])
+            ->name('admin.incidencias.show');
+
+        Route::post('/incidencias/{incidencia}/responder', [B2cIncidenciaAdminController::class, 'responder'])
+            ->name('admin.incidencias.responder');
+    });
+
+Route::match(['GET', 'POST'], '/b2c/prepago/webhook', [B2cMisEnviosController::class, 'recargaWebhook'])
+    ->name('b2c.prepago.webhook');
+
+//Cotizar b2c
+Route::post('/b2c/cotizar', [CotizacionPublicaController::class, 'cotizar'])
+    ->name('b2c.cotizar');
+
 
 /*
 |Los roles definidos son 
