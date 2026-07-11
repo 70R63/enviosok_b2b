@@ -19,7 +19,7 @@ use App\Http\Controllers\API\Reportes\PagosController as ReportesPagoController;
 use App\Http\Controllers\API\Ltd\FedexController;
 use App\Http\Controllers\API\Ltd\EstafetaController;
 
-use App\Http\Controllers\Api\Hub\PostalCodeController;
+use App\Http\Controllers\API\Hub\PostalCodeController;
 use App\Http\Middleware\ValidateZigoApiKey;
 
 use App\Http\Controllers\API\DEV\GuiaController as DevGuiaController ;
