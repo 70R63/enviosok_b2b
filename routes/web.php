@@ -7,7 +7,8 @@ use App\Http\Controllers\B2C\CotizacionPublicaController;
 use App\Http\Controllers\API\CPController;
 use App\Http\Controllers\B2cMisEnviosController;
 use App\Http\Controllers\Admin\B2cIncidenciaAdminController;
-
+use App\Http\Controllers\Crm\CrmClientController;
+use App\Http\Controllers\Web\PostalCodeLookupController;
 
 
 /*
@@ -34,10 +35,10 @@ Route::get('/dashboard', function () {
 
 Route::post('/b2c/cotizacion/{cotizacion}/seleccionar', [CotizacionPublicaController::class, 'seleccionar'])
     ->name('b2c.seleccionar');
-	
-Route::get('/b2c/cp/colonias', [CPController::class, 'colonias'])
-    ->name('b2c.cp.colonias');
-		
+
+Route::post('/b2c/cotizacion/{cotizacion}/seleccionar-nuevo', [CotizacionPublicaController::class, 'seleccionarNuevoEnvio'])
+    ->name('b2c.seleccionar.nuevo');
+			
 /*provisional pruebaa */
 Route::get('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'checkout'])
     ->name('b2c.checkout');
@@ -90,6 +91,12 @@ Route::middleware(['auth'])->group(function () {
 Route::get('/b2c/envios/{cotizacion}', [CotizacionPublicaController::class, 'detalleEnvioB2c'])
     ->middleware('auth')
     ->name('b2c.envios.detalle');
+
+Route::post('/b2c/envios/{cotizacion}/duplicar', [CotizacionPublicaController::class, 'duplicarEnvioB2c'])
+    ->name('b2c.envios.duplicar');
+
+Route::post('/b2c/envios/{cotizacion}/eliminar', [CotizacionPublicaController::class, 'eliminarCotizacionB2c'])
+    ->name('b2c.envios.eliminar');
 
 //Mis Pagos
 Route::get('/b2c/mis-pagos', [CotizacionPublicaController::class, 'misPagosB2c'])
@@ -153,6 +160,14 @@ Route::get('/b2c/incidencias', [CotizacionPublicaController::class, 'incidencias
 Route::post('/b2c/incidencias', [CotizacionPublicaController::class, 'guardarIncidenciaB2c'])
     ->name('b2c.incidencias.guardar');
 
+//nuevo envio -- paquete
+Route::post('/b2c/paquete/{cotizacion}', [CotizacionPublicaController::class, 'guardarPaqueteB2c'])
+    ->middleware('auth')
+    ->name('b2c.paquete.guardar');
+
+    Route::get('/b2c/cotizacion/{cotizacion}/opciones', [CotizacionPublicaController::class, 'opcionesB2c'])
+    ->name('b2c.opciones');
+
 });
 
 // Admin - Incidencias B2C
@@ -170,12 +185,214 @@ Route::middleware(['auth', 'roles:sysadmin,admin,adminops,operaciones'])
             ->name('admin.incidencias.responder');
     });
 
+//LOGIN SOPORTE
+Route::get('/soporte/login', [B2cIncidenciaAdminController::class, 'login'])
+    ->name('soporte.login');
+
+Route::post('/soporte/login', [B2cIncidenciaAdminController::class, 'loginPost'])
+    ->name('soporte.login.post');
+
+Route::post('/soporte/logout', [B2cIncidenciaAdminController::class, 'logoutSoporte'])
+            ->name('soporte.logout');
+
+// Portal Soporte
+Route::middleware(['auth', 'roles:sysadmin,admin,adminops,operaciones'])
+    ->prefix('soporte')
+    ->name('soporte.')
+    ->group(function () {
+
+        Route::get('/dashboard', [B2cIncidenciaAdminController::class, 'dashboard'])
+            ->name('dashboard');
+
+        Route::get('/incidencias', [B2cIncidenciaAdminController::class, 'indexSoporte'])
+            ->name('incidencias.index');
+
+        Route::get('/incidencias/{incidencia}', [B2cIncidenciaAdminController::class, 'showSoporte'])
+            ->name('incidencias.show');
+
+        Route::post('/incidencias/{incidencia}/responder', [B2cIncidenciaAdminController::class, 'responder'])
+            ->name('incidencias.responder');
+
+    });
+
+// ===============================
+// PORTAL NEGOCIOS / EMPRESAS B2B
+// ===============================
+Route::get('/negocios/login', [B2cIncidenciaAdminController::class, 'loginNegocios'])
+    ->name('negocios.login');
+
+Route::post('/negocios/login', [B2cIncidenciaAdminController::class, 'loginNegociosPost'])
+    ->name('negocios.login.post');
+
+Route::post('/negocios/logout', [B2cIncidenciaAdminController::class, 'logoutNegocios'])
+    ->name('negocios.logout');
+
+Route::middleware(['auth', 'roles:sysadmin,admin,adminops,operaciones,cliente'])
+    ->prefix('negocios')
+    ->name('negocios.')
+    ->group(function () {
+        Route::get('/dashboard', function () {
+            return view('negocios.dashboard');
+        })->name('dashboard');
+    });
+
+
+// ===============================
+// PORTAL CRM / ADMIN GENERAL
+// ===============================
+Route::get('/crm/login', [B2cIncidenciaAdminController::class, 'loginCrm'])
+    ->name('crm.login');
+
+Route::post('/crm/login', [B2cIncidenciaAdminController::class, 'loginCrmPost'])
+    ->name('crm.login.post');
+
+Route::post('/crm/logout', [B2cIncidenciaAdminController::class, 'logoutCrm'])
+    ->name('crm.logout');
+
+Route::middleware(['auth', 'roles:sysadmin,admin'])
+    ->prefix('crm')
+    ->name('crm.')
+    ->group(function () {
+        Route::get('/dashboard', function () {
+            return view('crm.dashboard');
+        })->name('dashboard');
+
+        Route::get('/seguridad', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'index'])
+            ->name('seguridad.index');
+
+        Route::get('/seguridad/usuarios', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'usuarios'])
+            ->name('seguridad.usuarios');
+
+        Route::get('/seguridad/roles', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'roles'])
+            ->name('seguridad.roles');
+
+        Route::get('/seguridad/permisos', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'permisos'])
+            ->name('seguridad.permisos');
+
+        Route::get('/seguridad/usuarios/crear', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'crearUsuario'])
+            ->name('seguridad.usuarios.crear');
+
+        Route::post('/seguridad/usuarios', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'guardarUsuario'])
+            ->name('seguridad.usuarios.guardar');
+
+        Route::get('/seguridad/usuarios/{user}/editar', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'editarUsuario'])
+            ->name('seguridad.usuarios.editar');
+
+        Route::post('/seguridad/usuarios/{user}/actualizar', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'actualizarUsuario'])
+            ->name('seguridad.usuarios.actualizar');
+
+        Route::post('/seguridad/usuarios/{user}/eliminar', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'eliminarUsuario'])
+            ->name('seguridad.usuarios.eliminar');
+
+        Route::get('/seguridad/roles/crear', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'crearRol'])
+            ->name('seguridad.roles.crear');
+
+        Route::post('/seguridad/roles', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'guardarRol'])
+            ->name('seguridad.roles.guardar');
+
+        Route::get('/seguridad/roles/{id}/editar', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'editarRol'])
+            ->name('seguridad.roles.editar');
+
+        Route::post('/seguridad/roles/{id}/actualizar', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'actualizarRol'])
+            ->name('seguridad.roles.actualizar');
+
+        Route::post('/seguridad/roles/{id}/eliminar', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'eliminarRol'])
+            ->name('seguridad.roles.eliminar');
+
+        Route::get('/seguridad/roles/{id}/permisos', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'permisosRol'])
+            ->name('seguridad.roles.permisos');
+
+        Route::post('/seguridad/roles/{id}/permisos', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'guardarPermisosRol'])
+            ->name('seguridad.roles.permisos.guardar');
+
+        Route::get('/seguridad/permisos/crear', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'crearPermiso'])
+            ->name('seguridad.permisos.crear');
+
+        Route::post('/seguridad/permisos', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'guardarPermiso'])
+            ->name('seguridad.permisos.guardar');
+
+        Route::get('/seguridad/permisos/{id}/editar', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'editarPermiso'])
+            ->name('seguridad.permisos.editar');
+
+        Route::post('/seguridad/permisos/{id}/actualizar', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'actualizarPermiso'])
+            ->name('seguridad.permisos.actualizar');
+
+        Route::post('/seguridad/permisos/{id}/eliminar', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'eliminarPermiso'])
+            ->name('seguridad.permisos.eliminar');
+
+        Route::get('/api-hub', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'index'])
+            ->name('api-hub.index');
+
+        Route::resource('clientes', \App\Http\Controllers\CRM\CrmClientController::class)
+            ->except(['show'])
+            ->names('clientes')
+            ->parameters(['clientes' => 'cliente']);
+        
+        Route::get('/api-hub/{apiClient}', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'show'])
+            ->name('api-hub.show');
+
+        Route::post('/api-hub/{apiClient}/plan', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'updatePlan'])
+            ->name('api-hub.update-plan');
+
+        Route::post('/api-hub/{apiClient}/toggle-active', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'toggleActive'])
+            ->name('api-hub.toggle-active');
+
+        Route::post('/api-hub/{apiClient}/keys', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'createApiKey'])
+            ->name('api-hub.keys.create');
+
+        Route::post('/api-hub/{apiClient}/keys/{apiKey}/toggle', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'toggleApiKey'])
+            ->name('api-hub.keys.toggle');
+
+    });
+
+
+// ===============================
+// API HUB
+// ===============================
+Route::get('/hub/login', [B2cIncidenciaAdminController::class, 'loginHub'])
+    ->name('hub.login');
+
+Route::post('/hub/login', [B2cIncidenciaAdminController::class, 'loginHubPost'])
+    ->name('hub.login.post');
+
+Route::post('/hub/logout', [B2cIncidenciaAdminController::class, 'logoutHub'])
+    ->name('hub.logout');
+
+Route::middleware(['auth', 'roles:sysadmin,admin,adminops,cliente'])
+    ->prefix('hub')
+    ->name('hub.')
+    ->group(function () {
+        Route::get('/dashboard', function () {
+            return view('hub.dashboard');
+        })->name('dashboard');
+    });
+// ===============================   
+
+
+// ===============================
+// RUTAS PÚBLICAS / UTILIDADES B2C
+// ===============================
+Route::get('/postal-code/lookup/{codigoPostal}', [PostalCodeLookupController::class, 'show'])
+    ->middleware('throttle:60,1')
+    ->name('postal-code.lookup');
+
+Route::get('/postal-code/lookup/{codigoPostal}', [PostalCodeLookupController::class, 'show'])
+    ->middleware('throttle:60,1')
+    ->name('postal-code.lookup');
+
+Route::get('/b2c/cp/colonias', [PostalCodeLookupController::class, 'colonias'])
+    ->middleware('throttle:60,1')
+    ->name('b2c.cp.colonias');
+
+// aquí siguen las  rutas públicas: index, login, registro, cotización pública, etc.
+
 Route::match(['GET', 'POST'], '/b2c/prepago/webhook', [B2cMisEnviosController::class, 'recargaWebhook'])
     ->name('b2c.prepago.webhook');
 
 //Cotizar b2c
 Route::post('/b2c/cotizar', [CotizacionPublicaController::class, 'cotizar'])
     ->name('b2c.cotizar');
+    
 
 
 /*

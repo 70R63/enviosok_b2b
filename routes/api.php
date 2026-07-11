@@ -19,6 +19,8 @@ use App\Http\Controllers\API\Reportes\PagosController as ReportesPagoController;
 use App\Http\Controllers\API\Ltd\FedexController;
 use App\Http\Controllers\API\Ltd\EstafetaController;
 
+use App\Http\Controllers\Api\Hub\PostalCodeController;
+use App\Http\Middleware\ValidateZigoApiKey;
 
 use App\Http\Controllers\API\DEV\GuiaController as DevGuiaController ;
 
@@ -366,4 +368,17 @@ Route::middleware(['throttle:50,1','AccesosApi'])->group(function(){
     });
 });
 
+Route::middleware('zigo.api')->prefix('hub')->group(function () {
+    Route::get('/ping', function (Request $request) {
+        return response()->json([
+            'success' => true,
+            'message' => 'ZIGO API funcionando correctamente',
+            'client' => $request->attributes->get('api_client')->name,
+            'environment' => $request->attributes->get('api_key')->environment,
+            'timestamp' => now()->toDateTimeString(),
+        ]);
+    });
+
+    Route::get('/cp/{codigoPostal}', [PostalCodeController::class, 'show']);
+});
 
