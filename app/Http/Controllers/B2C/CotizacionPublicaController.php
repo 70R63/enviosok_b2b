@@ -114,6 +114,29 @@ public function seleccionar(Request $request, B2cCotizacion $cotizacion)
         ->route('b2c.checkout', $cotizacion->id);
 }
 
+public function seleccionarNuevoEnvio(Request $request, B2cCotizacion $cotizacion)
+{
+    $data = $request->validate([
+        'logistico' => ['required','string'],
+        'servicio'  => ['required','string'],
+        'precio'    => ['required','numeric','min:1'],
+        'metodo_pago' => ['nullable','string'],
+    ]);
+
+    $cotizacion->update([
+        'logistico' => $data['logistico'],
+        'servicio'  => $data['servicio'],
+        'precio'    => $data['precio'],
+        'estatus'   => 'SELECCIONADA',
+    ]);
+
+    if (($data['metodo_pago'] ?? null) === 'saldo') {
+        return $this->pagarConSaldo($cotizacion);
+    }
+
+    return redirect()->route('b2c.pago', $cotizacion->id);
+}
+
 public function checkout(B2cCotizacion $cotizacion)
 {
     $saldo = auth()->check()
@@ -169,6 +192,12 @@ public function pago(B2cCotizacion $cotizacion)
         abort(500, 'Falta configurar MERCADOPAGO_ACCESS_TOKEN en .env');
     }
 
+    if (!$cotizacion->logistico || !$cotizacion->servicio || (float) $cotizacion->precio <= 0) {
+        return redirect()
+            ->route('b2c.opciones', $cotizacion->id)
+            ->with('error', 'Primero selecciona una paquetería válida.');
+    }
+
     SDK::setAccessToken($accessToken);
 
     $item = new Item();
@@ -181,21 +210,27 @@ public function pago(B2cCotizacion $cotizacion)
     $preference->items = [$item];
     $preference->external_reference = 'B2C-' . $cotizacion->id;
 
-    $preference->back_urls = [
-    'success' => 'https://veto-emphatic-ahead.ngrok-free.dev/b2c/pago/'.$cotizacion->id.'/success',
-    'failure' => 'https://veto-emphatic-ahead.ngrok-free.dev/b2c/pago/'.$cotizacion->id.'/failure',
-    'pending' => 'https://veto-emphatic-ahead.ngrok-free.dev/b2c/pago/'.$cotizacion->id.'/pending',
-];
+    $baseUrl = rtrim(config('app.url'), '/');
 
-    //$preference->auto_return = 'approved';
+    $preference->back_urls = [
+        'success' => $baseUrl . '/b2c/pago/' . $cotizacion->id . '/success',
+        'failure' => $baseUrl . '/b2c/pago/' . $cotizacion->id . '/failure',
+        'pending' => $baseUrl . '/b2c/pago/' . $cotizacion->id . '/pending',
+    ];
+
+    $preference->auto_return = 'approved';
+
     $preference->save();
 
     if (!$preference->id || !$preference->init_point) {
-    dd([
-        'error' => $preference->error,
-        'preference' => $preference,
-    ]);
-}
+        \Log::error('Mercado Pago no creó preferencia', [
+            'cotizacion_id' => $cotizacion->id,
+            'precio' => $cotizacion->precio,
+            'error' => $preference->error ?? null,
+        ]);
+
+        abort(500, 'Mercado Pago no pudo generar la preferencia de pago.');
+    }
 
     $cotizacion->update([
         'estatus' => 'PAGO_INICIADO',
@@ -530,7 +565,21 @@ public function misPagosB2c()
 
 public function nuevoEnvioB2c()
 {
-    return view('b2c.nuevo-envio');
+    $direccionesOrigen = B2cDireccion::where('user_id', auth()->id())
+        ->where('activo', true)
+        ->where('tipo', 'ORIGEN')
+        ->orderByDesc('favorita')
+        ->latest()
+        ->get();
+
+    $direccionesDestino = B2cDireccion::where('user_id', auth()->id())
+        ->where('activo', true)
+        ->where('tipo', 'DESTINO')
+        ->orderByDesc('favorita')
+        ->latest()
+        ->get();
+
+    return view('b2c.nuevo-envio', compact('direccionesOrigen', 'direccionesDestino'));
 }
 
 public function guardarNuevoEnvioB2c(Request $request)
@@ -563,6 +612,11 @@ public function guardarNuevoEnvioB2c(Request $request)
         'colonia_destino' => ['required', 'string', 'max:255'],
         'ciudad_destino' => ['required', 'string', 'max:100'],
         'estado_destino' => ['required', 'string', 'max:100'],
+
+        'guardar_origen' => ['nullable'],
+        'guardar_destino' => ['nullable'],
+        'alias_origen' => ['nullable', 'string', 'max:100'],
+        'alias_destino' => ['nullable', 'string', 'max:100'],
     ]);
 
     $cotizacion = B2cCotizacion::create([
@@ -597,6 +651,50 @@ public function guardarNuevoEnvioB2c(Request $request)
         'medidas' => '20x20x20',
         'estatus' => 'DIRECCION_CAPTURADA',
     ]);
+
+    if ($request->has('guardar_origen')) {
+    B2cDireccion::create([
+        'user_id' => auth()->id(),
+        'tipo' => 'ORIGEN',
+        'alias' => $data['alias_origen'] ?? 'Origen',
+        'nombre' => $data['remitente_nombre'],
+        'empresa' => $data['remitente_empresa'] ?? null,
+        'email' => $data['remitente_email'] ?? null,
+        'telefono' => $data['remitente_telefono'],
+        'calle' => $data['remitente_direccion'],
+        'num_ext' => $data['remitente_num_ext'],
+        'num_int' => $data['remitente_num_int'] ?? null,
+        'referencias' => $data['remitente_referencias'] ?? null,
+        'cp' => $data['cp_origen'],
+        'colonia' => $data['colonia_origen'],
+        'ciudad' => $data['ciudad_origen'],
+        'estado' => $data['estado_origen'],
+        'activo' => true,
+        'favorita' => false,
+    ]);
+}
+
+if ($request->has('guardar_destino')) {
+    B2cDireccion::create([
+        'user_id' => auth()->id(),
+        'tipo' => 'DESTINO',
+        'alias' => $data['alias_destino'] ?? 'Destino',
+        'nombre' => $data['destinatario_nombre'],
+        'empresa' => $data['destinatario_empresa'] ?? null,
+        'email' => $data['destinatario_email'] ?? null,
+        'telefono' => $data['destinatario_telefono'],
+        'calle' => $data['destinatario_direccion'],
+        'num_ext' => $data['destinatario_num_ext'],
+        'num_int' => $data['destinatario_num_int'] ?? null,
+        'referencias' => $data['destinatario_referencias'] ?? null,
+        'cp' => $data['cp_destino'],
+        'colonia' => $data['colonia_destino'],
+        'ciudad' => $data['ciudad_destino'],
+        'estado' => $data['estado_destino'],
+        'activo' => true,
+        'favorita' => false,
+    ]);
+}
 
     return redirect()->route('b2c.paquete', $cotizacion->id);
 }
@@ -794,6 +892,118 @@ public function guardarIncidenciaB2c(Request $request)
     return redirect()
         ->route('b2c.incidencias')
         ->with('success', 'Incidencia registrada correctamente.');
+}
+
+public function guardarPaqueteB2c(\Illuminate\Http\Request $request, \App\Models\B2cCotizacion $cotizacion)
+{
+    if ($cotizacion->user_id !== auth()->id()) {
+        abort(403);
+    }
+
+    $data = $request->validate([
+        'tipo_envio' => ['required', 'string', 'max:30'],
+        'peso' => ['required', 'numeric', 'min:0.1'],
+        'largo' => ['required', 'numeric', 'min:1'],
+        'ancho' => ['required', 'numeric', 'min:1'],
+        'alto' => ['required', 'numeric', 'min:1'],
+        'contenido' => ['required', 'string', 'max:255'],
+        'valor_declarado' => ['nullable', 'numeric', 'min:0'],
+        'acepta_no_prohibidos' => ['accepted'],
+    ]);
+
+    $cotizacion->update([
+        'tipo_envio' => $data['tipo_envio'],
+        'peso' => $data['peso'],
+        'medidas' => $data['largo'].'x'.$data['ancho'].'x'.$data['alto'],
+        'contenido' => $data['contenido'],
+        'valor_declarado' => $data['valor_declarado'] ?? 0,
+    ]);
+
+    return redirect()->route('b2c.opciones', $cotizacion->id);
+}
+
+public function opcionesB2c(B2cCotizacion $cotizacion)
+{
+    if ($cotizacion->user_id !== auth()->id()) {
+        abort(403);
+    }
+
+    $opciones = [
+        [
+            'logistico' => 'Estafeta',
+            'logo' => 'img/estafeta.png',
+            'servicio' => 'Terrestre',
+            'entrega' => '2 a 5 días hábiles',
+            'precio' => 395.00,
+        ],
+        [
+            'logistico' => 'FedEx',
+            'logo' => 'img/fedex.png',
+            'servicio' => 'Día siguiente',
+            'entrega' => '1 a 2 días hábiles',
+            'precio' => 419.50,
+        ],
+        [
+            'logistico' => 'DHL',
+            'logo' => 'img/dhl.png',
+            'servicio' => 'Express',
+            'entrega' => '1 a 3 días hábiles',
+            'precio' => 445.00,
+        ],
+    ];
+
+    $saldo = B2cSaldo::firstOrCreate(
+        ['user_id' => auth()->id()],
+        ['saldo' => 0]
+    );
+
+    return view('b2c.opciones', compact('cotizacion', 'opciones', 'saldo'));
+
+}
+
+public function duplicarEnvioB2c(B2cCotizacion $cotizacion)
+{
+    if ($cotizacion->user_id !== auth()->id()) {
+        abort(403);
+    }
+
+    $nueva = $cotizacion->replicate();
+
+    $nueva->estatus = 'DIRECCION_CAPTURADA';
+    $nueva->guia_estatus = 'SIN_GUIA';
+    $nueva->tracking_number = null;
+    $nueva->documento = null;
+    $nueva->guia_id = null;
+    $nueva->payment_id = null;
+    $nueva->payment_status = null;
+    $nueva->payment_external_reference = null;
+    $nueva->payment_collection_id = null;
+    $nueva->logistico = null;
+    $nueva->servicio = null;
+    $nueva->precio = 0;
+
+    $nueva->save();
+
+    return redirect()
+        ->route('b2c.paquete', $nueva->id)
+        ->with('success', 'Envío duplicado correctamente. Revisa el paquete antes de cotizar.');
+}
+
+public function eliminarCotizacionB2c(B2cCotizacion $cotizacion)
+{
+    if ($cotizacion->user_id !== auth()->id()) {
+        abort(403);
+    }
+
+    if ($cotizacion->tracking_number || $cotizacion->guia_estatus === 'GENERADA') {
+        return back()->with('error', 'No puedes eliminar una guía ya generada.');
+    }
+
+    $cotizacion->delete();
+
+    return redirect()
+        ->route('b2c.mis-envios')
+        ->with('success', 'Cotización eliminada correctamente.');
 }
 
 }

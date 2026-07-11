@@ -370,6 +370,7 @@ Class EstafetaCreacion {
         $data['identification']=$identification;
         $data['labelDefinition']['serviceConfiguration']['salesOrganization'] = $ltdTipoServicio['sales_organization'];
         
+        logger()->info($ltdTipoServicio);
         $data['labelDefinition']['serviceConfiguration']['serviceTypeId'] = $ltdTipoServicio['service_id_ltd'];
 
     	Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__);

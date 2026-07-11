@@ -66,6 +66,7 @@ class Kernel extends HttpKernel
         'roles' => \App\Http\Middleware\RolesMiddleware::class, //MIDDELWARE DE ROLES
         'validaToken'   => \App\Http\Middleware\ValidaToken::class,
         'AccesosApi'   => \App\Http\Middleware\AccesosApi::class,
+        'zigo.api' => \App\Http\Middleware\ValidateZigoApiKey::class,
     ];
 }
  

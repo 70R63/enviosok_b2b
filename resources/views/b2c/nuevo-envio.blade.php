@@ -58,13 +58,32 @@
         .card{background:white;border-radius:18px;padding:24px;box-shadow:0 10px 24px rgba(0,0,0,.08)}
         h2{margin-top:0}
         label{font-weight:800;font-size:13px;margin-top:12px;display:block}
-        input{width:100%;height:42px;border:1px solid #cbd5e1;border-radius:10px;padding:0 12px;box-sizing:border-box}
+        input,select{width:100%;height:42px;border:1px solid #cbd5e1;border-radius:10px;padding:0 12px;box-sizing:border-box;background:white}
         .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
         .btn{margin-top:24px;background:#2563eb;color:white;border:none;border-radius:12px;padding:14px 28px;font-weight:900;cursor:pointer}
         .suggestions{background:white;border:1px solid #e5e7eb;border-radius:10px;position:absolute;z-index:10;width:100%;box-shadow:0 10px 24px rgba(0,0,0,.12)}
         .suggestion-item{padding:12px;cursor:pointer}
         .suggestion-item:hover{background:#eff6ff}
         .autocomplete-wrap{position:relative}
+        .select-address{
+            width:100%;
+            height:42px;
+            border:1px solid #cbd5e1;
+            border-radius:10px;
+            padding:0 12px;
+            box-sizing:border-box;
+            background:white;
+        }
+        .helper-box{
+            margin-top:14px;
+            padding:14px;
+            border:1px solid #bfdbfe;
+            background:#eff6ff;
+            border-radius:12px;
+            color:#1e3a8a;
+            font-size:13px;
+            font-weight:700;
+        }
     </style>
 </head>
 <body>
@@ -106,6 +125,18 @@
             <div class="grid">
                 <section class="card">
                     <h2>Datos del origen</h2>
+
+                    @if(($direccionesOrigen ?? collect())->isNotEmpty())
+                        <label>Direcciones de origen guardadas</label>
+                        <select id="direccion_origen_select" onchange="cargarDireccion('origen', this.value)">
+                            <option value="">-- Selecciona una dirección --</option>
+                            @foreach($direccionesOrigen as $direccion)
+                                <option value='@json($direccion)'>
+                                    {{ $direccion->alias ?: $direccion->nombre }} - {{ $direccion->cp }}
+                                </option>
+                            @endforeach
+                        </select>
+                    @endif
 
                     <label>Nombre completo del remitente</label>
                     <input name="remitente_nombre" required>
@@ -163,10 +194,30 @@
                             <input id="estado_origen_label" readonly>
                         </div>
                     </div>
+
+                    <label style="margin-top:16px;">
+                        <input type="checkbox" name="guardar_origen" value="1" style="width:auto;height:auto;">
+                        Guardar esta dirección de origen
+                    </label>
+
+                    <input name="alias_origen" placeholder="Alias opcional: Casa, Oficina, Bodega" style="margin-top:8px;">
+
                 </section>
 
                 <section class="card">
                     <h2>Datos del destino</h2>
+
+                    @if(($direccionesDestino ?? collect())->isNotEmpty())
+                        <label>Direcciones de destino guardadas</label>
+                        <select id="direccion_destino_select" onchange="cargarDireccion('destino', this.value)">
+                            <option value="">-- Selecciona una dirección --</option>
+                            @foreach($direccionesDestino as $direccion)
+                                <option value='@json($direccion)'>
+                                    {{ $direccion->alias ?: $direccion->nombre }} - {{ $direccion->cp }}
+                                </option>
+                            @endforeach
+                        </select>
+                    @endif
 
                     <label>Nombre completo del destinatario</label>
                     <input name="destinatario_nombre" required>
@@ -224,6 +275,13 @@
                             <input id="estado_destino_label" readonly>
                         </div>
                     </div>
+
+                    <label style="margin-top:16px;">
+                        <input type="checkbox" name="guardar_destino" value="1" style="width:auto;height:auto;">
+                        Guardar esta dirección de destino
+                    </label>
+
+                    <input name="alias_destino" placeholder="Alias opcional: Cliente, Oficina, Casa" style="margin-top:8px;">
                 </section>
             </div>
 
@@ -232,6 +290,35 @@
     </main>
 </div>
 
-<script src="{{ asset('js/b2c-cp-autocomplete.js') }}"></script>
+<script>
+function cargarDireccion(tipo, json) {
+    if (!json) return;
+
+    const d = JSON.parse(json);
+
+    const prefijo = tipo === 'origen' ? 'remitente' : 'destinatario';
+    const geo = tipo === 'origen' ? 'origen' : 'destino';
+
+    document.querySelector(`[name="${prefijo}_nombre"]`).value = d.nombre || '';
+    document.querySelector(`[name="${prefijo}_empresa"]`).value = d.empresa || '';
+    document.querySelector(`[name="${prefijo}_email"]`).value = d.email || '';
+    document.querySelector(`[name="${prefijo}_telefono"]`).value = d.telefono || '';
+    document.querySelector(`[name="${prefijo}_direccion"]`).value = d.calle || '';
+    document.querySelector(`[name="${prefijo}_num_ext"]`).value = d.num_ext || '';
+    document.querySelector(`[name="${prefijo}_num_int"]`).value = d.num_int || '';
+    document.querySelector(`[name="${prefijo}_referencias"]`).value = d.referencias || '';
+
+    document.getElementById(`cp_${geo}`).value = d.cp || '';
+    document.getElementById(`colonia_${geo}`).value = d.colonia || '';
+    document.getElementById(`ciudad_${geo}`).value = d.ciudad || '';
+    document.getElementById(`estado_${geo}`).value = d.estado || '';
+
+    document.getElementById(`colonia_${geo}_label`).value = d.colonia || '';
+    document.getElementById(`ciudad_${geo}_label`).value = d.ciudad || '';
+    document.getElementById(`estado_${geo}_label`).value = d.estado || '';
+}
+</script>
+
+<script src="/js/b2c-cp-autocomplete.js?v={{ time() }}"></script>
 </body>
 </html>

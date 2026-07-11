@@ -64,6 +64,12 @@
         .success{background:#16a34a;color:white}
         .warning{background:#f59e0b;color:white}
         .empty{background:#eff6ff;color:#1e40af;padding:16px;border-radius:12px;font-weight:700}
+        .actions-wrap{position:relative;display:inline-block}
+        .actions-btn{background:#ea580c;color:white;border:none;border-radius:8px;padding:8px 12px;font-weight:900;cursor:pointer;font-size:12px}
+        .actions-menu{display:none;position:absolute;right:0;top:34px;background:white;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,.15);z-index:20;min-width:170px;padding:8px}
+        .actions-wrap:hover .actions-menu{display:block}
+        .actions-menu a,.actions-menu button{display:block;width:100%;background:white;border:none;text-align:left;padding:9px 10px;font-size:13px;color:#111827;text-decoration:none;cursor:pointer;border-radius:8px}
+        .actions-menu a:hover,.actions-menu button:hover{background:#f1f5f9}
     </style>
 </head>
 <body>
@@ -166,30 +172,54 @@
                                 <td>{{ $envio->guia_estatus ?? 'SIN_GUIA' }}</td>
                                 <td>{{ $envio->tracking_number ?? '-' }}</td>
                                 <td>
-                                    <a href="{{ route('b2c.envios.detalle', $envio->id) }}" class="btn primary">
-                                        Ver detalle
-                                    </a>
+                                    <div class="actions-wrap">
+                                        <button type="button" class="actions-btn">Acción ▾</button>
 
-                                    @if($envio->tracking_number)
-                                        <a href="{{ url('/rastreo?tracking_number=' . $envio->tracking_number) }}" class="btn info">
-                                            Rastrear
-                                        </a>
-                                    @endif
+                                        <div class="actions-menu">
+                                            <a href="{{ route('b2c.envios.detalle', $envio->id) }}">
+                                                Ver detalle
+                                            </a>
 
-                                    @if($envio->documento)
-                                        <a href="{{ asset('storage/' . basename($envio->documento)) }}" target="_blank" class="btn success">
-                                            Descargar guía
-                                        </a>
-                                    @endif
+                                            @if(($envio->precio ?? 0) > 0 && !$envio->tracking_number && !in_array($envio->estatus, ['PAGADA', 'GUIA_GENERADA']))
+                                                <a href="{{ route('b2c.pago', $envio->id) }}">
+                                                    Pagar ahora
+                                                </a>
+                                            @endif
 
-                                    @if(in_array($envio->estatus, ['PAGADA', 'ERROR_GENERACION_GUIA']) && !$envio->tracking_number)
-                                        <form method="POST" action="{{ route('b2c.guia.generar', $envio->id) }}" style="display:inline">
-                                            @csrf
-                                            <button type="submit" class="btn warning" style="border:none;cursor:pointer">
-                                                Generar guía
-                                            </button>
-                                        </form>
-                                    @endif
+                                            <form method="POST" action="{{ route('b2c.envios.duplicar', $envio->id) }}">
+                                                @csrf
+                                                <button type="submit">Duplicar envío</button>
+                                            </form>
+
+                                            @if($envio->tracking_number)
+                                                <a href="{{ url('/rastreo?tracking_number=' . $envio->tracking_number) }}">
+                                                    Rastrear
+                                                </a>
+                                            @endif
+
+                                            @if($envio->documento)
+                                                <a href="{{ asset('storage/' . basename($envio->documento)) }}" target="_blank">
+                                                    Descargar guía
+                                                </a>
+                                            @endif
+
+                                            @if(in_array($envio->estatus, ['PAGADA', 'ERROR_GENERACION_GUIA']) && !$envio->tracking_number)
+                                                <form method="POST" action="{{ route('b2c.guia.generar', $envio->id) }}">
+                                                    @csrf
+                                                    <button type="submit">Generar guía</button>
+                                                </form>
+                                            @endif
+
+                                            @if(!$envio->tracking_number && !$envio->documento)
+                                                <form method="POST" action="{{ route('b2c.envios.eliminar', $envio->id) }}">
+                                                    @csrf
+                                                    <button type="submit" onclick="return confirm('¿Eliminar esta cotización?')">
+                                                        Eliminar cotización
+                                                    </button>
+                                                </form>
+                                            @endif
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                         @endforeach

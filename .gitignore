@@ -23,3 +23,7 @@ yarn-error.log
 
 .DS_Store
 Thumbs.db
+_deploy_apihub_cp/
+deploy_apihub_cp.zip
+sepomex_backup.sql
+siteground_full_backup.sql
