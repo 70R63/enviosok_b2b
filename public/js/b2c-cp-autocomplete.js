@@ -40,16 +40,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
 
                     rows.forEach(item => {
+                        const codigoPostal = item.d_codigo || cp;
                         const colonia = item.d_asenta || item.colonia || '';
-                        const municipio = item.d_mnpio || item.municipio || '';
-                        const estado = item.codigo_estado || item.d_estado || 'MEX';
+                        const municipio = item.D_mnpio || item.d_mnpio || item.municipio || item.d_ciudad || '';
+                        const estado = item.d_estado || item.estado || item.codigo_estado || '';
 
                         const div = document.createElement('div');
                         div.className = 'suggestion-item';
-                        div.textContent = `${cp} - ${colonia} - ${municipio} - ${estado}`;
+                        div.textContent = `${codigoPostal} - ${colonia} - ${municipio} - ${estado}`;
 
                         div.addEventListener('click', function () {
-                            input.value = div.textContent;
+                            input.value = codigoPostal;
 
                             hidden.value = colonia;
                             if (ciudadHidden) ciudadHidden.value = municipio;
