@@ -27,3 +27,6 @@ _deploy_apihub_cp/
 deploy_apihub_cp.zip
 sepomex_backup.sql
 siteground_full_backup.sql
+
+# Deploy local scripts
+deploy-*.ps1
