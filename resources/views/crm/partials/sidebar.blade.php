@@ -16,7 +16,7 @@
         <a href="#">Usuarios Negocios</a>
         <a href="#">Usuarios Soporte</a>
         <a href="#">Empresas</a>
-        <a href="#">Prospectos</a>
+        <a href="{{ route('crm.clientes.index', ['commercial_status' => 'prospecto', 'client_type' => 'b2b']) }}">Prospectos</a>
         <a href="#">Guías</a>
         <a href="#">Incidencias</a>
         <a href="#">Adeudos</a>
