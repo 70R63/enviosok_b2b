@@ -9,6 +9,7 @@ use App\Http\Controllers\B2cMisEnviosController;
 use App\Http\Controllers\Admin\B2cIncidenciaAdminController;
 use App\Http\Controllers\Crm\CrmClientController;
 use App\Http\Controllers\Web\PostalCodeLookupController;
+use App\Http\Controllers\Web\LandingProspectController;
 
 
 /*
@@ -376,13 +377,19 @@ Route::get('/postal-code/lookup/{codigoPostal}', [PostalCodeLookupController::cl
     ->middleware('throttle:60,1')
     ->name('postal-code.lookup');
 
-Route::get('/postal-code/lookup/{codigoPostal}', [PostalCodeLookupController::class, 'show'])
-    ->middleware('throttle:60,1')
-    ->name('postal-code.lookup');
-
 Route::get('/b2c/cp/colonias', [PostalCodeLookupController::class, 'colonias'])
     ->middleware('throttle:60,1')
     ->name('b2c.cp.colonias');
+
+
+// ===============================
+// LANDING / PROSPECTOS
+// ===============================
+Route::get('/soluciones', [LandingProspectController::class, 'empresas'])
+    ->name('landing.empresas');
+
+Route::post('/soluciones/solicitud', [LandingProspectController::class, 'storeB2B'])
+    ->name('landing.empresas.store');
 
 // aquí siguen las  rutas públicas: index, login, registro, cotización pública, etc.
 

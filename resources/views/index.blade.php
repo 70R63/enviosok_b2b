@@ -293,6 +293,70 @@
     line-height: 1.2;
 }
 
+.feature-card-link{
+    display:block;
+    color:inherit;
+    text-decoration:none;
+    transition:.2s ease;
+}
+
+.feature-card-link:hover{
+    transform:translateY(-4px);
+    box-shadow:0 18px 40px rgba(37,99,235,.18);
+}
+
+.feature-card-link span{
+    display:inline-block;
+    margin-top:14px;
+    color:#2563eb;
+    font-weight:900;
+}
+
+.faq-section{
+    padding:80px 24px;
+    background:#f8fafc;
+}
+
+.faq-section h2{
+    text-align:center;
+    font-size:38px;
+    font-weight:900;
+    margin:0 0 36px;
+    color:#111827;
+}
+
+.faq-grid{
+    max-width:1100px;
+    margin:0 auto;
+    display:grid;
+    grid-template-columns:repeat(2,1fr);
+    gap:20px;
+}
+
+.faq-item{
+    background:white;
+    border-radius:18px;
+    padding:24px;
+    box-shadow:0 12px 30px rgba(15,23,42,.08);
+}
+
+.faq-item h3{
+    margin:0 0 10px;
+    color:#1d4ed8;
+}
+
+.faq-item p{
+    margin:0;
+    color:#475569;
+    line-height:1.6;
+}
+
+@media(max-width:700px){
+    .faq-grid{
+        grid-template-columns:1fr;
+    }
+}
+
 @keyframes zigoEnter {
     from {
         opacity: 0;
@@ -541,10 +605,11 @@
                 <p>Guarda direcciones, consulta historial y descarga tus guías cuando lo necesites.</p>
             </div>
 
-            <div class="card">
+            <a href="{{ route('landing.empresas') }}" class="card feature-card-link">
                 <h3>Empresas B2B</h3>
-                <p>Acceso privado con usuarios, saldos, reportes, tarifas y guías masivas.</p>
-            </div>
+                <p>Acceso privado con usuarios, saldos, reportes, direcciones, tarifas y guías para tu operación.</p>
+                <span>Conocer solución empresarial →</span>
+            </a>
         </div>
     </section>
 
@@ -556,6 +621,31 @@
             <img src="{{ asset('img/estafeta.png') }}" alt="Estafeta">
             <img src="{{ asset('img/dhl.png') }}" alt="DHL">
             <img src="{{ asset('img/ups.png') }}" alt="UPS">
+        </div>
+    </section>
+
+    <section class="faq-section" id="faq">
+        <h2>Preguntas frecuentes</h2>
+        <div class="faq-grid">
+            <div class="faq-item">
+                <h3>¿Puedo cotizar sin registrarme?</h3>
+                <p>Sí. Puedes cotizar como visitante. Para funciones avanzadas o envíos tipo caja, será necesario crear una cuenta o iniciar sesión.</p>
+            </div>
+
+            <div class="faq-item">
+                <h3>¿Qué tipo de envío puedo hacer?</h3>
+                <p>Actualmente puedes operar envíos sencillos y consultar opciones disponibles según cobertura, tipo de paquete y servicio.</p>
+            </div>
+
+            <div class="faq-item">
+                <h3>¿ZIGO tiene solución para empresas?</h3>
+                <p>Sí. ZIGO Empresas permite centralizar usuarios, direcciones, saldos, reportes y generación de guías.</p>
+            </div>
+
+            <div class="faq-item">
+                <h3>¿Puedo integrar ZIGO a mi sistema?</h3>
+                <p>Sí. API Hub permite integrar servicios como códigos postales, colonias, consumo y futuras funciones logísticas.</p>
+            </div>
         </div>
     </section>
 
