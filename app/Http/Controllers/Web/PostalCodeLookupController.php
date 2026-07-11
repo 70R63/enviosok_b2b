@@ -36,11 +36,25 @@ class PostalCodeLookupController extends Controller
         $data = collect($result['colonias'])->map(function ($item) use ($result) {
             return [
                 'd_codigo' => $result['codigo_postal'],
+
                 'd_asenta' => $item['nombre'],
+                'colonia' => $item['nombre'],
+
                 'd_tipo_asenta' => $item['tipo_asentamiento'],
+                'tipo_asentamiento' => $item['tipo_asentamiento'],
+
+                // Compatibilidad con pantallas viejas y nuevas
                 'D_mnpio' => $result['municipio'],
+                'd_mnpio' => $result['municipio'],
+                'municipio' => $result['municipio'],
+
                 'd_estado' => $result['estado'],
+                'estado' => $result['estado'],
+                'codigo_estado' => $result['estado'],
+
                 'd_ciudad' => $result['ciudad'],
+                'ciudad' => $result['ciudad'],
+
                 'zona' => $item['zona'],
             ];
         })->values();
