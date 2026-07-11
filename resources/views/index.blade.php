@@ -601,9 +601,9 @@
 
         colonias.forEach(item => {
             const cp = item.d_codigo || '';
-            const colonia = item.d_asenta || '';
-            const municipio = item.d_mnpio || '';
-            const estado = item.d_estado || '';
+            const colonia = item.d_asenta || item.colonia || '';
+            const municipio = item.D_mnpio || item.d_mnpio || item.municipio || item.d_ciudad || '';
+            const estado = item.d_estado || item.estado || item.codigo_estado || '';
 
             const texto = `${cp} - ${colonia} - ${municipio} - ${estado}`;
 

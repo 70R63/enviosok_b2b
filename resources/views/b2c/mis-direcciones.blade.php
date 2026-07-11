@@ -447,8 +447,8 @@ function seleccionarColoniaDireccion() {
 
     const item = coloniasDireccion[index];
 
-    document.getElementById('direccion_ciudad').value = item.d_mnpio || '';
-    document.getElementById('direccion_estado').value = item.d_estado || item.codigo_estado || '';
+    document.getElementById('direccion_ciudad').value = item.D_mnpio || item.d_mnpio || item.municipio || item.d_ciudad || '';
+    document.getElementById('direccion_estado').value = item.d_estado || item.estado || item.codigo_estado || '';
 }
 </script>
 <script>
