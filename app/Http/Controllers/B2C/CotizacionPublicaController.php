@@ -1058,6 +1058,10 @@ public function opcionesB2c(B2cCotizacion $cotizacion)
 
     private function customerSegmentForCotizacion(B2cCotizacion $cotizacion): string
     {
+        if ($cotizacion->referencia === 'LANDING_PUBLICA' && empty($cotizacion->user_id)) {
+            return 'anonymous';
+        }
+
         if (!auth()->check()) {
             return 'anonymous';
         }

@@ -280,10 +280,15 @@
 
     </style>
 </head>
-<body class="{{ auth()->check() ? 'auth' : 'guest' }}">
+
+@php
+    $isPublicCheckout = $cotizacion->referencia === 'LANDING_PUBLICA' && empty($cotizacion->user_id);
+@endphp
+
+<body class="{{ auth()->check() && !$isPublicCheckout ? 'auth' : 'guest' }}">
 
 <div class="layout">
-    @auth
+    @if(auth()->check() && !$isPublicCheckout)
     <aside class="sidebar">
         <div class="logo zigo-logo">
             <img src="{{ asset('img/zigo-logo.png') }}" alt="ZIGO" class="zigo-img">
@@ -310,7 +315,7 @@
             </form>
         </div>
     </aside>
-    @endauth
+    @endif
 
     <main class="content">
         <div class="title">Completa los datos de tu guía</div>
@@ -326,7 +331,7 @@
                         <div class="form-grid">
                             <div>
                                 <label>Nombre completo</label>
-                                <input type="text" name="remitente_nombre" value="{{ auth()->user()->name ?? '' }}" required>
+                                <input type="text" name="remitente_nombre" value="{{ !$isPublicCheckout ? (auth()->user()->name ?? '') : '' }}" required>
                             </div>
 
                             <div>
@@ -336,7 +341,7 @@
 
                             <div class="full">
                                 <label>Correo electrónico</label>
-                                <input type="email" name="remitente_email" value="{{ auth()->user()->email ?? '' }}" required>
+                                <input type="email" name="remitente_email" value="{{ !$isPublicCheckout ? (auth()->user()->email ?? '') : '' }}" required>
                             </div>
 
                             <div class="full">
@@ -464,7 +469,7 @@
 
                     <button class="btn" type="submit">Continuar a pago</button>
 
-                    @auth
+                    @if(auth()->check() && !$isPublicCheckout)
                     <div class="saldo-box">
 
                         <div class="saldo-line">
@@ -500,7 +505,7 @@
                         @endif
 
                     </div>
-                    @endauth
+                    @endif
                 </aside>
             </div>
         </form>
