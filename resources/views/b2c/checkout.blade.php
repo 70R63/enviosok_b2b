@@ -64,16 +64,16 @@
         }
         .menu a,.logout-btn{display:block;color:white;text-decoration:none;font-weight:800;margin:18px 0;background:rgba(255,255,255,.12);padding:14px;border-radius:12px}
         .logout-btn{width:100%;border:none;text-align:left;cursor:pointer;font-size:16px}
-        .content{padding:40px}
-        .title{font-size:36px;font-weight:900;margin-bottom:8px;color:#111827}
-        .subtitle{color:#64748b;margin-bottom:30px}
-        .grid{display:grid;grid-template-columns:1fr 360px;gap:24px}
-        .card{background:white;border-radius:18px;padding:24px;box-shadow:0 10px 24px rgba(0,0,0,.08);margin-bottom:20px}
+        .content{padding:28px 34px}
+        .title{font-size:32px;font-weight:900;margin-bottom:6px;color:#111827}
+        .subtitle{color:#64748b;margin-bottom:22px}
+        .grid{display:grid;grid-template-columns:1fr 330px;gap:20px}
+        .card{background:white;border-radius:16px;padding:20px;box-shadow:0 8px 20px rgba(0,0,0,.06);margin-bottom:16px}
         h2{margin-top:0}
-        .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+        .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px 14px}
         .full{grid-column:1 / -1}
-        label{display:block;font-weight:800;font-size:14px;margin-bottom:6px}
-        input{width:100%;height:42px;border:1px solid #cbd5e1;border-radius:10px;padding:0 12px;box-sizing:border-box}
+        label{display:block;font-weight:800;font-size:13px;margin-bottom:5px}
+        input{width:100%;height:38px;border:1px solid #cbd5e1;border-radius:9px;padding:0 11px;box-sizing:border-box;font-size:14px}
         input[readonly]{background:#f8fafc;color:#475569}
         .summary-row{display:flex;justify-content:space-between;margin-bottom:12px;font-size:15px}
         .total{border-top:1px solid #e5e7eb;padding-top:16px;font-size:24px;font-weight:900}
@@ -165,6 +165,55 @@
             max-width:1200px;
             margin:0 auto;
             padding:40px 24px;
+        }
+
+        .card h2{
+            font-size:23px;
+            margin-bottom:16px;
+        }
+
+        .summary-row{
+            margin-bottom:9px;
+            font-size:14px;
+        }
+
+        .total{
+            font-size:22px;
+        }
+
+        .btn{
+            padding:13px;
+            font-size:15px;
+        }
+
+        .saldo-box{
+            margin-top:16px;
+            padding:15px;
+        }
+
+        .saldo-line strong{
+            font-size:20px;
+        }
+
+        body.guest .content{
+            max-width:1180px;
+            margin:0 auto;
+            padding:30px 24px;
+        }
+
+        body.guest .title{
+            font-size:32px;
+        }
+
+        body.guest .card{
+            padding:20px;
+        }
+
+        @media(max-width:900px){
+            .layout{grid-template-columns:1fr}
+            .sidebar{display:none}
+            .grid,.form-grid{grid-template-columns:1fr}
+            .content{padding:22px 16px}
         }
 
     </style>

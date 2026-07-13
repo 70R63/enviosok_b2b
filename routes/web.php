@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\B2cIncidenciaAdminController;
 use App\Http\Controllers\Crm\CrmClientController;
 use App\Http\Controllers\Web\PostalCodeLookupController;
 use App\Http\Controllers\Web\LandingProspectController;
+use App\Http\Controllers\CRM\CrmPricingController;
 
 
 /*
@@ -24,9 +25,10 @@ use App\Http\Controllers\Web\LandingProspectController;
 */
 
 
-Route::get('/', function () {
-    return view('index');
-});
+Route::get('/', [CotizacionPublicaController::class, 'index'])->name('home');
+
+Route::get('/limpiar-cotizacion', [CotizacionPublicaController::class, 'limpiarCotizacion'])
+    ->name('landing.cotizacion.limpiar');
 
 Route::resource('profile','userProfileController');
 
@@ -40,13 +42,6 @@ Route::post('/b2c/cotizacion/{cotizacion}/seleccionar', [CotizacionPublicaContro
 Route::post('/b2c/cotizacion/{cotizacion}/seleccionar-nuevo', [CotizacionPublicaController::class, 'seleccionarNuevoEnvio'])
     ->name('b2c.seleccionar.nuevo');
 			
-/*provisional pruebaa */
-Route::get('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'checkout'])
-    ->name('b2c.checkout');
-	
-Route::post('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'procesarCheckout'])
-    ->name('b2c.checkout.procesar');
-
 /*provisional pago */
 Route::get('/b2c/pago/{cotizacion}', [CotizacionPublicaController::class, 'pago'])
     ->name('b2c.pago');
@@ -344,6 +339,33 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
         Route::post('/api-hub/{apiClient}/keys/{apiKey}/toggle', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'toggleApiKey'])
             ->name('api-hub.keys.toggle');
 
+        Route::post('/clientes/{cliente}/seguimiento', [CrmClientController::class, 'actualizarSeguimiento'])
+            ->name('clientes.seguimiento');
+            
+        Route::get('/pricing', [CrmPricingController::class, 'index'])
+            ->name('pricing.index');
+
+        Route::post('/pricing/simulate', [CrmPricingController::class, 'simulate'])
+            ->name('pricing.simulate');
+
+        Route::post('/pricing/rules/{rule}/toggle', [CrmPricingController::class, 'toggleRule'])
+            ->name('pricing.rules.toggle');
+
+        Route::post('/pricing/adjustments/{adjustment}/toggle', [CrmPricingController::class, 'toggleAdjustment'])
+            ->name('pricing.adjustments.toggle');
+
+        Route::post('/pricing/client-rules/{clientRule}/toggle', [CrmPricingController::class, 'toggleClientRule'])
+            ->name('pricing.client-rules.toggle');
+
+        Route::post('/pricing/rules', [CrmPricingController::class, 'storeRule'])
+            ->name('pricing.rules.store');
+
+        Route::post('/pricing/adjustments', [CrmPricingController::class, 'storeAdjustment'])
+            ->name('pricing.adjustments.store');
+
+        Route::post('/pricing/client-rules', [CrmPricingController::class, 'storeClientRule'])
+            ->name('pricing.client-rules.store');
+
     });
 
 
@@ -381,6 +403,34 @@ Route::get('/b2c/cp/colonias', [PostalCodeLookupController::class, 'colonias'])
     ->middleware('throttle:60,1')
     ->name('b2c.cp.colonias');
 
+Route::view('/nosotros', 'public.nosotros')->name('public.nosotros');
+Route::view('/paqueteria', 'public.paqueteria')->name('public.paqueteria');
+Route::view('/faqs', 'public.faqs')->name('public.faqs');
+
+Route::view('/aviso-privacidad', 'legal.aviso-privacidad')
+    ->name('legal.aviso-privacidad');
+
+Route::view('/terminos-condiciones', 'legal.terminos')
+    ->name('legal.terminos');
+
+Route::view('/politica-envios', 'legal.politica-envios')
+    ->name('legal.politica-envios');
+
+Route::view('/api-hub', 'web.api-hub')
+    ->name('web.api-hub');
+
+Route::view('/soporte', 'web.soporte')
+    ->name('web.soporte');
+
+Route::view('/api-hub', 'public.api-hub')->name('public.api-hub');
+
+Route::view('/soporte', 'public.soporte')->name('public.soporte');
+
+Route::get('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'checkout'])
+    ->name('b2c.checkout');
+
+Route::post('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'procesarCheckout'])
+    ->name('b2c.checkout.procesar');
 
 // ===============================
 // LANDING / PROSPECTOS
@@ -397,6 +447,10 @@ Route::match(['GET', 'POST'], '/b2c/prepago/webhook', [B2cMisEnviosController::c
     ->name('b2c.prepago.webhook');
 
 //Cotizar b2c
+Route::get('/b2c/cotizar', function () {
+    return redirect()->to(url('/') . '#cotizar');
+})->name('b2c.cotizar.get');
+
 Route::post('/b2c/cotizar', [CotizacionPublicaController::class, 'cotizar'])
     ->name('b2c.cotizar');
     

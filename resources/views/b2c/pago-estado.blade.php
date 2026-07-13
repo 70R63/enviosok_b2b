@@ -8,45 +8,45 @@
     <style>
         body{
             margin:0;
-            padding:40px;
+            padding:24px;
             background:#f3f4f6;
             font-family:Arial, Helvetica, sans-serif;
         }
 
         .container{
-            max-width:1200px;
+            max-width:1050px;
             margin:auto;
             background:white;
-            border-radius:20px;
-            padding:40px;
+            border-radius:18px;
+            padding:30px;
             box-shadow:0 2px 10px rgba(0,0,0,.08);
         }
 
         .titulo{
-            font-size:48px;
+            font-size:38px;
             font-weight:bold;
             color:{{ $color }};
-            margin-bottom:20px;
+            margin-bottom:12px;
         }
 
         .mensaje{
-            font-size:18px;
+            font-size:16px;
             color:#64748b;
-            margin-bottom:40px;
+            margin-bottom:24px;
         }
 
         .grid{
             display:grid;
             grid-template-columns:1fr 1fr;
-            gap:20px;
-            margin-bottom:30px;
+            gap:14px;
+            margin-bottom:22px;
         }
 
         .card{
             border:1px solid #dbe2ea;
-            border-radius:18px;
-            padding:22px;
-            min-height:90px;
+            border-radius:15px;
+            padding:16px 18px;
+            min-height:72px;
         }
 
         .label{
@@ -57,14 +57,14 @@
 
         .value{
             color:#111827;
-            font-size:20px;
+            font-size:18px;
             font-weight:bold;
         }
 
         .acciones{
-            margin-top:35px;
+            margin-top:24px;
             display:flex;
-            gap:15px;
+            gap:12px;
         }
 
         .btn-primary{

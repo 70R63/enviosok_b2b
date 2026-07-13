@@ -6,133 +6,362 @@
     <title>ZIGO | Cotiza y genera tus guías</title>
 
     <style>
+        :root {
+            --zigo-blue: #3867f5;
+            --zigo-blue-dark: #1d4ed8;
+            --zigo-orange: #f97316;
+            --zigo-yellow: #facc15;
+            --zigo-text: #111827;
+            --zigo-muted: #52607a;
+            --zigo-soft: #f7f9ff;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
             font-family: Arial, sans-serif;
-            color: #1f2937;
+            color: var(--zigo-text);
             background: #ffffff;
         }
 
-        .top {
-            background: linear-gradient(90deg, #2563eb, #3b82f6, #4338ca);
-            color: white;
+        a {
+            text-decoration: none;
+        }
+
+        .page-wrap {
+            min-height: 100vh;
+            background:
+                linear-gradient(180deg, #ffffff 0%, #ffffff 62%, #f7f9ff 100%);
+        }
+
+        .top-header {
+            background: #ffffff;
+            border-bottom: 1px solid #edf0f7;
         }
 
         .nav {
-            max-width: 1180px;
-            margin: auto;
-            padding: 8px 24px 4px;
+            max-width: 1220px;
+            margin: 0 auto;
+            padding: 8px 24px 8px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 34px;
         }
 
-        .nav img {
-            width: auto;
+        .brand { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; text-decoration:none; gap:2; min-width:430px; }
+        .brand-logo-frame { width:430px; max-width:100%; min-height:72px; display:flex; align-items:center; justify-content:flex-start; background:transparent; box-shadow:none; border-radius:0; overflow:visible; }
+
+        .brand-logo {
+            width: 385px;
+            max-width: 100%;
+            height: auto;
             object-fit: contain;
+            display: block;
+            filter: drop-shadow(0 10px 20px rgba(56,103,245,.20));
+            animation: zigoEnter .8s ease-out;
+            transition: transform .35s ease, filter .35s ease;
+            will-change: transform;
         }
 
-        .nav a {
-            color: white;
-            text-decoration: none;
-            margin-left: 22px;
-            font-size: 15px;
-            font-weight: 600;
+        .brand:hover .brand-logo {
+            transform: translateX(8px) scale(1.04);
+            filter:
+                drop-shadow(0 0 8px rgba(56,189,248,.8))
+                drop-shadow(0 0 14px rgba(37,99,235,.6));
+        }
+
+        .brand-tagline { margin-top:-14px; font-size:12px; letter-spacing:3px; text-transform:uppercase; color:#1e40af; font-weight:900; line-height:1.2; white-space:nowrap; }
+
+        @keyframes zigoEnter {
+            from {
+                opacity: 0;
+                transform: translateX(-28px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .main-nav {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 28px;
+            flex-wrap: wrap;
+        }
+
+        .main-nav a {
+            color: #08152f;
+            font-weight: 900;
+            font-size: 16px;
+        }
+
+        .main-nav a:hover {
+            color: var(--zigo-blue);
+        }
+
+        .nav-login {
+            padding: 14px 22px;
+            border-radius: 14px;
+            background: #ffffff;
+            color: var(--zigo-blue) !important;
+            box-shadow: 0 14px 32px rgba(17,24,39,.10);
+        }
+
+        .nav-register,
+        .nav-account {
+            background: var(--zigo-blue);
+            color: #ffffff !important;
+            padding: 14px 24px;
+            border-radius: 14px;
+            font-weight: 900;
+            box-shadow: 0 14px 32px rgba(56,103,245,.28);
+        }
+
+        .nav-register:hover,
+        .nav-account:hover {
+            background: var(--zigo-blue-dark);
+            color: #ffffff !important;
         }
 
         .quote-box {
-            max-width: 1180px;
-            margin: auto;
-            padding: 4px 24px 30px;
+            max-width: 1220px;
+            margin: 0 auto;
+            padding: 34px 24px 34px;
+        }
+
+        .quote-card {
+            width: 100%;
+            padding: 18px 20px 20px;
+            background: var(--zigo-blue);
+            color: #ffffff;
+            border-radius: 18px;
+            box-shadow: 0 18px 42px rgba(56,103,245,.25);
         }
 
         .quote-title {
             text-align: center;
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 900;
-            margin-bottom: 16px;
+            margin: 0 0 14px;
+            color: #ffffff;
         }
 
-        .quote-form {
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 12px;
-            align-items: end;
-        }
+        .quote-form { display: grid; grid-template-columns: 1.25fr 1.25fr 1.05fr .8fr 1.45fr 1.1fr; gap: 16px; align-items: end; }
 
         .field label {
             display: block;
-            font-size: 13px;
-            margin-bottom: 6px;
-            font-weight: 600;
+            font-size: 15px;
+            margin-bottom: 7px;
+            font-weight: 800;
+            color: #ffffff;
         }
 
         .field input,
         .field select {
             width: 100%;
-            height: 38px;
-            border-radius: 6px;
-            border: none;
-            padding: 0 10px;
-            box-sizing: border-box;
+            height: 46px;
+            border-radius: 13px;
+            border: 1px solid rgba(255,255,255,.25);
+            padding: 0 15px;
+            background: #ffffff;
+            color: #111827;
+            font-size: 15px;
+            outline: none;
+        }
+
+        .field input:focus,
+        .field select:focus {
+            border-color: var(--zigo-yellow);
+            box-shadow: 0 0 0 3px rgba(250,204,21,.20);
         }
 
         .btn-yellow {
-            height: 38px;
+            height: 46px;
             border: none;
-            border-radius: 6px;
-            background: #facc15;
-            color: #1f2937;
-            font-weight: 800;
+            border-radius: 13px;
+            background: var(--zigo-orange);
+            color: #ffffff;
+            font-weight: 900;
             cursor: pointer;
+            font-size: 15px;
+            box-shadow: 0 12px 24px rgba(249,115,22,.24);
+        }
+
+        .btn-yellow:hover {
+            background: #ea580c;
         }
 
         .hero {
-            max-width: 1180px;
-            margin: auto;
-            padding: 70px 24px;
+            max-width: 1220px;
+            margin: 0 auto;
+            padding: 28px 24px 76px;
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 50px;
+            gap: 58px;
             align-items: center;
+            position: relative;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            left: 24px;
+            right: 24px;
+            bottom: 0;
+            height: 160px;
+            background:
+                linear-gradient(90deg, rgba(56,103,245,.06), rgba(249,115,22,.04));
+            border-radius: 32px 32px 0 0;
+            z-index: 0;
+        }
+
+        .hero-copy,
+        .hero-visual {
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-kicker {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #08152f;
+            font-size: 18px;
+            font-weight: 900;
+            margin: 0 0 18px;
+        }
+
+        .hero-kicker span {
+            width: 28px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #08152f;
+            border-radius: 999px;
+            color: var(--zigo-blue);
+            font-size: 16px;
         }
 
         .hero h1 {
-            font-size: 46px;
+            font-size: 56px;
             line-height: 1.1;
-            margin: 0 0 22px;
-            color: white;
+            margin: 0 0 20px;
+            color: #0f172a;
+            letter-spacing: -1.8px;
+        }
+
+        .hero h1 strong {
+            color: var(--zigo-orange);
         }
 
         .hero p {
-            font-size: 18px;
-            line-height: 1.7;
+            font-size: 19px;
+            line-height: 1.75;
+            color: var(--zigo-muted);
+            margin: 0 0 28px;
+            max-width: 610px;
+        }
+
+        .hero-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            align-items: center;
+        }
+
+        .hero-primary {
+            display: inline-block;
+            padding: 15px 24px;
+            border-radius: 14px;
+            background: var(--zigo-orange);
             color: white;
+            font-weight: 900;
+            box-shadow: 0 16px 34px rgba(249,115,22,.28);
+        }
+
+        .hero-secondary {
+            display: inline-block;
+            padding: 15px 24px;
+            border-radius: 14px;
+            color: var(--zigo-blue);
+            font-weight: 900;
+            background: #ffffff;
+            box-shadow: 0 12px 28px rgba(17,24,39,.08);
+        }
+
+        .hero-visual {
+            min-height: 390px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .hero-card {
-            background: rgba(255,255,255,.08);
-            border: 1px solid rgba(255,255,255,.15);
+            width: 100%;
+            max-width: 520px;
+            min-height: 340px;
             border-radius: 32px;
-            padding: 40px;
-            backdrop-filter: blur(8px);
+            background:
+                radial-gradient(circle at 15% 20%, rgba(255,255,255,.95), rgba(255,255,255,.65) 28%, rgba(56,103,245,.08) 62%, rgba(249,115,22,.08));
+            box-shadow: 0 30px 70px rgba(15,23,42,.15);
+            border: 1px solid #edf0f7;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
         }
 
-        .hero-card img {
-            width: 100%;
-            border-radius: 28px;
+        .hero-card::before,
+        .hero-card::after {
+            content: '';
+            position: absolute;
+            border-radius: 999px;
+            background: rgba(56,103,245,.08);
+        }
+
+        .hero-card::before {
+            width: 210px;
+            height: 210px;
+            right: -80px;
+            top: -70px;
+        }
+
+        .hero-card::after {
+            width: 160px;
+            height: 160px;
+            left: -65px;
+            bottom: -55px;
+            background: rgba(249,115,22,.08);
+        }
+
+        .hero-logo {
+            width: 82%;
+            max-width: 430px;
+            position: relative;
+            z-index: 1;
+            object-fit: contain;
+            filter: drop-shadow(0 18px 28px rgba(56,103,245,.20));
         }
 
         .section {
-            max-width: 1180px;
-            margin: auto;
+            max-width: 1220px;
+            margin: 0 auto;
             padding: 70px 24px;
         }
 
         .section h2 {
-            font-size: 34px;
-            margin-bottom: 18px;
+            font-size: 36px;
+            margin: 0 0 18px;
             text-align: center;
+            color: #0f172a;
         }
 
         .cards {
@@ -144,14 +373,33 @@
 
         .card {
             padding: 28px;
-            border-radius: 20px;
-            background: #f8fafc;
-            box-shadow: 0 8px 24px rgba(0,0,0,.06);
+            border-radius: 22px;
+            background: #ffffff;
+            box-shadow: 0 14px 36px rgba(15,23,42,.08);
+            border: 1px solid #eef2ff;
         }
 
         .card h3 {
             margin-top: 0;
-            color: #2563eb;
+            color: var(--zigo-blue);
+        }
+
+        .feature-card-link {
+            display: block;
+            color: inherit;
+            transition: .2s ease;
+        }
+
+        .feature-card-link:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 18px 40px rgba(37,99,235,.18);
+        }
+
+        .feature-card-link span {
+            display: inline-block;
+            margin-top: 14px;
+            color: var(--zigo-blue);
+            font-weight: 900;
         }
 
         .logos {
@@ -166,10 +414,50 @@
         .logos img {
             max-height: 55px;
             max-width: 160px;
+            object-fit: contain;
+        }
+
+        .faq-section {
+            padding: 80px 24px;
+            background: var(--zigo-soft);
+        }
+
+        .faq-section h2 {
+            text-align: center;
+            font-size: 38px;
+            font-weight: 900;
+            margin: 0 0 36px;
+            color: #111827;
+        }
+
+        .faq-grid {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(2,1fr);
+            gap: 20px;
+        }
+
+        .faq-item {
+            background: white;
+            border-radius: 18px;
+            padding: 24px;
+            box-shadow: 0 12px 30px rgba(15,23,42,.08);
+        }
+
+        .faq-item h3 {
+            margin: 0 0 10px;
+            color: var(--zigo-blue-dark);
+        }
+
+        .faq-item p {
+            margin: 0;
+            color: #475569;
+            line-height: 1.6;
         }
 
         .cta {
-            background: #facc15;
+            background: #fff7d6;
             padding: 55px 24px;
             text-align: center;
         }
@@ -177,312 +465,347 @@
         .cta h2 {
             font-size: 34px;
             margin: 0 0 12px;
+            color: #0f172a;
         }
 
         .cta a {
             display: inline-block;
             margin-top: 22px;
             padding: 14px 26px;
-            background: #2563eb;
+            background: var(--zigo-orange);
             color: white;
-            text-decoration: none;
-            border-radius: 8px;
-            font-weight: 800;
+            border-radius: 12px;
+            font-weight: 900;
         }
 
         .whatsapp {
             position: fixed;
-            right: 24px;
-            bottom: 24px;
-            background: #22c55e;
+            left: 22px;
+            bottom: 22px;
+            width: 58px;
+            height: 58px;
+            background: #25d366;
             color: white;
-            padding: 14px 18px;
             border-radius: 999px;
-            text-decoration: none;
-            font-weight: 800;
-            box-shadow: 0 10px 30px rgba(0,0,0,.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 14px 28px rgba(37,211,102,.32);
+            z-index: 50;
         }
 
-        footer {
-            padding: 28px;
+        .whatsapp svg {
+            width: 31px;
+            height: 31px;
+            fill: currentColor;
+        }
+
+        .autocomplete-wrap {
+            position: relative;
+        }
+
+        .suggestions { display:none; position:absolute; top:76px; left:0; width:520px; max-height:230px; overflow-y:auto; background:#ffffff!important; color:#111827!important; border-radius:10px; box-shadow:0 14px 35px rgba(0,0,0,.25); z-index:9999; }
+        .suggestion-item { padding:12px 14px; font-size:14px; cursor:pointer; border-bottom:1px solid #e5e7eb; white-space:normal; line-height:1.35; }
+
+        .suggestion-item:hover {
+            background: #f3f4f6;
+        }
+
+        .suggestion-item strong {
+            color: #111827;
+        }
+
+        .suggestion-item small {
+            color: #475569;
+        }
+
+        .cp-help { display:none !important; margin-top:6px; font-size:12px; color:#ffffff; }
+        .cp-help.is-error { display:block !important; color:#fee2e2; font-weight:800; }
+        .box-dimensions { display:grid; grid-template-columns:repeat(3, 1fr); overflow:hidden; border-radius:13px; background:#ffffff; height:46px; }
+        .box-dimensions input { height:46px!important; border-radius:0!important; border:none!important; border-right:1px solid #d1d5db!important; text-align:center; padding:0 8px!important; }
+        .box-dimensions input:last-child { border-right:none!important; }
+
+        .peso-volumetrico-box { grid-column:1 / -1; margin-top:4px; padding:14px 18px; border-radius:16px; background:rgba(255,255,255,.16); color:#ffffff; font-size:14px; line-height:1.8; box-shadow:inset 0 0 0 1px rgba(255,255,255,.18); display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; }        
+        .peso-volumetrico-box strong { font-weight: 900; color: #ffffff; }
+        .peso-volumetrico-box span { font-weight: 800; }
+        .peso-volumetrico-box div { background:rgba(255,255,255,.10); border-radius:12px; padding:10px 12px; }
+
+        .landing-alert {
+            max-width: 980px;
+            margin: 0 auto 24px auto;
+            background: #fff7ed;
+            border: 1px solid #fdba74;
+            color: #9a3412;
+            padding: 18px 22px;
+            border-radius: 16px;
+            font-weight: 900;
             text-align: center;
-            background: #111827;
-            color: white;
         }
-		
-		.autocomplete-wrap {
-    position: relative;
-}
 
-.suggestions {
-    display: none;
-    position: absolute;
-    top: 68px;
-    left: 0;
-    width: 520px;
-    max-height: 230px;
-    overflow-y: auto;
+        .landing-alert-actions {
+            margin-top: 14px;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
 
-    background: #ffffff !important;
-    color: #111827 !important;
+        .landing-alert-actions a {
+            display: inline-block;
+            padding: 11px 20px;
+            border-radius: 12px;
+            background: #f97316;
+            color: #ffffff;
+            text-decoration: none;
+            font-weight: 900;
+        }
 
-    border-radius: 8px;
-    box-shadow: 0 14px 35px rgba(0,0,0,.25);
-    z-index: 9999;
-}
+        .landing-alert-actions a:last-child {
+            background: #4361ee;
+        }
 
-.suggestion-item {
-    padding: 11px 14px;
-    font-size: 14px;
-    cursor: pointer;
-    border-bottom: 1px solid #e5e7eb;
-    white-space: normal;
-}
+        .quote-reset-wrap {
+            width: 100%;
+            text-align: center;
+            margin: 14px 0 0;
+        }
 
-.suggestion-item:hover {
-    background: #f3f4f6;
-}
+        .quote-reset-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 18px;
+            border-radius: 999px;
+            background: rgba(255,255,255,.14);
+            border: 1px solid rgba(255,255,255,.22);
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 800;
+            text-decoration: none;
+        }
 
-.hero-logo{
-    width:100%;
-    max-width:500px;
-    display:block;
-    margin:auto;
-    object-fit:contain;
-}
+        .quote-reset-link:hover {
+            background: rgba(255,255,255,.22);
+        }
 
-.hero-logo{
-    animation:zigoFloat 5s ease-in-out infinite;
-}
+        .field-dimensions.is-disabled { opacity: .45; pointer-events: none; }
 
-@keyframes zigoFloat{
-    0%{transform:translateY(0)}
-    50%{transform:translateY(-8px)}
-    100%{transform:translateY(0)}
-}
+        .solutions-section {
+            background: #ffffff;
+            padding: 70px 24px;
+        }
 
-.brand {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-decoration: none;
-}
+        .section-container {
+            max-width: 1220px;
+            margin: 0 auto;
+        }
 
-.brand-logo {
-    height: 92px;
-    width: auto;
-    object-fit: contain;
-    animation: zigoEnter .8s ease-out;
-    transition: transform .35s ease, filter .35s ease;
-}
+        .solutions-section h2 {
+            text-align: center;
+            font-size: 38px;
+            line-height: 1.15;
+            margin: 0 0 36px;
+            color: #0f172a;
+            font-weight: 900;
+        }
 
-.brand:hover .brand-logo {
-    transform: translateX(4px) scale(1.03);
-    filter:
-        drop-shadow(0 0 8px rgba(56,189,248,.8))
-        drop-shadow(0 0 14px rgba(37,99,235,.6));
-}
+        .solutions-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
 
-.brand-tagline {
-    margin-top: -8px;
-    font-size: 10px;
-    letter-spacing: 1.8px;
-    text-transform: uppercase;
-    color: #eaf2ff;
-    font-weight: 900;
-    line-height: 1.2;
-}
+        .solution-card {
+            background: #ffffff;
+            border: 1px solid #e8edf7;
+            border-radius: 24px;
+            padding: 30px;
+            min-height: 230px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, .06);
+            transition: transform .2s ease, box-shadow .2s ease;
+        }
 
-.feature-card-link{
-    display:block;
-    color:inherit;
-    text-decoration:none;
-    transition:.2s ease;
-}
+        .solution-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 24px 55px rgba(15, 23, 42, .10);
+        }
 
-.feature-card-link:hover{
-    transform:translateY(-4px);
-    box-shadow:0 18px 40px rgba(37,99,235,.18);
-}
+        .solution-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            background: #eef4ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 18px;
+            font-size: 22px;
+        }
 
-.feature-card-link span{
-    display:inline-block;
-    margin-top:14px;
-    color:#2563eb;
-    font-weight:900;
-}
+        .solution-card h3 {
+            margin: 0 0 12px;
+            font-size: 22px;
+            color: #4361ee;
+            font-weight: 900;
+        }
 
-.faq-section{
-    padding:80px 24px;
-    background:#f8fafc;
-}
+        .solution-card p {
+            margin: 0 0 18px;
+            color: #334155;
+            line-height: 1.45;
+            font-size: 16px;
+        }
 
-.faq-section h2{
-    text-align:center;
-    font-size:38px;
-    font-weight:900;
-    margin:0 0 36px;
-    color:#111827;
-}
+        .solution-card a,
+        .solution-card span {
+            color: #4361ee;
+            font-weight: 900;
+            text-decoration: none;
+        }
 
-.faq-grid{
-    max-width:1100px;
-    margin:0 auto;
-    display:grid;
-    grid-template-columns:repeat(2,1fr);
-    gap:20px;
-}
+        @media (max-width: 900px) {
+            .solutions-grid {
+                grid-template-columns: 1fr;
+            }
 
-.faq-item{
-    background:white;
-    border-radius:18px;
-    padding:24px;
-    box-shadow:0 12px 30px rgba(15,23,42,.08);
-}
+            .solutions-section h2 {
+                font-size: 30px;
+            }
+        }
 
-.faq-item h3{
-    margin:0 0 10px;
-    color:#1d4ed8;
-}
+        @media (max-width: 900px) {
+            .suggestions {
+                width: 100%;
+            }
 
-.faq-item p{
-    margin:0;
-    color:#475569;
-    line-height:1.6;
-}
+            .box-dimensions {
+                grid-template-columns: 1fr;
+            }
 
-@media(max-width:700px){
-    .faq-grid{
-        grid-template-columns:1fr;
-    }
-}
+            .box-dimensions input {
+                border-right: none !important;
+                border-bottom: 1px solid #d1d5db !important;
+            }
 
-@keyframes zigoEnter {
-    from {
-        opacity: 0;
-        transform: translateX(-28px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
+            .box-dimensions input:last-child {
+                border-bottom: none !important;
+            }
+        }
 
- @media (max-width: 900px) {
-    .quote-form,
-    .hero,
-    .cards {
-        grid-template-columns: 1fr;
-    }
+        .zigo-footer {
+            background: #050a1a;
+            color: #ffffff;
+            padding: 36px 0;
+        }
 
-    .hero h1 {
-        font-size: 34px;
-    }
+        .footer-inner {
+            width: min(1180px, calc(100% - 40px));
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 42px;
+        }
 
-    .nav {
-        flex-direction: column;
-        gap: 16px;
-    }
+        .zigo-footer h4 {
+            margin: 0 0 14px;
+            font-size: 16px;
+            font-weight: 900;
+        }
 
-    .nav a {
-        margin: 0 8px;
-    }
+        .zigo-footer p {
+            margin: 0;
+            color: #dbe4ff;
+            line-height: 1.5;
+        }
 
-    .suggestions {
-        width: 100%;
-    }
+        .zigo-footer a {
+            display: block;
+            color: #dbe4ff;
+            text-decoration: none;
+            margin-bottom: 8px;
+            font-size: 15px;
+        }
 
-    .nav nav {
-    display: flex;
-    align-items: center;
-    gap: 28px;
-}
+        .zigo-footer a:hover {
+            color: #ffffff;
+        }
 
-.nav nav a,
-.nav-logout {
-    color: #fff;
-    font-weight: 800;
-    text-decoration: none;
-    font-size: 14px;
-}
+        @media (max-width: 768px) {
+            .footer-inner {
+                grid-template-columns: 1fr;
+                gap: 24px;
+            }
+        }
 
-.nav-logout {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-}
-
-
-}
-		
     </style>
 </head>
 <body>
-
-    <div class="top">
-        <header class="nav">
+<div class="page-wrap">
+    <header class="top-header">
+        <div class="nav">
             <a href="/" class="brand">
-                <img src="{{ asset('img/zigo-logo.png') }}" alt="ZIGO" class="brand-logo">
+                <div class="brand-logo-frame">
+                    <img src="{{ asset('img/zigo-logo.png') }}" alt="ZIGO" class="brand-logo">
+                </div>
                 <div class="brand-tagline">
                     Tecnología • Logística • Conexión
                 </div>
             </a>
+            <nav class="main-nav"><a href="{{ route('public.nosotros') }}">Nosotros</a><a href="{{ route('public.paqueteria') }}">Paquetería</a><a href="{{ route('public.faqs') }}">FAQ'S</a><a href="{{ url('/login') }}" class="nav-login">Iniciar sesión</a><a href="{{ route('b2c.register') }}" class="nav-register">Registro</a></nav>
+        </div>
+    </header>
 
-            <nav>
-    <a href="#nosotros">Nosotros</a>
-    <a href="#paqueterias">Paquetería</a>
-    <a href="#faq">FAQ'S</a>
+    <section class="quote-box" id="cotizar">
+        <div class="quote-card">
+            <div class="quote-title">Cotiza gratis tu envío</div>
 
-    @auth
-        <a href="{{ url('/dashboard') }}">Mi cuenta</a>
+            @if(session('login_required'))
+                <div class="landing-alert">
+                    {{ session('login_required') }}
+                </div>
+            @endif
 
-        <form method="POST" action="{{ route('logout') }}" style="display:inline;">
-                        @csrf
-                        <button type="submit" class="nav-logout">
-                            Cerrar sesión
-                        </button>
-                    </form>
-                @else
-                    <a href="{{ url('/login') }}">Iniciar sesión</a>
-                    <a href="{{ route('b2c.register') }}">Registro</a>
-                @endauth
-            </nav>
-            </header>
+            <form class="quote-form" method="POST" action="{{ route('b2c.cotizar') }}">
+                @csrf
 
-            <section class="quote-box">
-                 <div class="quote-title">Cotiza gratis tu envío</div>
+                <div class="field autocomplete-wrap">
+                    <label>Origen</label>
 
-                            <form class="quote-form" method="POST" action="{{ route('b2c.cotizar') }}">
-                    @csrf
-                                <div class="field autocomplete-wrap">
-                    <label>Código postal origen</label>
+                    <input type="text"
+                        id="cp_origen"
+                        name="cp_origen"
+                        value="{{ old('cp_origen', isset($cotizacion_publica) ? trim(($cotizacion_publica->cp_origen ?? '') . ($cotizacion_publica->colonia_origen ? ' - ' . $cotizacion_publica->colonia_origen : '')) : '') }}"
+                        placeholder="Código postal origen"
+                        maxlength="120"
+                        autocomplete="off">
 
-                    <input type="text" id="cp_origen" name="cp_origen" placeholder="Código postal origen" maxlength="120" autocomplete="off">
+                    <input type="hidden" id="colonia_origen" name="colonia_origen" value="{{ old('colonia_origen', $cotizacion_publica->colonia_origen ?? '') }}">
+                    <input type="hidden" id="ciudad_origen" name="ciudad_origen" value="{{ old('ciudad_origen', $cotizacion_publica->ciudad_origen ?? '') }}">
+                    <input type="hidden" id="estado_origen" name="estado_origen" value="{{ old('estado_origen', $cotizacion_publica->estado_origen ?? '') }}">
 
-                    <input type="hidden" id="colonia_origen" name="colonia_origen">
-                    <input type="hidden" id="ciudad_origen" name="ciudad_origen">
-                    <input type="hidden" id="estado_origen" name="estado_origen">
                     <div id="colonias_origen_list" class="suggestions"></div>
 
-                    <small id="cp_origen_msg" style="display:none; color:#fff; margin-top:6px;">
-                        Valida <a href="https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/Descarga.aspx" target="_blank" style="color:#facc15;">aquí</a> tu código postal
-                    </small>
+                    <small id="cp_origen_msg" class="cp-help"></small>
                 </div>
 
                 <div class="field autocomplete-wrap">
-                    <label>Código postal destino</label>
+                    <label>Destino</label>
 
-                    <input type="text" id="cp_destino" name="cp_destino" placeholder="Código postal destino" maxlength="120" autocomplete="off">
+                    <input type="text"
+                        id="cp_destino"
+                        name="cp_destino"
+                        value="{{ old('cp_destino', isset($cotizacion_publica) ? trim(($cotizacion_publica->cp_destino ?? '') . ($cotizacion_publica->colonia_destino ? ' - ' . $cotizacion_publica->colonia_destino : '')) : '') }}"
+                        placeholder="Código postal destino"
+                        maxlength="120"
+                        autocomplete="off">
 
-                    <input type="hidden" id="colonia_destino" name="colonia_destino">
-                    <input type="hidden" id="ciudad_destino" name="ciudad_destino">
-                    <input type="hidden" id="estado_destino" name="estado_destino">
+                    <input type="hidden" id="colonia_destino" name="colonia_destino" value="{{ old('colonia_destino', $cotizacion_publica->colonia_destino ?? '') }}">
+                    <input type="hidden" id="ciudad_destino" name="ciudad_destino" value="{{ old('ciudad_destino', $cotizacion_publica->ciudad_destino ?? '') }}">
+                    <input type="hidden" id="estado_destino" name="estado_destino" value="{{ old('estado_destino', $cotizacion_publica->estado_destino ?? '') }}">
+
                     <div id="colonias_destino_list" class="suggestions"></div>
 
-                    <small id="cp_destino_msg" style="display:none; color:#fff; margin-top:6px;">
-                        Valida <a href="https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/Descarga.aspx" target="_blank" style="color:#facc15;">aquí</a> tu código postal
-                    </small>
+                    <small id="cp_destino_msg" class="cp-help"></small>
                 </div>
 
                 <div class="field">
@@ -495,19 +818,41 @@
 
                 <div class="field">
                     <label>Peso (kg)</label>
-                    <input type="number" name="peso" placeholder="Kg(s)">
+                    <input type="number" id="peso" name="peso" placeholder="Kg" min="0.1" step="0.1" value="{{ old('peso', isset($cotizacion_publica) ? $cotizacion_publica->peso : '') }}">
                 </div>
 
-                <div class="field">
-                    <label>Tamaño de caja (cm)</label>
-                    <input type="text" name="medidas" placeholder="Alto x Largo x Ancho">
+                <div class="field field-dimensions">
+                    <label>Tamaño de caja en (cm)</label>
+
+                    <div class="box-dimensions">
+                        <input type="number" id="largo" placeholder="Largo" min="1">
+                        <input type="number" id="alto" placeholder="Alto" min="1">
+                        <input type="number" id="ancho" placeholder="Ancho" min="1">
+                    </div>
+
+                    <input type="hidden" id="medidas" name="medidas" value="{{ old('medidas') }}">
+                </div>
+
+                <input type="hidden" id="peso_cotizar" name="peso_cotizar" value="{{ old('peso_cotizar') }}">
+
+                <div id="peso_volumetrico_box" class="peso-volumetrico-box" style="display:none;">
+                    <div><strong>Peso real:</strong> <span id="peso_real_text">0.00</span> kg</div>
+                    <div><strong>Peso volumétrico:</strong> <span id="peso_vol_text">0.00</span> kg</div>
+                    <div><strong>Peso a cotizar:</strong> <span id="peso_cotizar_text">0.00</span> kg</div>
                 </div>
 
                 <button class="btn-yellow" type="submit">Cotizar envío</button>
+                
             </form>
 
+            @if(isset($cotizacion_publica) || session('login_required'))
+                <div class="quote-reset-wrap">
+                    <a href="{{ route('landing.cotizacion.limpiar') }}" class="quote-reset-link">Limpiar cotización</a>
+                </div>
+            @endif
+
             @if(isset($cotizacion_id) && isset($opciones))
-                <div style="max-width:1180px;margin:25px auto 0;padding:0 24px;">
+                <div style="margin:25px auto 0;">
                     <div style="background:white;color:#111827;border-radius:20px;padding:24px;box-shadow:0 12px 30px rgba(0,0,0,.12);">
                         <h2 style="margin-top:0;color:#111827;text-align:center;">Opciones disponibles</h2>
 
@@ -518,14 +863,9 @@
 
                                 <input type="hidden" name="logistico" value="{{ $opcion['logistico'] }}">
                                 <input type="hidden" name="servicio" value="{{ $opcion['servicio'] }}">
-                                <input type="hidden" name="precio" value="{{ $opcion['precio'] }}">
 
-                               <div style="display:flex;align-items:center;gap:15px;">
-                                    <img
-                                        src="{{ asset($opcion['logo']) }}"
-                                        alt="{{ $opcion['logistico'] }}"
-                                        style="width:90px;height:auto;object-fit:contain;"
-                                    >
+                                <div style="display:flex;align-items:center;gap:15px;">
+                                    <img src="{{ asset($opcion['logo']) }}" alt="{{ $opcion['logistico'] }}" style="width:90px;height:auto;object-fit:contain;">
                                     <div>
                                         <strong>{{ $opcion['logistico'] }}</strong>
                                         <div>{{ $opcion['servicio'] }}</div>
@@ -538,80 +878,98 @@
                                     ${{ number_format($opcion['precio'], 2) }}
                                 </div>
 
-                                <button type="submit"
-                                        style="background:#f97316;color:white;border:none;border-radius:10px;padding:12px 22px;font-weight:900;cursor:pointer;">
-                                    Comprar
+                                <button type="submit" style="background:#f97316;color:white;border:none;border-radius:10px;padding:12px 22px;font-weight:900;cursor:pointer;">
+                                    Seleccionar
                                 </button>
                             </form>
                         @endforeach
                     </div>
                 </div>
             @endif
-        </section>
-
-        <section style="padding: 70px 20px; background:#ffffff; text-align:center;">
-    <h2 style="font-size:42px; margin-bottom:25px; color:#111827;">
-        Rastrea tu envío
-    </h2>
-
-    <form method="POST" action="{{ route('b2c.rastreo.buscar') }}"
-          style="max-width:820px; margin:auto; display:flex; background:white; border-radius:14px; overflow:hidden; box-shadow:0 10px 24px rgba(0,0,0,.16); border:1px solid #e5e7eb;">
-        @csrf
-
-        <input
-            type="text"
-            name="tracking_number"
-            placeholder="Ingresa tu número de rastreo"
-            required
-            style="flex:1; padding:22px; border:none; font-size:20px; outline:none;"
-        >
-
-        <button type="submit"
-                style="background:#dc2626; color:white; border:none; padding:0 38px; font-size:20px; font-weight:800; cursor:pointer;">
-            Rastrear
-        </button>
-    </form>
-</section>
-
-        <section class="hero">
-            <div>
-                <p>En ZIGO podrás cotizar envíos nacionales en sencillos pasos.</p>
-                <h1>Envía paquetes de forma segura y rápida</h1>
-                <p>
-                    Somos una plataforma de autoservicio digital para cotizar, pagar y generar guías
-                    de envío con aliados logísticos nacionales. Ideal para personas, emprendedores y empresas.
-                </p>
-            </div>
-
-            <div class="hero-card">
-                <img src="{{ asset('img/zigo-logo.png') }}"
-                    alt="ZIGO"
-                    class="hero-logo">
-            </div>
-        </section>
-    </div>
-
-    <section class="section" id="nosotros">
-        <h2>Todo para tus envíos en un solo lugar</h2>
-
-        <div class="cards">
-            <div class="card">
-                <h3>B2C sin registro</h3>
-                <p>Cotiza, paga en línea y genera tu guía sin crear cuenta.</p>
-            </div>
-
-            <div class="card">
-                <h3>Perfil personal</h3>
-                <p>Guarda direcciones, consulta historial y descarga tus guías cuando lo necesites.</p>
-            </div>
-
-            <a href="{{ route('landing.empresas') }}" class="card feature-card-link">
-                <h3>Empresas B2B</h3>
-                <p>Acceso privado con usuarios, saldos, reportes, direcciones, tarifas y guías para tu operación.</p>
-                <span>Conocer solución empresarial →</span>
-            </a>
         </div>
     </section>
+
+    {{--
+    <section class="tracking-section">
+        <h2>Rastrea tu envío</h2>
+        <form class="tracking-form" method="POST" action="{{ route('b2c.rastreo.buscar') }}">
+            @csrf
+            <input type="text" name="tracking_number" placeholder="Ingresa tu número de rastreo" required>
+            <button type="submit">Rastrear</button>
+        </form>
+    </section>
+    --}}
+
+    <section class="hero">
+        <div class="hero-copy">
+            <div class="hero-kicker"><span>✓</span> Envíos nacionales en sencillos pasos</div>
+            <h1>Envía paquetes de forma <strong>segura</strong> y rápida</h1>
+            <p>
+                Cotiza, paga y genera guías digitales desde una plataforma simple para personas,
+                emprendedores y empresas que necesitan operar sus envíos de forma confiable.
+            </p>
+            <div class="hero-actions">
+                <a href="#cotizar" class="hero-primary">Cotizar ahora</a>
+                <a href="{{ route('landing.empresas') }}" class="hero-secondary">Soluciones B2B</a>
+            </div>
+        </div>
+
+        <div class="hero-visual">
+            <div class="hero-card">
+                <img src="{{ asset('img/zigo-logo.png') }}" alt="ZIGO" class="hero-logo">
+            </div>
+        </div>
+    </section>
+
+    <section class="solutions-section">
+    <div class="section-container">
+        <h2>Todo para tus envíos en un solo lugar</h2>
+
+        <div class="solutions-grid">
+            <div class="solution-card">
+                <div class="solution-icon">📦</div>
+                <h3>B2C sin registro</h3>
+                <p>Cotiza, paga en línea y genera guías para envíos sencillos sin crear una cuenta.</p>
+                <span>Ideal para envíos ocasionales</span>
+            </div>
+
+            <div class="solution-card">
+                <div class="solution-icon">👤</div>
+                <h3>Perfil personal</h3>
+                <p>Guarda direcciones, consulta historial, descarga tus guías y agiliza futuras cotizaciones.</p>
+                <a href="{{ route('b2c.register') }}">Crear cuenta →</a>
+            </div>
+
+            <div class="solution-card">
+                <div class="solution-icon">🏢</div>
+                <h3>Empresas B2B</h3>
+                <p>Centraliza usuarios, saldos, direcciones, reportes, tarifas preferenciales y guías para tu operación.</p>
+                <a href="{{ route('landing.empresas') }}">Conocer solución empresarial →</a>
+            </div>
+
+            <div class="solution-card">
+                <div class="solution-icon">🔌</div>
+                <h3>API Hub</h3>
+                <p>Integra servicios logísticos como consulta de códigos postales, cobertura y futuras cotizaciones mediante API.</p>
+                <a href="{{ route('public.api-hub') }}">Ver API Hub →</a>
+            </div>
+
+            <div class="solution-card">
+                <div class="solution-icon">🛟</div>
+                <h3>Soporte</h3>
+                <p>Recibe ayuda para tus envíos, pagos, guías, incidencias y seguimiento de paquetes.</p>
+                <a href="{{ route('public.soporte') }}">Ir a soporte →</a>
+            </div>
+
+            <div class="solution-card">
+                <div class="solution-icon">🚚</div>
+                <h3>Paquetería</h3>
+                <p>Gestiona envíos nacionales con aliados logísticos y opciones pensadas para personas y negocios.</p>
+                <a href="{{ route('public.paqueteria') }}">Ver paquetería →</a>
+            </div>
+        </div>
+    </div>
+</section>
 
     <section class="section" id="paqueterias">
         <h2>Paqueterías integradas</h2>
@@ -655,90 +1013,302 @@
         <a href="{{ url('/register') }}">Crear cuenta</a>
     </section>
 
-    <footer>
-        ZIGO © {{ date('Y') }}. Plataforma de envíos B2C y B2B.
+    <footer class="zigo-footer">
+        <div class="footer-inner">
+            <div>
+                <h4>ZIGO</h4>
+                <p>
+                    Plataforma logística digital para personas, negocios e integradores.
+                </p>
+            </div>
+
+            <div>
+                <h4>Soluciones</h4>
+                <!--a href="{{ url('/') }}">B2C</a-->
+                <a href="{{ route('landing.empresas') }}">Empresas</a>
+                <a href="{{ route('public.api-hub') }}">API Hub</a>
+            </div>
+
+            <div>
+                <h4>Ayuda</h4>
+                <a href="{{ route('public.faqs') }}">FAQ'S</a>
+                <a href="{{ route('public.soporte') }}">Soporte</a>
+                <!--a href="{{ url('/rastreo') }}">Rastrear envío</a-->
+            </div>
+
+            <div>
+                <h4>Legal</h4>
+                <a href="{{ route('legal.aviso-privacidad') }}">Aviso de privacidad</a>
+                <a href="{{ route('legal.terminos') }}">Términos y condiciones</a>
+                <a href="{{ route('legal.politica-envios') }}">Política de envíos</a>
+            </div>
+        </div>
     </footer>
 
-    <a class="whatsapp" href="#" target="_blank">¡¡Estamos aquí para ayudarte!!</a>
-	
-	<script>
-    async function cargarColonias(cpInputId, listId, msgId, hiddenColoniaId) {
-    const cpInput = document.getElementById(cpInputId);
-    const list = document.getElementById(listId);
-    const msg = document.getElementById(msgId);
-    const hiddenColonia = document.getElementById(hiddenColoniaId);
+    <a class="whatsapp" href="#" target="_blank" aria-label="WhatsApp ZIGO">
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M16.02 3.2c-7.07 0-12.82 5.64-12.82 12.58 0 2.37.68 4.68 1.96 6.67L3.2 28.8l6.56-1.88a13.03 13.03 0 0 0 6.26 1.6c7.07 0 12.82-5.64 12.82-12.58S23.09 3.2 16.02 3.2Zm0 22.95c-1.96 0-3.88-.54-5.55-1.56l-.4-.24-3.9 1.12 1.14-3.75-.26-.39a10.2 10.2 0 0 1-1.6-5.55c0-5.63 4.74-10.22 10.57-10.22s10.57 4.59 10.57 10.22-4.74 10.37-10.57 10.37Zm5.8-7.67c-.32-.16-1.88-.91-2.18-1.02-.29-.1-.5-.16-.72.16-.21.31-.82 1.02-1 1.23-.19.21-.37.24-.69.08-.32-.16-1.34-.49-2.55-1.56-.94-.82-1.58-1.84-1.77-2.15-.18-.31-.02-.48.14-.64.15-.14.32-.37.48-.55.16-.18.21-.31.32-.52.1-.21.05-.39-.03-.55-.08-.16-.72-1.7-.98-2.33-.26-.61-.52-.53-.72-.54h-.61c-.21 0-.55.08-.84.39-.29.31-1.1 1.05-1.1 2.56s1.13 2.98 1.29 3.18c.16.21 2.22 3.33 5.38 4.67.75.32 1.34.51 1.8.65.76.24 1.45.2 2 .12.61-.09 1.88-.75 2.14-1.48.26-.73.26-1.36.18-1.48-.08-.13-.29-.21-.61-.37Z"/>
+        </svg>
+    </a>
+</div>
 
-    const cp = cpInput.value.trim();
+    <script>
+        async function cargarColonias(cpInputId, listId, msgId, hiddenColoniaId) {
+            const cpInput = document.getElementById(cpInputId);
+            const list = document.getElementById(listId);
+            const msg = document.getElementById(msgId);
+            const hiddenColonia = document.getElementById(hiddenColoniaId);
 
-    list.innerHTML = '';
-    list.style.display = 'none';
-    msg.style.display = 'none';
-    hiddenColonia.value = '';
+            const cp = cpInput.value.replace(/\D/g, '').substring(0, 5);
 
-    if (cp.length !== 5 || !/^\d{5}$/.test(cp)) {
-        return;
-    }
+            list.innerHTML = '';
+            list.style.display = 'none';
+            msg.style.display = 'none';
+            hiddenColonia.value = '';
 
-    try {
-        const response = await fetch(`/b2c/cp/colonias?cp=${encodeURIComponent(cp)}`);
-        const json = await response.json();
-        const colonias = json?.data || json?.success?.data || [];
+            if (cp.length !== 5) {
+                return;
+            }
 
-        if (!Array.isArray(colonias) || colonias.length === 0) {
-            msg.style.display = 'block';
-            return;
+            try {
+                const response = await fetch(`/b2c/cp/colonias?cp=${encodeURIComponent(cp)}`, {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                const json = await response.json();
+                const colonias = json?.data || [];
+
+                if (!response.ok || !Array.isArray(colonias) || colonias.length === 0) {
+                    msg.textContent = 'Código postal no encontrado';
+                    msg.classList.add('is-error');;
+                    msg.style.color = '#fee2e2';
+                    msg.style.display = 'block';
+                    return;
+                }
+
+                msg.textContent = '';
+                msg.style.display = 'none';
+                msg.classList.remove('is-error');
+
+                colonias.forEach(item => {
+                    const cpValue = item.d_codigo || item.codigo_postal || cp;
+                    const colonia = item.d_asenta || item.colonia || '';
+                    const municipio = item.D_mnpio || item.d_mnpio || item.municipio || item.d_ciudad || '';
+                    const estado = item.d_estado || item.estado || '';
+
+                    const texto = `${cpValue} - ${colonia} - ${municipio} - ${estado}`;
+
+                    const div = document.createElement('div');
+                    div.className = 'suggestion-item';
+                    div.innerHTML = `
+                        <strong>${texto}</strong>
+                        <br>
+                        <small>${municipio}, ${estado}</small>
+                    `;
+
+                    div.addEventListener('click', function () {
+                        cpInput.value = texto;
+                        hiddenColonia.value = colonia;
+
+                        msg.textContent = '';
+                        msg.style.display = 'none';
+                        msg.classList.remove('is-error');
+
+                        if (cpInputId === 'cp_origen') {
+                            document.getElementById('ciudad_origen').value = municipio;
+                            document.getElementById('estado_origen').value = estado;
+                        }
+
+                        if (cpInputId === 'cp_destino') {
+                            document.getElementById('ciudad_destino').value = municipio;
+                            document.getElementById('estado_destino').value = estado;
+                        }
+
+                        list.style.display = 'none';
+                    });
+
+                    list.appendChild(div);
+                });
+
+                list.style.display = 'block';
+            } catch (error) {
+                msg.textContent = 'No fue posible consultar el código postal';
+                msg.style.color = '#fee2e2';
+                msg.style.display = 'block';
+            }
         }
 
-        colonias.forEach(item => {
-            const cp = item.d_codigo || '';
-            const colonia = item.d_asenta || item.colonia || '';
-            const municipio = item.D_mnpio || item.d_mnpio || item.municipio || item.d_ciudad || '';
-            const estado = item.d_estado || item.estado || item.codigo_estado || '';
-
-            const texto = `${cp} - ${colonia} - ${municipio} - ${estado}`;
-
-            const div = document.createElement('div');
-            div.className = 'suggestion-item';
-            div.textContent = texto;
-
-            div.addEventListener('click', function () {
-                cpInput.value = texto;          // visible como antes
-                hiddenColonia.value = colonia;  // limpio para Estafeta
-
-                if (cpInputId === 'cp_origen') {
-                    document.getElementById('ciudad_origen').value = municipio;
-                    document.getElementById('estado_origen').value = estado;
-                }
-
-                if (cpInputId === 'cp_destino') {
-                    document.getElementById('ciudad_destino').value = municipio;
-                    document.getElementById('estado_destino').value = estado;
-                }
-
-                list.style.display = 'none';
-            });
-
-            list.appendChild(div);
+        document.getElementById('cp_origen').addEventListener('input', function () {
+            if (this.value.replace(/\D/g, '').length === 5) {
+                cargarColonias('cp_origen', 'colonias_origen_list', 'cp_origen_msg', 'colonia_origen');
+            }
         });
 
-        list.style.display = 'block';
-    } catch (error) {
-        msg.style.display = 'block';
-    }
-}
+        document.getElementById('cp_destino').addEventListener('input', function () {
+            if (this.value.replace(/\D/g, '').length === 5) {
+                cargarColonias('cp_destino', 'colonias_destino_list', 'cp_destino_msg', 'colonia_destino');
+            }
+        });
 
-document.getElementById('cp_origen').addEventListener('keyup', function () {
-    if (/^\d{5}$/.test(this.value.trim())) {
-        cargarColonias('cp_origen', 'colonias_origen_list', 'cp_origen_msg', 'colonia_origen');
-    }
-});
+        document.addEventListener('click', function (event) {
+            if (!event.target.closest('.autocomplete-wrap')) {
+                document.querySelectorAll('.suggestions').forEach(item => {
+                    item.style.display = 'none';
+                });
+            }
+        });
 
-document.getElementById('cp_destino').addEventListener('keyup', function () {
-    if (/^\d{5}$/.test(this.value.trim())) {
-        cargarColonias('cp_destino', 'colonias_destino_list', 'cp_destino_msg', 'colonia_destino');
-    }
-});
-</script>
+        const quoteForm = document.querySelector('.quote-form');
+
+        const tipoEnvioInput = document.querySelector('select[name="tipo_envio"]');
+        const pesoInput = document.getElementById('peso');
+        const largoInput = document.getElementById('largo');
+        const altoInput = document.getElementById('alto');
+        const anchoInput = document.getElementById('ancho');
+        const medidasInput = document.getElementById('medidas');
+        const pesoCotizarInput = document.getElementById('peso_cotizar');
+
+        const pesoBox = document.getElementById('peso_volumetrico_box');
+        const pesoRealText = document.getElementById('peso_real_text');
+        const pesoVolText = document.getElementById('peso_vol_text');
+        const pesoCotizarText = document.getElementById('peso_cotizar_text');
+
+        function toNumber(value) {
+            return parseFloat(String(value || '').replace(',', '.')) || 0;
+        }
+
+        function limpiarCalculoDimensiones() {
+            if (medidasInput) medidasInput.value = '';
+            if (pesoCotizarInput) pesoCotizarInput.value = '';
+            if (pesoBox) pesoBox.style.display = 'none';
+        }
+
+        function configurarTipoEnvioLanding() {
+            const tipo = tipoEnvioInput ? tipoEnvioInput.value : 'caja';
+            const esSobre = tipo === 'sobre';
+
+            [largoInput, altoInput, anchoInput].forEach(function (input) {
+                if (!input) return;
+
+                input.disabled = esSobre;
+                input.required = !esSobre;
+                input.style.opacity = esSobre ? '0.55' : '1';
+                input.style.cursor = esSobre ? 'not-allowed' : 'text';
+
+                if (esSobre) {
+                    input.value = '';
+                }
+            });
+
+            const dimensionsField = document.querySelector('.field-dimensions');
+
+            if (dimensionsField) {
+                if (esSobre) {
+                    dimensionsField.classList.add('is-disabled');
+                } else {
+                    dimensionsField.classList.remove('is-disabled');
+                }
+            }
+
+            if (esSobre) {
+                const pesoReal = toNumber(pesoInput ? pesoInput.value : 0);
+
+                limpiarCalculoDimensiones();
+
+                if (pesoCotizarInput) {
+                    pesoCotizarInput.value = pesoReal > 0 ? pesoReal.toFixed(2) : '';
+                }
+
+                return;
+            }
+
+            calcularPesoVolumetricoLanding();
+        }
+
+        function calcularPesoVolumetricoLanding() {
+            const tipo = tipoEnvioInput ? tipoEnvioInput.value : 'caja';
+
+            if (tipo === 'sobre') {
+                configurarTipoEnvioLanding();
+                return;
+            }
+
+            const pesoReal = toNumber(pesoInput ? pesoInput.value : 0);
+            const largo = toNumber(largoInput ? largoInput.value : 0);
+            const alto = toNumber(altoInput ? altoInput.value : 0);
+            const ancho = toNumber(anchoInput ? anchoInput.value : 0);
+
+            if (medidasInput) {
+                medidasInput.value = largo && alto && ancho ? `${largo}x${alto}x${ancho}` : '';
+            }
+
+            if (!pesoReal || !largo || !alto || !ancho) {
+                limpiarCalculoDimensiones();
+                return;
+            }
+
+            const pesoVolumetrico = (largo * alto * ancho) / 5000;
+            const pesoCotizar = Math.max(pesoReal, pesoVolumetrico);
+
+            if (pesoRealText) pesoRealText.textContent = pesoReal.toFixed(2);
+            if (pesoVolText) pesoVolText.textContent = pesoVolumetrico.toFixed(2);
+            if (pesoCotizarText) pesoCotizarText.textContent = pesoCotizar.toFixed(2);
+
+            if (pesoCotizarInput) {
+                pesoCotizarInput.value = pesoCotizar.toFixed(2);
+            }
+
+            if (pesoBox) {
+                pesoBox.style.display = 'grid';
+            }
+        }
+
+        [tipoEnvioInput, pesoInput, largoInput, altoInput, anchoInput].forEach(function (input) {
+            if (!input) return;
+
+            input.addEventListener('input', function () {
+                if (input === tipoEnvioInput) {
+                    configurarTipoEnvioLanding();
+                } else {
+                    calcularPesoVolumetricoLanding();
+                }
+            });
+
+            input.addEventListener('change', function () {
+                if (input === tipoEnvioInput) {
+                    configurarTipoEnvioLanding();
+                } else {
+                    calcularPesoVolumetricoLanding();
+                }
+            });
+        });
+
+        if (quoteForm) {
+            quoteForm.addEventListener('submit', function () {
+                const tipo = tipoEnvioInput ? tipoEnvioInput.value : 'caja';
+
+                if (tipo === 'sobre') {
+                    configurarTipoEnvioLanding();
+                } else {
+                    calcularPesoVolumetricoLanding();
+                }
+
+                const btn = quoteForm.querySelector('button[type="submit"]');
+
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = 'Cotizando...';
+                    btn.style.opacity = '.75';
+                    btn.style.cursor = 'not-allowed';
+                }
+            });
+        }
+
+        configurarTipoEnvioLanding();
+
+    </script>
 
 </body>
 </html>
