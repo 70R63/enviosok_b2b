@@ -810,7 +810,7 @@
 
                 <div class="field">
                     <label>Tipo de envío</label>
-                    <select name="tipo_envio">
+                    <select name="tipo_envio" id="tipo_envio">
                         <option value="caja">Caja</option>
                         <option value="sobre">Sobre</option>
                     </select>
@@ -1213,15 +1213,26 @@
             }
 
             if (esSobre) {
-                const pesoReal = toNumber(pesoInput ? pesoInput.value : 0);
+                if (pesoInput) {
+                    pesoInput.value = '1.00';
+                    pesoInput.readOnly = true;
+                    pesoInput.style.opacity = '0.75';
+                    pesoInput.style.cursor = 'not-allowed';
+                }
 
                 limpiarCalculoDimensiones();
 
                 if (pesoCotizarInput) {
-                    pesoCotizarInput.value = pesoReal > 0 ? pesoReal.toFixed(2) : '';
+                    pesoCotizarInput.value = '1.00';
                 }
 
                 return;
+            }
+
+            if (pesoInput) {
+                pesoInput.readOnly = false;
+                pesoInput.style.opacity = '1';
+                pesoInput.style.cursor = 'text';
             }
 
             calcularPesoVolumetricoLanding();
@@ -1271,6 +1282,7 @@
             input.addEventListener('input', function () {
                 if (input === tipoEnvioInput) {
                     configurarTipoEnvioLanding();
+                    calcularPesoVolumetricoLanding();
                 } else {
                     calcularPesoVolumetricoLanding();
                 }
@@ -1279,6 +1291,7 @@
             input.addEventListener('change', function () {
                 if (input === tipoEnvioInput) {
                     configurarTipoEnvioLanding();
+                    calcularPesoVolumetricoLanding();
                 } else {
                     calcularPesoVolumetricoLanding();
                 }
@@ -1291,6 +1304,14 @@
 
                 if (tipo === 'sobre') {
                     configurarTipoEnvioLanding();
+
+                    if (pesoInput) {
+                        pesoInput.value = '1.00';
+                    }
+
+                    if (pesoCotizarInput) {
+                        pesoCotizarInput.value = '1.00';
+                    }
                 } else {
                     calcularPesoVolumetricoLanding();
                 }

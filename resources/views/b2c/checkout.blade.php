@@ -67,7 +67,39 @@
         .content{padding:28px 34px}
         .title{font-size:32px;font-weight:900;margin-bottom:6px;color:#111827}
         .subtitle{color:#64748b;margin-bottom:22px}
-        .grid{display:grid;grid-template-columns:1fr 330px;gap:20px}
+        .grid{
+            display:grid;
+            grid-template-columns:minmax(0,1fr) minmax(0,1fr) 330px;
+            gap:18px;
+            align-items:start;
+        }
+
+        .summary-card{
+            grid-column:3;
+            grid-row:1 / span 2;
+        }
+
+        .package-card{
+            grid-column:1 / span 2;
+        }
+
+        body.guest .content{
+            max-width:1320px;
+            margin:0 auto;
+            padding:28px 24px;
+        }
+
+        @media(max-width:1150px){
+            .grid{
+                grid-template-columns:1fr;
+            }
+
+            .summary-card,
+            .package-card{
+                grid-column:auto;
+                grid-row:auto;
+            }
+        }
         .card{background:white;border-radius:16px;padding:20px;box-shadow:0 8px 20px rgba(0,0,0,.06);margin-bottom:16px}
         h2{margin-top:0}
         .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px 14px}
@@ -216,6 +248,36 @@
             .content{padding:22px 16px}
         }
 
+        .grid{
+            display:grid !important;
+            grid-template-columns:minmax(0,1fr) minmax(0,1fr) 330px !important;
+            gap:18px !important;
+            align-items:start !important;
+        }
+
+        .summary-card{
+            grid-column:3 !important;
+            grid-row:1 / 3 !important;
+            align-self:start !important;
+        }
+
+        .package-card{
+            grid-column:1 / 3 !important;
+            grid-row:2 !important;
+        }
+
+        @media(max-width:1150px){
+            .grid{
+                grid-template-columns:1fr !important;
+            }
+
+            .summary-card,
+            .package-card{
+                grid-column:auto !important;
+                grid-row:auto !important;
+            }
+        }
+
     </style>
 </head>
 <body class="{{ auth()->check() ? 'auth' : 'guest' }}">
@@ -258,7 +320,6 @@
             @csrf
 
             <div class="grid">
-                <div>
                     <section class="card">
                         <h2>Remitente</h2>
 
@@ -361,7 +422,7 @@
                         </div>
                     </section>
 
-                    <section class="card">
+                    <section class="card package-card">
                         <h2>Contenido del paquete</h2>
 
                         <div class="form-grid">
@@ -381,9 +442,8 @@
                             </div>
                         </div>
                     </section>
-                </div>
 
-                <aside class="card">
+                <aside class="card summary-card">
                     <h2>Resumen</h2>
 
                     <div class="summary-row"><span>Mensajería</span><strong>{{ $cotizacion->logistico }}</strong></div>

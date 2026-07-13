@@ -58,7 +58,7 @@ class CotizacionPublicaController extends Controller
         }
 
         if ($tipoEnvio === 'sobre') {
-            $pesoFinal = $pesoReal;
+            $pesoFinal = 1.00;
             $medidasFinal = null;
         } else {
             $medidasFinal = $data['medidas'] ?? null;
@@ -126,7 +126,6 @@ class CotizacionPublicaController extends Controller
         ]);
 
         $tipoEnvio = strtolower($cotizacion->tipo_envio ?? 'caja');
-        $peso = (float) str_replace(',', '.', $cotizacion->peso ?? 0);
 
         $requiereLogin = false;
 
@@ -135,8 +134,13 @@ class CotizacionPublicaController extends Controller
                 $requiereLogin = true;
             }
 
-            if ($tipoEnvio === 'sobre' && $peso > 2) {
-                $requiereLogin = true;
+            if ($tipoEnvio === 'sobre') {
+                $cotizacion->update([
+                    'peso' => 1.00,
+                    'medidas' => null,
+                ]);
+
+                $cotizacion->refresh();
             }
         }
 
@@ -145,9 +149,7 @@ class CotizacionPublicaController extends Controller
                 ->to(url('/') . '#cotizar')
                 ->with(
                     'login_required',
-                    $tipoEnvio === 'caja'
-                        ? 'Para continuar con envíos tipo caja necesitas iniciar sesión o crear una cuenta.'
-                        : 'Para continuar con sobres mayores a 2 kg necesitas iniciar sesión o crear una cuenta.'
+                    'Para continuar con envíos tipo caja necesitas iniciar sesión o crear una cuenta.'
                 );
         }
 
