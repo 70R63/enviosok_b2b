@@ -326,8 +326,7 @@
                             <button class="btn" type="button"
                                 onclick="abrirModalPago(
                                     '{{ $opcion['logistico'] }}',
-                                    '{{ $opcion['servicio'] }}',
-                                    '{{ $opcion['precio'] }}'
+                                    '{{ $opcion['servicio'] }}'
                                 )">
                                 Seleccionar
                             </button>
@@ -366,7 +365,6 @@
             @csrf
             <input type="hidden" name="logistico" id="mp_logistico">
             <input type="hidden" name="servicio" id="mp_servicio">
-            <input type="hidden" name="precio" id="mp_precio">
             <button class="btn" type="submit">Mercado Pago</button>
         </form>
 
@@ -375,7 +373,6 @@
                 @csrf
                 <input type="hidden" name="logistico" id="saldo_logistico">
                 <input type="hidden" name="servicio" id="saldo_servicio">
-                <input type="hidden" name="precio" id="saldo_precio">
                 <input type="hidden" name="metodo_pago" value="saldo">
                 <button class="btn btn-saldo" type="submit">Saldo prepago</button>
             </form>
@@ -388,19 +385,16 @@
 </div>
 
 <script>
-    function abrirModalPago(logistico, servicio, precio) {
+    function abrirModalPago(logistico, servicio) {
         document.getElementById('mp_logistico').value = logistico;
         document.getElementById('mp_servicio').value = servicio;
-        document.getElementById('mp_precio').value = precio;
 
         const saldoLogistico = document.getElementById('saldo_logistico');
         const saldoServicio = document.getElementById('saldo_servicio');
-        const saldoPrecio = document.getElementById('saldo_precio');
 
-        if (saldoLogistico && saldoServicio && saldoPrecio) {
+        if (saldoLogistico && saldoServicio) {
             saldoLogistico.value = logistico;
             saldoServicio.value = servicio;
-            saldoPrecio.value = precio;
         }
 
         document.getElementById('modalPago').style.display = 'flex';

@@ -11,7 +11,7 @@ use App\Http\Controllers\Crm\CrmClientController;
 use App\Http\Controllers\Web\PostalCodeLookupController;
 use App\Http\Controllers\Web\LandingProspectController;
 use App\Http\Controllers\CRM\CrmPricingController;
-
+use App\Models\B2cCotizacion;
 
 /*
 |--------------------------------------------------------------------------

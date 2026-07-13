@@ -19,7 +19,22 @@
         label{font-weight:900;display:block;margin-bottom:6px}
         input,select,textarea{width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px}
         textarea{min-height:90px}
-        .full{grid-column:1 / -1}
+        .form-grid{
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:16px;
+        }
+
+        .full{
+            grid-column:1/-1;
+        }
+
+        .card{
+            background:white;
+            border-radius:18px;
+            padding:24px;
+            box-shadow:0 10px 24px rgba(0,0,0,.08);
+        }
         .btn{display:inline-block;background:#4361ee;color:white;text-decoration:none;font-weight:800;padding:12px 16px;border-radius:9px;border:none;cursor:pointer}
         .btn-gray{background:#334155}
         .errors{background:#fee2e2;color:#991b1b;padding:12px;border-radius:10px;margin-bottom:16px;font-weight:800}
@@ -43,6 +58,7 @@
         @endif
 
         <div class="card">
+            {{-- FORMULARIO 1: DATOS GENERALES --}}
             <form method="POST" action="{{ route('crm.clientes.update', $cliente) }}">
                 @csrf
                 @method('PUT')
@@ -122,6 +138,70 @@
                     <a class="btn btn-gray" href="{{ route('crm.clientes.index') }}">Cancelar</a>
                 </p>
             </form>
+
+            {{-- FORMULARIO 2: SEGUIMIENTO COMERCIAL --}}
+            <div class="card" style="margin-top:24px;">
+                <h2>Seguimiento comercial</h2>
+                <p style="color:#64748b;margin-top:0;">
+                    Registra llamadas, citas, prioridad y próximo contacto del prospecto.
+                </p>
+
+                @if($cliente->commercial_status === 'prospecto' && is_null($cliente->reviewed_at))
+                    <div style="background:#fee2e2;color:#991b1b;padding:12px;border-radius:10px;margin-bottom:16px;font-weight:800;">
+                        Prospecto nuevo sin revisar.
+                    </div>
+                @endif
+
+                <form method="POST" action="{{ route('crm.clientes.seguimiento', $cliente) }}">
+                    @csrf
+
+                    <div class="form-grid">
+                        <div>
+                            <label>Estatus de seguimiento</label>
+                            <select name="lead_status" required>
+                                <option value="nuevo" @selected(($cliente->lead_status ?? 'nuevo') === 'nuevo')>Nuevo</option>
+                                <option value="sin_revisar" @selected(($cliente->lead_status ?? '') === 'sin_revisar')>Sin revisar</option>
+                                <option value="contactado" @selected(($cliente->lead_status ?? '') === 'contactado')>Contactado</option>
+                                <option value="cita_agendada" @selected(($cliente->lead_status ?? '') === 'cita_agendada')>Cita agendada</option>
+                                <option value="en_negociacion" @selected(($cliente->lead_status ?? '') === 'en_negociacion')>En negociación</option>
+                                <option value="convertido" @selected(($cliente->lead_status ?? '') === 'convertido')>Convertido a cliente</option>
+                                <option value="descartado" @selected(($cliente->lead_status ?? '') === 'descartado')>Descartado</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label>Prioridad</label>
+                            <select name="lead_priority" required>
+                                <option value="baja" @selected(($cliente->lead_priority ?? 'media') === 'baja')>Baja</option>
+                                <option value="media" @selected(($cliente->lead_priority ?? 'media') === 'media')>Media</option>
+                                <option value="alta" @selected(($cliente->lead_priority ?? 'media') === 'alta')>Alta</option>
+                                <option value="urgente" @selected(($cliente->lead_priority ?? 'media') === 'urgente')>Urgente</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label>Próximo seguimiento</label>
+                            <input type="datetime-local"
+                                name="next_follow_up_at"
+                                value="{{ $cliente->next_follow_up_at ? $cliente->next_follow_up_at->format('Y-m-d\TH:i') : '' }}">
+                        </div>
+
+                        <div>
+                            <label>Último contacto</label>
+                            <input readonly value="{{ $cliente->last_contact_at ? $cliente->last_contact_at->format('d/m/Y H:i') : 'Sin contacto registrado' }}">
+                        </div>
+
+                        <div class="full">
+                            <label>Notas internas de seguimiento</label>
+                            <textarea name="internal_notes" rows="5" placeholder="Ejemplo: Se llamó al cliente, solicita propuesta de cuenta empresarial...">{{ old('internal_notes', $cliente->internal_notes) }}</textarea>
+                        </div>
+                    </div>
+
+                    <button class="btn" type="submit" style="margin-top:16px;">
+                        Guardar seguimiento
+                    </button>
+                </form>
+            </div>
         </div>
     </main>
 </div>

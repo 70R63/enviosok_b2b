@@ -29,6 +29,9 @@ class LandingProspectController extends Controller
         CrmClient::create([
             'client_type' => 'b2b',
             'commercial_status' => 'prospecto',
+            'lead_status' => 'nuevo',
+            'lead_priority' => 'media',
+            'reviewed_at' => null,
             'name' => $data['name'],
             'company_name' => $data['company_name'],
             'contact_name' => $data['name'],

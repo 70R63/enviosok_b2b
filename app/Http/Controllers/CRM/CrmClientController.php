@@ -108,4 +108,48 @@ class CrmClientController extends Controller
             ->route('crm.clientes.index')
             ->with('success', 'Cliente suspendido correctamente.');
     }
+
+    public function actualizarSeguimiento(Request $request, CrmClient $cliente)
+    {
+        $data = $request->validate([
+            'lead_status' => ['required', 'in:nuevo,sin_revisar,contactado,cita_agendada,en_negociacion,convertido,descartado'],
+            'lead_priority' => ['required', 'in:baja,media,alta,urgente'],
+            'next_follow_up_at' => ['nullable', 'date'],
+            'internal_notes' => ['nullable', 'string'],
+        ]);
+
+        $updateData = [
+            'lead_status' => $data['lead_status'],
+            'lead_priority' => $data['lead_priority'],
+            'next_follow_up_at' => $data['next_follow_up_at'] ?? null,
+            'internal_notes' => $data['internal_notes'] ?? null,
+            'reviewed_at' => $cliente->reviewed_at ?? now(),
+        ];
+
+        if (in_array($data['lead_status'], [
+            'contactado',
+            'cita_agendada',
+            'en_negociacion',
+            'convertido',
+            'descartado',
+        ])) {
+            $updateData['last_contact_at'] = now();
+        }
+
+        if ($data['lead_status'] === 'convertido') {
+            $updateData['commercial_status'] = 'activo';
+            $updateData['active'] = true;
+        }
+
+        if ($data['lead_status'] === 'descartado') {
+            $updateData['commercial_status'] = 'perdido';
+            $updateData['active'] = false;
+        }
+
+        $cliente->update($updateData);
+
+        return redirect()
+            ->route('crm.clientes.edit', $cliente)
+            ->with('success', 'Seguimiento comercial actualizado correctamente.');
+    }
 }
