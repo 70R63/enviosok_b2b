@@ -115,6 +115,9 @@
 
     </style>
 </head>
+@php
+    $isPublicCheckout = $cotizacion->referencia === 'LANDING_PUBLICA' && empty($cotizacion->user_id);
+@endphp
 <body>
 
 <div class="container">
@@ -240,7 +243,7 @@
 
     </div>
 
-    <div class="acciones">
+        <div class="acciones">
 
         @if($cotizacion->documento)
             <a href="{{ asset('storage/' . $cotizacion->documento) }}" target="_blank" class="btn-primary">
@@ -255,21 +258,27 @@
             </form>
         @endif
 
-        @auth
-            <a href="{{ route('b2c.dashboard') }}" class="btn-secondary">
-                Ir a mi dashboard
-            </a>
-
-            <a href="{{ route('b2c.mis-envios') }}" class="btn-secondary">
-                Mis envíos
-            </a>
-        @endauth
-
-        @guest
-            <a href="/" class="btn-secondary">
+        @if($isPublicCheckout)
+            <a href="{{ url('/') }}" class="btn-secondary">
                 Volver al inicio
             </a>
-        @endguest
+        @else
+            @auth
+                <a href="{{ route('b2c.dashboard') }}" class="btn-secondary">
+                    Ir a mi dashboard
+                </a>
+
+                <a href="{{ route('b2c.mis-envios') }}" class="btn-secondary">
+                    Mis envíos
+                </a>
+            @endauth
+
+            @guest
+                <a href="{{ url('/') }}" class="btn-secondary">
+                    Volver al inicio
+                </a>
+            @endguest
+        @endif
 
     </div>
 
