@@ -107,6 +107,63 @@
         label{display:block;font-weight:800;font-size:13px;margin-bottom:5px}
         input{width:100%;height:38px;border:1px solid #cbd5e1;border-radius:9px;padding:0 11px;box-sizing:border-box;font-size:14px}
         input[readonly]{background:#f8fafc;color:#475569}
+        .insurance-box{
+            grid-column:1 / -1;
+            margin-top:6px;
+            padding:14px;
+            border:1px solid #dbeafe;
+            border-radius:14px;
+            background:#eff6ff;
+        }
+
+        .insurance-check{
+            display:flex;
+            gap:10px;
+            align-items:flex-start;
+            font-weight:900;
+            color:#111827;
+            cursor:pointer;
+        }
+
+        .insurance-check input{
+            width:auto;
+            height:auto;
+            margin-top:3px;
+        }
+
+        .insurance-help{
+            margin:8px 0 0 26px;
+            font-size:13px;
+            color:#475569;
+            line-height:1.35;
+        }
+
+        .insurance-preview{
+            margin:10px 0 0 26px;
+            display:grid;
+            gap:4px;
+            font-size:13px;
+            color:#0f172a;
+        }
+
+        .insurance-preview strong{
+            font-size:14px;
+        }
+
+        .insurance-error{
+            display:none;
+            margin:10px 0 0 26px;
+            color:#991b1b;
+            background:#fee2e2;
+            border-radius:10px;
+            padding:10px;
+            font-size:13px;
+            font-weight:800;
+        }
+
+        .summary-row.insurance-summary{
+            color:#1d4ed8;
+        }
         .summary-row{display:flex;justify-content:space-between;margin-bottom:12px;font-size:15px}
         .total{border-top:1px solid #e5e7eb;padding-top:16px;font-size:24px;font-weight:900}
         .btn{width:100%;border:none;background:#f97316;color:white;padding:15px;border-radius:12px;font-weight:900;cursor:pointer;font-size:16px;margin-top:18px}
@@ -438,12 +495,50 @@
 
                             <div>
                                 <label>Valor declarado</label>
-                                <input type="number" name="valor_declarado" min="0" step="0.01" value="0">
+                                <input
+                                    type="number"
+                                    name="valor_declarado"
+                                    id="valor_declarado"
+                                    min="0"
+                                    step="0.01"
+                                    value="{{ old('valor_declarado', $cotizacion->valor_declarado ?? 0) }}"
+                                >
                             </div>
 
                             <div>
                                 <label>Referencia opcional</label>
-                                <input type="text" name="referencia">
+                                <input type="text" name="referencia" value="{{ old('referencia', $cotizacion->referencia) }}">
+                            </div>
+
+                            <div class="insurance-box">
+                                <input type="hidden" name="requiere_seguro_envio" value="0">
+
+                                <label class="insurance-check">
+                                    <input
+                                        type="checkbox"
+                                        name="requiere_seguro_envio"
+                                        id="requiere_seguro_envio"
+                                        value="1"
+                                        {{ old('requiere_seguro_envio', $cotizacion->requiere_seguro_envio ?? false) ? 'checked' : '' }}
+                                    >
+
+                                    <span>Quiero proteger mi envío</span>
+                                </label>
+
+                                <div class="insurance-help">
+                                    Agrega protección por el valor declarado. El costo es el 2% del valor declarado + IVA.
+                                </div>
+
+                                <div class="insurance-preview">
+                                    <div>Protección 2%: <strong id="seguro_base_preview">$0.00 MXN</strong></div>
+                                    <div>IVA protección: <strong id="seguro_iva_preview">$0.00 MXN</strong></div>
+                                    <div>Total protección: <strong id="seguro_monto_preview">$0.00 MXN</strong></div>
+                                    <div>Total con protección: <strong id="total_con_seguro_preview">${{ number_format($cotizacion->precio, 2) }} MXN</strong></div>
+                                </div>
+
+                                <div id="insurance_error" class="insurance-error">
+                                    Para proteger tu envío, captura un valor declarado mayor a 0.
+                                </div>
                             </div>
                         </div>
                     </section>
@@ -458,9 +553,30 @@
                     <div class="summary-row"><span>Peso</span><strong>{{ $cotizacion->peso }} kg</strong></div>
                     <div class="summary-row"><span>Medidas</span><strong>{{ $cotizacion->medidas ?? 'N/A' }}</strong></div>
 
+                    @php
+                        $precioBaseResumen = (float) ($cotizacion->precio_sin_seguro ?: $cotizacion->precio);
+                        $seguroMontoResumen = (float) ($cotizacion->seguro_monto ?? 0);
+                        $totalResumen = $precioBaseResumen + $seguroMontoResumen;
+                    @endphp
+
+                    <div class="summary-row">
+                        <span>Envío</span>
+                        <strong id="resumen_envio">${{ number_format($precioBaseResumen, 2) }} MXN</strong>
+                    </div>
+
+                    <div class="summary-row insurance-summary">
+                        <span>Protección 2%</span>
+                        <strong id="resumen_seguro_base">$0.00 MXN</strong>
+                    </div>
+
+                    <div class="summary-row insurance-summary">
+                        <span>IVA protección</span>
+                        <strong id="resumen_seguro_iva">$0.00 MXN</strong>
+                    </div>
+
                     <div class="summary-row total">
                         <span>Total</span>
-                        <span>${{ number_format($cotizacion->precio, 2) }} MXN</span>
+                        <span id="resumen_total">${{ number_format($totalResumen, 2) }} MXN</span>
                     </div>
 
                     <p class="muted">
@@ -516,5 +632,69 @@
     @csrf
 </form>
 @endif
+
+<script>
+    const precioBaseEnvio = {{ (float) ($cotizacion->precio_sin_seguro ?: $cotizacion->precio) }};
+    const seguroPorcentaje = 2;
+    const seguroIvaPorcentaje = 16;
+
+    const valorDeclaradoInput = document.getElementById('valor_declarado');
+    const requiereSeguroInput = document.getElementById('requiere_seguro_envio');
+    const seguroPreview = document.getElementById('seguro_monto_preview');
+    const totalPreview = document.getElementById('total_con_seguro_preview');
+    const resumenSeguro = document.getElementById('resumen_seguro');
+    const resumenTotal = document.getElementById('resumen_total');
+    const insuranceError = document.getElementById('insurance_error');
+
+    const seguroBasePreview = document.getElementById('seguro_base_preview');
+    const seguroIvaPreview = document.getElementById('seguro_iva_preview');
+    const resumenSeguroBase = document.getElementById('resumen_seguro_base');
+    const resumenSeguroIva = document.getElementById('resumen_seguro_iva');
+
+    function money(value) {
+        return '$' + Number(value || 0).toFixed(2) + ' MXN';
+    }
+
+    function calcularSeguroVisual() {
+        const valorDeclarado = parseFloat(valorDeclaradoInput?.value || 0) || 0;
+        const requiereSeguro = requiereSeguroInput?.checked || false;
+
+        let seguroBase = 0;
+        let seguroIva = 0;
+        let seguroMonto = 0;
+
+        if (requiereSeguro && valorDeclarado > 0) {
+            seguroBase = valorDeclarado * (seguroPorcentaje / 100);
+            seguroIva = seguroBase * (seguroIvaPorcentaje / 100);
+            seguroMonto = seguroBase + seguroIva;
+        }
+
+        const total = precioBaseEnvio + seguroMonto;
+
+        if (seguroPreview) seguroPreview.textContent = money(seguroMonto);
+        if (seguroBasePreview) seguroBasePreview.textContent = money(seguroBase);
+        if (seguroIvaPreview) seguroIvaPreview.textContent = money(seguroIva);
+        if (resumenSeguroBase) resumenSeguroBase.textContent = money(seguroBase);
+        if (resumenSeguroIva) resumenSeguroIva.textContent = money(seguroIva);
+        if (totalPreview) totalPreview.textContent = money(total);
+        if (resumenSeguro) resumenSeguro.textContent = money(seguroMonto);
+        if (resumenTotal) resumenTotal.textContent = money(total);
+
+        if (insuranceError) {
+            insuranceError.style.display = requiereSeguro && valorDeclarado <= 0 ? 'block' : 'none';
+        }
+    }
+
+    if (valorDeclaradoInput) {
+        valorDeclaradoInput.addEventListener('input', calcularSeguroVisual);
+        valorDeclaradoInput.addEventListener('change', calcularSeguroVisual);
+    }
+
+    if (requiereSeguroInput) {
+        requiereSeguroInput.addEventListener('change', calcularSeguroVisual);
+    }
+
+    calcularSeguroVisual();
+</script>
 </body>
 </html>

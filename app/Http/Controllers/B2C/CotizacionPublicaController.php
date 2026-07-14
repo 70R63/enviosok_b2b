@@ -260,6 +260,7 @@ public function procesarCheckout(Request $request, B2cCotizacion $cotizacion)
 
         'contenido' => ['required', 'string', 'max:255'],
         'valor_declarado' => ['nullable', 'numeric', 'min:0'],
+        'requiere_seguro_envio' => ['nullable', 'boolean'],
         'referencia' => ['nullable', 'string', 'max:255'],
     ]);
 
@@ -291,9 +292,37 @@ public function procesarCheckout(Request $request, B2cCotizacion $cotizacion)
             ->with('error', 'No fue posible completar ciudad/estado con el código postal seleccionado. Captura los datos manualmente.');
     }
 
+    $requiereSeguro = (bool) ($data['requiere_seguro_envio'] ?? false);
+    $valorDeclarado = (float) ($data['valor_declarado'] ?? 0);
+
+    if ($requiereSeguro && $valorDeclarado <= 0) {
+        return back()
+            ->withInput()
+            ->with('error', 'Para proteger tu envío, captura un valor declarado mayor a 0.');
+    }
+
+    $precioSinSeguro = (float) ($cotizacion->precio_sin_seguro ?: $cotizacion->precio);
+    $seguroPorcentaje = 2.00;
+    $seguroIvaPorcentaje = 16.00;
+    $seguroMonto = 0.00;
+
+    if ($requiereSeguro) {
+        $seguroBase = $valorDeclarado * ($seguroPorcentaje / 100);
+        $seguroIva = $seguroBase * ($seguroIvaPorcentaje / 100);
+        $seguroMonto = round($seguroBase + $seguroIva, 2);
+    }
+
+    $precioFinal = round($precioSinSeguro + $seguroMonto, 2);
+
     $cotizacion->update([
         ...$data,
-        'valor_declarado' => $data['valor_declarado'] ?? 0,
+        'valor_declarado' => $valorDeclarado,
+        'requiere_seguro_envio' => $requiereSeguro,
+        'seguro_porcentaje' => $seguroPorcentaje,
+        'seguro_iva_porcentaje' => $seguroIvaPorcentaje,
+        'seguro_monto' => $seguroMonto,
+        'precio_sin_seguro' => $precioSinSeguro,
+        'precio' => $precioFinal,
         'estatus' => 'CHECKOUT_COMPLETO',
     ]);
 
@@ -476,6 +505,9 @@ private function buildEstafetaPayload(B2cCotizacion $cotizacion): array
         20
     );
 
+    $requiereSeguro = (bool) $cotizacion->requiere_seguro_envio;
+    $valorDeclarado = $requiereSeguro ? (float) $cotizacion->valor_declarado : 0.00;
+
     return [
         'user_id' => (int) env('B2C_USER_ID', 9),
         'empresa_id' => (int) env('B2C_EMPRESA_ID', 1),
@@ -483,6 +515,10 @@ private function buildEstafetaPayload(B2cCotizacion $cotizacion): array
         'servicio_id' => (int) env('B2C_ESTAFETA_SERVICIO_ID', 1),
         'esManual' => 'API',
         'canal' => 'API',
+        'valor_declarado' => $valorDeclarado,
+        'valor_envio' => $valorDeclarado,
+        'seguro' => $requiereSeguro ? 1 : 0,
+        'bSeguro' => $requiereSeguro ? 'true' : 'false',
         'formatoImpresion' => 'FILE_PDF',
 
         'labelDefinition' => [
