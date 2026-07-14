@@ -531,33 +531,27 @@
         .peso-volumetrico-box div { background:rgba(255,255,255,.10); border-radius:12px; padding:10px 12px; }
 
         .landing-alert {
-            max-width: 980px;
-            margin: 0 auto 24px auto;
+            max-width: 780px;
+            margin: 0 auto 18px auto;
             background: #fff7ed;
             border: 1px solid #fdba74;
             color: #9a3412;
-            padding: 18px 22px;
-            border-radius: 16px;
+            padding: 16px 20px;
+            border-radius: 14px;
             font-weight: 900;
             text-align: center;
+            line-height: 1.45;
         }
 
-        .landing-alert-actions {
-            margin-top: 14px;
-            display: flex;
-            justify-content: center;
-            gap: 12px;
-            flex-wrap: wrap;
-        }
-
-        .landing-alert-actions a {
-            display: inline-block;
-            padding: 11px 20px;
-            border-radius: 12px;
-            background: #f97316;
-            color: #ffffff;
-            text-decoration: none;
+        .landing-alert a {
+            color: #ea580c;
+            text-decoration: underline;
+            text-underline-offset: 3px;
             font-weight: 900;
+        }
+
+        .landing-alert a:hover {
+            color: #c2410c;
         }
 
         .landing-alert-actions a:last-child {
@@ -737,6 +731,121 @@
             }
         }
 
+        .business-types {
+    max-width: 1120px;
+    margin: 88px auto 72px;
+    padding: 0 24px;
+}
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .section-title span {
+            color: #4361ee;
+            font-weight: 900;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            font-size: 13px;
+        }
+
+        .section-title h2 {
+            font-size: 38px;
+            margin: 10px 0;
+            color: #111827;
+            font-weight: 900;
+        }
+
+        .section-title p {
+            max-width: 760px;
+            margin: 0 auto;
+            color: #64748b;
+            font-size: 17px;
+            line-height: 1.5;
+        }
+
+        .business-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 22px;
+        }
+
+        .business-card {
+            background: #ffffff;
+            border-radius: 22px;
+            padding: 28px;
+            box-shadow: 0 14px 34px rgba(15, 23, 42, .08);
+            border: 1px solid #e5e7eb;
+        }
+
+        .business-icon {
+            font-size: 34px;
+            margin-bottom: 16px;
+        }
+
+        .business-card h3 {
+            font-size: 22px;
+            color: #111827;
+            margin: 0 0 10px;
+            font-weight: 900;
+        }
+
+        .business-card p {
+            color: #64748b;
+            line-height: 1.45;
+            margin: 0;
+        }
+
+        @media(max-width: 900px) {
+            .business-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .section-title h2 {
+                font-size: 30px;
+            }
+        }
+
+        .business-types .section-title .business-main-title {
+            color: #4361ee !important;
+            font-size: 40px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin: 0 0 14px;
+        }
+
+        .business-types .section-title .business-subtitle {
+            color: #111827;
+            font-size: 38px;
+            font-weight: 900;
+            margin: 0 0 14px;
+        }
+
+        @media(max-width: 900px) {
+            .business-types .section-title .business-main-title {
+                font-size: 30px;
+                letter-spacing: 2px;
+            }
+
+            .business-types .section-title .business-subtitle {
+                font-size: 28px;
+            }
+        }
+
+        .business-link {
+            display: inline-block;
+            margin-top: 16px;
+            color: #4361ee;
+            font-weight: 900;
+            text-decoration: none;
+        }
+
+        .business-link:hover {
+            text-decoration: underline;
+        }
+
     </style>
 </head>
 <body>
@@ -761,7 +870,10 @@
 
             @if(session('login_required'))
                 <div class="landing-alert">
-                    {{ session('login_required') }}
+                    Para continuar con envíos tipo caja necesitas
+                    <a href="{{ url('/login') }}">iniciar sesión</a>
+                    o
+                    <a href="{{ route('b2c.register') }}">crear una cuenta</a>.
                 </div>
             @endif
 
@@ -910,13 +1022,64 @@
             </p>
             <div class="hero-actions">
                 <a href="#cotizar" class="hero-primary">Cotizar ahora</a>
-                <a href="{{ route('landing.empresas') }}" class="hero-secondary">Soluciones B2B</a>
+                <a href="{{ route('landing.empresas') }}" class="hero-secondary">Soluciones Empresas</a>
             </div>
         </div>
 
         <div class="hero-visual">
             <div class="hero-card">
                 <img src="{{ asset('img/zigo-logo.png') }}" alt="ZIGO" class="hero-logo">
+            </div>
+        </div>
+    </section>
+
+    <section class="business-types">
+        <div class="section-title">
+            <h2 class="business-main-title">Soluciones Empresas</h2>
+
+            <h3 class="business-subtitle">¿Qué tipo de negocio eres?</h3>
+
+            <p>
+                Soluciones logísticas para empresas y emprendedores que necesitan control,
+                automatización y crecimiento.
+            </p>
+        </div>
+
+        <div class="business-grid">
+            <div class="business-card">
+                <div class="business-icon">🚀</div>
+                <h3>Ecommerce</h3>
+                <p>
+                    Vende en tu tienda online y entrega a toda la república.
+                </p>
+
+                <a href="{{ route('landing.empresas') }}" class="business-link">
+                    Conocer solución →
+                </a>
+            </div>
+
+            <div class="business-card">
+                <div class="business-icon">🏬</div>
+                <h3>Retail</h3>
+                <p>
+                    Distribuye a sucursales, tiendas y clientes finales.
+                </p>
+
+                <a href="{{ route('landing.empresas') }}" class="business-link">
+                    Conocer solución →
+                </a>
+            </div>
+
+            <div class="business-card">
+                <div class="business-icon">📦</div>
+                <h3>Fulfillment</h3>
+                <p>
+                    Nosotros almacenamos, preparamos y enviamos tus pedidos.
+                </p>
+
+                <a href="{{ route('landing.empresas') }}" class="business-link">
+                    Conocer solución →
+                </a>
             </div>
         </div>
     </section>
@@ -928,7 +1091,7 @@
         <div class="solutions-grid">
             <div class="solution-card">
                 <div class="solution-icon">📦</div>
-                <h3>B2C sin registro</h3>
+                <h3>Portal de envios</h3>
                 <p>Cotiza, paga en línea y genera guías para envíos sencillos sin crear una cuenta.</p>
                 <span>Ideal para envíos ocasionales</span>
             </div>
@@ -942,7 +1105,7 @@
 
             <div class="solution-card">
                 <div class="solution-icon">🏢</div>
-                <h3>Empresas B2B</h3>
+                <h3>Empresas </h3>
                 <p>Centraliza usuarios, saldos, direcciones, reportes, tarifas preferenciales y guías para tu operación.</p>
                 <a href="{{ route('landing.empresas') }}">Conocer solución empresarial →</a>
             </div>
@@ -950,7 +1113,7 @@
             <div class="solution-card">
                 <div class="solution-icon">🔌</div>
                 <h3>API Hub</h3>
-                <p>Integra servicios logísticos como consulta de códigos postales, cobertura y futuras cotizaciones mediante API.</p>
+                <p>Integra servicios como códigos postales, colonias, cotización, rastreo y generación de guías desde tu tienda en línea.</p>
                 <a href="{{ route('public.api-hub') }}">Ver API Hub →</a>
             </div>
 
@@ -1261,7 +1424,7 @@
             }
 
             const pesoVolumetrico = (largo * alto * ancho) / 5000;
-            const pesoCotizar = Math.max(pesoReal, pesoVolumetrico);
+            const pesoCotizar = Math.ceil(Math.max(pesoReal, pesoVolumetrico));
 
             if (pesoRealText) pesoRealText.textContent = pesoReal.toFixed(2);
             if (pesoVolText) pesoVolText.textContent = pesoVolumetrico.toFixed(2);

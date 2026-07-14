@@ -85,7 +85,7 @@ class CotizacionPublicaController extends Controller
             $ancho = max((float) $partes[2], 1);
 
             $pesoVolumetrico = round(($largo * $alto * $ancho) / 5000, 2);
-            $pesoFinal = max($pesoReal, $pesoVolumetrico);
+            $pesoFinal = ceil(max($pesoReal, $pesoVolumetrico));
         }
 
         $cpOrigen = substr($data['cp_origen'], 0, 5);

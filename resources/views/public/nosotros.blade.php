@@ -16,17 +16,18 @@
         .page-header {
             background: linear-gradient(135deg, #2563eb, #4f46e5);
             color: white;
-            padding: 50px 24px;
+            padding: 54px 24px;
             text-align: center;
         }
 
         .page-header h1 {
             font-size: 42px;
             margin: 0 0 12px;
+            font-weight: 900;
         }
 
         .page-header p {
-            max-width: 820px;
+            max-width: 860px;
             margin: auto;
             font-size: 18px;
             line-height: 1.6;
@@ -49,6 +50,14 @@
         .section h2 {
             color: #1d4ed8;
             margin-top: 0;
+            font-size: 28px;
+            font-weight: 900;
+        }
+
+        .section p {
+            color: #475569;
+            line-height: 1.65;
+            font-size: 16px;
         }
 
         .grid {
@@ -64,12 +73,23 @@
             padding: 20px;
         }
 
+        .card h3 {
+            margin-top: 0;
+            color: #111827;
+            font-size: 19px;
+            font-weight: 900;
+        }
+
         .back {
             display: inline-block;
             margin-top: 15px;
             color: #2563eb;
             font-weight: 900;
             text-decoration: none;
+        }
+
+        .back:hover {
+            text-decoration: underline;
         }
 
         @media(max-width: 800px) {
@@ -80,6 +100,14 @@
             .page-header h1 {
                 font-size: 32px;
             }
+
+            .container {
+                padding: 32px 16px;
+            }
+
+            .section {
+                padding: 22px;
+            }
         }
     </style>
 </head>
@@ -88,50 +116,136 @@
 <header class="page-header">
     <h1>Nosotros</h1>
     <p>
-        En ZIGO conectamos tecnología, logística y operación para facilitar la forma en que personas,
-        emprendedores y empresas gestionan sus envíos.
+        Tecnología, logística y conexión para que enviar sea más simple, claro y accesible.
     </p>
 </header>
 
 <main class="container">
+
     <section class="section">
         <h2>¿Quiénes somos?</h2>
+
         <p>
-            ZIGO es una plataforma digital enfocada en simplificar la cotización, pago, generación de guías
-            y seguimiento de envíos. Nuestro objetivo es ofrecer una experiencia clara, práctica y accesible
-            para usuarios finales y negocios que necesitan operar sus envíos de forma más eficiente.
+            En ZIGO creemos que enviar no debería ser complicado.
+        </p>
+
+        <p>
+            Somos una plataforma digital que te ayuda a cotizar, pagar, generar guías y dar seguimiento a tus envíos de forma rápida y sencilla, todo desde un solo lugar.
+        </p>
+
+        <p>
+            Nuestro objetivo es que personas, emprendedores y empresas tengan una manera más fácil de gestionar sus envíos, con herramientas claras, tecnología accesible y una experiencia pensada para ahorrar tiempo y evitar complicaciones.
+        </p>
+
+        <p>
+            Porque la logística no tiene que ser difícil. Con ZIGO, enviar es más simple.
+        </p>
+    </section>
+
+    <section class="section">
+        <h2>Nuestra visión</h2>
+
+        <p>
+            Queremos hacer que la logística sea más simple, accesible y eficiente para todos.
+        </p>
+
+        <p>
+            Trabajamos para convertirnos en la plataforma que acompaña el crecimiento de nuestros clientes, desde un envío ocasional hasta una operación con cientos de entregas al día.
+        </p>
+
+        <p>
+            A través de la tecnología, la innovación y un servicio cercano, buscamos ayudar a personas y empresas a mover sus productos con confianza, rapidez y tranquilidad, sin importar el tamaño de su negocio.
         </p>
     </section>
 
     <section class="section">
         <h2>¿Qué hacemos?</h2>
+
         <div class="grid">
             <div class="card">
-                <h3>Cotización digital</h3>
-                <p>Permitimos consultar opciones de envío con base en origen, destino, peso y dimensiones.</p>
+                <h3>Cotizar es así de fácil</h3>
+                <p>
+                    Ingresa los datos de tu envío y descubre en segundos las opciones disponibles para hacerlo llegar a su destino.
+                </p>
             </div>
 
             <div class="card">
                 <h3>Guías de envío</h3>
-                <p>Facilitamos el proceso para pagar y generar guías de envío desde una plataforma centralizada.</p>
+                <p>
+                    Genera y paga tus guías de envío en minutos, desde un solo lugar y sin complicaciones.
+                </p>
             </div>
 
             <div class="card">
                 <h3>Soluciones empresariales</h3>
-                <p>Diseñamos una base operativa para clientes con mayor volumen, control y necesidades de integración.</p>
+                <p>
+                    Acompañamos a empresas que necesitan gestionar más envíos, automatizar procesos y tener mayor control de su operación logística.
+                </p>
             </div>
         </div>
     </section>
 
     <section class="section">
-        <h2>Nuestra visión</h2>
+        <h2>¿Qué ofrecemos?</h2>
+
         <p>
-            Queremos convertirnos en una plataforma logística flexible, tecnológica y escalable, capaz de acompañar
-            desde envíos ocasionales hasta operaciones empresariales con mayor demanda.
+            En ZIGO simplificamos la forma de enviar.
+        </p>
+
+        <p>
+            Desde una sola plataforma puedes cotizar, generar guías y dar seguimiento a tus envíos de manera rápida, clara y sin complicaciones.
+        </p>
+
+        <p>
+            Creamos herramientas que te ayudan a tener el control de tus envíos sin agregar más trabajo a tu día.
+        </p>
+    </section>
+
+    <section class="section">
+        <h2>¿Cómo funciona?</h2>
+
+        <div class="grid">
+            <div class="card">
+                <h3>1. Ingresa los datos de tu envío</h3>
+                <p>
+                    Solo necesitamos algunos detalles de tu paquete para encontrar las mejores opciones disponibles.
+                </p>
+            </div>
+
+            <div class="card">
+                <h3>2. Compara y elige</h3>
+                <p>
+                    Revisa las alternativas disponibles y selecciona la que mejor se adapte a tu tiempo y presupuesto.
+                </p>
+            </div>
+
+            <div class="card">
+                <h3>3. Envía con confianza</h3>
+                <p>
+                    Genera tu guía en minutos y mantente al tanto de tu envío en cada etapa del recorrido.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <section class="section">
+        <h2>Soluciones para diferentes necesidades</h2>
+
+        <p>
+            No importa si haces un envío al mes o cientos al día.
+        </p>
+
+        <p>
+            ZIGO te ayuda a gestionar tus envíos de forma simple, desde las necesidades de una persona o emprendedor hasta las operaciones de empresas que buscan mayor control, automatización y eficiencia.
+        </p>
+
+        <p>
+            Una sola plataforma para acompañarte en cada etapa de tu crecimiento.
         </p>
 
         <a class="back" href="{{ url('/') }}">← Volver al inicio</a>
     </section>
+
 </main>
 
 </body>
