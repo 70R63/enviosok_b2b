@@ -195,19 +195,37 @@ class CotizacionPublicaController extends Controller
 
 public function checkout(B2cCotizacion $cotizacion)
 {
-    if (
-        $cotizacion->user_id !== null
-        && auth()->check()
-        && $cotizacion->user_id !== auth()->id()
-    ) {
-        abort(403);
+    $ubicacionOrigen = $this->resolverUbicacionPostal(
+        $cotizacion->cp_origen,
+        $cotizacion->colonia_origen
+    );
+
+    $ubicacionDestino = $this->resolverUbicacionPostal(
+        $cotizacion->cp_destino,
+        $cotizacion->colonia_destino
+    );
+
+    $updates = [];
+
+    if (empty($cotizacion->ciudad_origen) && !empty($ubicacionOrigen['ciudad'])) {
+        $updates['ciudad_origen'] = $ubicacionOrigen['ciudad'];
     }
 
-    if (
-        $cotizacion->user_id !== null
-        && !auth()->check()
-    ) {
-        return redirect()->route('login');
+    if (empty($cotizacion->estado_origen) && !empty($ubicacionOrigen['estado'])) {
+        $updates['estado_origen'] = $ubicacionOrigen['estado'];
+    }
+
+    if (empty($cotizacion->ciudad_destino) && !empty($ubicacionDestino['ciudad'])) {
+        $updates['ciudad_destino'] = $ubicacionDestino['ciudad'];
+    }
+
+    if (empty($cotizacion->estado_destino) && !empty($ubicacionDestino['estado'])) {
+        $updates['estado_destino'] = $ubicacionDestino['estado'];
+    }
+
+    if (!empty($updates)) {
+        $cotizacion->update($updates);
+        $cotizacion->refresh();
     }
 
     return view('b2c.checkout', compact('cotizacion'));
@@ -221,15 +239,19 @@ public function procesarCheckout(Request $request, B2cCotizacion $cotizacion)
         'remitente_email' => ['required', 'email', 'max:255'],
         'remitente_direccion' => ['required', 'string', 'max:255'],
 
-        'remitente_num_ext' => 'required|string|max:50',
-        'remitente_num_int' => 'nullable|string|max:50',
-        'ciudad_origen' => 'required|string|max:100',
-        'estado_origen' => 'required|string|max:100',
+        'remitente_num_ext' => ['required', 'string', 'max:50'],
+        'remitente_num_int' => ['nullable', 'string', 'max:50'],
 
-        'destinatario_num_ext' => 'required|string|max:50',
-        'destinatario_num_int' => 'nullable|string|max:50',
-        'ciudad_destino' => 'required|string|max:100',
-        'estado_destino' => 'required|string|max:100',
+        // Se dejan nullable porque si el frontend no los llena,
+        // se resuelven por CP/colonia antes de guardar.
+        'ciudad_origen' => ['nullable', 'string', 'max:100'],
+        'estado_origen' => ['nullable', 'string', 'max:100'],
+
+        'destinatario_num_ext' => ['required', 'string', 'max:50'],
+        'destinatario_num_int' => ['nullable', 'string', 'max:50'],
+
+        'ciudad_destino' => ['nullable', 'string', 'max:100'],
+        'estado_destino' => ['nullable', 'string', 'max:100'],
 
         'destinatario_nombre' => ['required', 'string', 'max:255'],
         'destinatario_telefono' => ['required', 'string', 'max:30'],
@@ -240,6 +262,34 @@ public function procesarCheckout(Request $request, B2cCotizacion $cotizacion)
         'valor_declarado' => ['nullable', 'numeric', 'min:0'],
         'referencia' => ['nullable', 'string', 'max:255'],
     ]);
+
+    $ubicacionOrigen = $this->resolverUbicacionPostal(
+        $cotizacion->cp_origen,
+        $cotizacion->colonia_origen
+    );
+
+    $ubicacionDestino = $this->resolverUbicacionPostal(
+        $cotizacion->cp_destino,
+        $cotizacion->colonia_destino
+    );
+
+    $data['ciudad_origen'] = $data['ciudad_origen']
+        ?: ($ubicacionOrigen['ciudad'] ?? $cotizacion->ciudad_origen);
+
+    $data['estado_origen'] = $data['estado_origen']
+        ?: ($ubicacionOrigen['estado'] ?? $cotizacion->estado_origen);
+
+    $data['ciudad_destino'] = $data['ciudad_destino']
+        ?: ($ubicacionDestino['ciudad'] ?? $cotizacion->ciudad_destino);
+
+    $data['estado_destino'] = $data['estado_destino']
+        ?: ($ubicacionDestino['estado'] ?? $cotizacion->estado_destino);
+
+    if (!$data['ciudad_origen'] || !$data['estado_origen'] || !$data['ciudad_destino'] || !$data['estado_destino']) {
+        return back()
+            ->withInput()
+            ->with('error', 'No fue posible completar ciudad/estado con el código postal seleccionado. Captura los datos manualmente.');
+    }
 
     $cotizacion->update([
         ...$data,
@@ -1193,7 +1243,7 @@ public function opcionesB2c(B2cCotizacion $cotizacion)
 
     private function resolverUbicacionPostal(?string $cp, ?string $colonia = null): array
     {
-        $cp = substr((string) $cp, 0, 5);
+        $cp = substr(preg_replace('/\D/', '', (string) $cp), 0, 5);
 
         if (!$cp) {
             return [
@@ -1221,10 +1271,28 @@ public function opcionesB2c(B2cCotizacion $cotizacion)
                 ->first();
         }
 
+        if (!$row) {
+            return [
+                'ciudad' => null,
+                'estado' => null,
+                'colonia' => $colonia,
+            ];
+        }
+
         return [
-            'ciudad' => $row->D_mnpio ?? $row->d_mnpio ?? $row->d_ciudad ?? null,
-            'estado' => $row->d_estado ?? null,
-            'colonia' => $row->d_asenta ?? $colonia,
+            'ciudad' => $row->D_mnpio
+                ?? $row->d_mnpio
+                ?? $row->d_ciudad
+                ?? $row->municipio
+                ?? null,
+
+            'estado' => $row->d_estado
+                ?? $row->estado
+                ?? null,
+
+            'colonia' => $row->d_asenta
+                ?? $row->colonia
+                ?? $colonia,
         ];
     }
 }

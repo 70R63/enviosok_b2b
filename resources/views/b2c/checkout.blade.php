@@ -360,12 +360,12 @@
 
                                 <div>
                                     <label>Ciudad origen</label>
-                                    <input type="text" name="ciudad_origen" required>
+                                    <input type="text" name="ciudad_origen" value="{{ old('ciudad_origen', $cotizacion->ciudad_origen) }}" required>
                                 </div>
 
                                 <div>
                                     <label>Estado origen</label>
-                                    <input type="text" name="estado_origen" value="MEX" required>
+                                    <input type="text" name="estado_origen" value="{{ old('estado_origen', $cotizacion->estado_origen ?: 'MEX') }}" required>
                                 </div>
                             </div>
 
@@ -411,12 +411,12 @@
 
                                 <div>
                                     <label>Ciudad destino</label>
-                                    <input type="text" name="ciudad_destino" required>
+                                    <input type="text" name="ciudad_destino" value="{{ old('ciudad_destino', $cotizacion->ciudad_destino) }}" required>
                                 </div>
 
                                 <div>
                                     <label>Estado destino</label>
-                                    <input type="text" name="estado_destino" value="MEX" required>
+                                    <input type="text" name="estado_destino" value="{{ old('estado_destino', $cotizacion->estado_destino ?: 'MEX') }}" required>
                                 </div>
                             </div>
 
@@ -511,10 +511,10 @@
         </form>
     </main>
 </div>
-@auth
+@if(auth()->check() && !$isPublicCheckout)
 <form id="pagar-saldo-form" method="POST" action="{{ route('b2c.pago.saldo', $cotizacion->id) }}">
     @csrf
 </form>
-@endauth
+@endif
 </body>
 </html>
