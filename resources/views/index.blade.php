@@ -846,6 +846,30 @@
             text-decoration: underline;
         }
 
+        .hero-image-card {
+            padding: 0;
+            overflow: hidden;
+            position: relative;
+            min-height: 340px;
+        }
+
+        .hero-image {
+            width: 100%;
+            height: 100%;
+            min-height: 340px;
+            object-fit: cover;
+            display: block;
+            border-radius: 28px;
+        }
+
+        .hero-image-card::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(67, 97, 238, .20), rgba(255, 255, 255, .08));
+            pointer-events: none;
+        }
+
     </style>
 </head>
 <body>
@@ -871,7 +895,7 @@
             @if(session('login_required'))
                 <div class="landing-alert">
                     Para continuar con envíos tipo caja necesitas
-                    <a href="{{ url('/login') }}">iniciar sesión</a>
+                    <a href="{{ route('login') }}">iniciar sesión</a>
                     o
                     <a href="{{ route('b2c.register') }}">crear una cuenta</a>.
                 </div>
@@ -1027,8 +1051,8 @@
         </div>
 
         <div class="hero-visual">
-            <div class="hero-card">
-                <img src="{{ asset('img/zigo-logo.png') }}" alt="ZIGO" class="hero-logo">
+            <div class="hero-card hero-image-card">
+                <img src="{{ asset('img/hero-logistica.jpg') }}" alt="Soluciones logísticas ZIGO" class="hero-image">
             </div>
         </div>
     </section>

@@ -33,7 +33,7 @@ Route::get('/limpiar-cotizacion', [CotizacionPublicaController::class, 'limpiarC
 Route::resource('profile','userProfileController');
 
 Route::get('/dashboard', function () {
-    return view('dashboard');
+    return redirect()->route('b2c.dashboard');
 })->middleware(['auth'])->name('dashboard');
 
 Route::post('/b2c/cotizacion/{cotizacion}/seleccionar', [CotizacionPublicaController::class, 'seleccionar'])
