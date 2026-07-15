@@ -118,6 +118,158 @@ class CotizacionPublicaController extends Controller
         return redirect()->to(url('/') . '#cotizar');
     }
 
+    public function cotizadorRapidoB2c(Request $request)
+    {
+        $data = $request->validate([
+            'cp_origen' => ['required', 'string', 'max:120'],
+            'colonia_origen' => ['nullable', 'string', 'max:255'],
+            'ciudad_origen' => ['nullable', 'string', 'max:100'],
+            'estado_origen' => ['nullable', 'string', 'max:100'],
+
+            'cp_destino' => ['required', 'string', 'max:120'],
+            'colonia_destino' => ['nullable', 'string', 'max:255'],
+            'ciudad_destino' => ['nullable', 'string', 'max:100'],
+            'estado_destino' => ['nullable', 'string', 'max:100'],
+
+            'tipo_envio' => ['required', 'in:caja,sobre'],
+            'peso' => ['nullable', 'numeric', 'min:0.1'],
+            'medidas' => ['nullable', 'string', 'max:50'],
+        ]);
+
+        $tipoEnvio = strtolower($data['tipo_envio']);
+
+        $cpOrigen = substr(
+            preg_replace('/\D/', '', $data['cp_origen']),
+            0,
+            5
+        );
+
+        $cpDestino = substr(
+            preg_replace('/\D/', '', $data['cp_destino']),
+            0,
+            5
+        );
+
+        if (strlen($cpOrigen) !== 5) {
+            return back()
+                ->withErrors([
+                    'cp_origen' => 'Selecciona un código postal de origen válido.',
+                ])
+                ->withInput();
+        }
+
+        if (strlen($cpDestino) !== 5) {
+            return back()
+                ->withErrors([
+                    'cp_destino' => 'Selecciona un código postal de destino válido.',
+                ])
+                ->withInput();
+        }
+
+        if ($tipoEnvio === 'sobre') {
+            $pesoFinal = 1;
+            $medidasFinal = null;
+        } else {
+            if (empty($data['peso'])) {
+                return back()
+                    ->withErrors([
+                        'peso' => 'El peso es obligatorio para envíos en caja.',
+                    ])
+                    ->withInput();
+            }
+
+            if (empty($data['medidas'])) {
+                return back()
+                    ->withErrors([
+                        'medidas' => 'Las medidas son obligatorias para envíos en caja.',
+                    ])
+                    ->withInput();
+            }
+
+            $medidasCapturadas = strtolower(
+                preg_replace('/\s+/', '', $data['medidas'])
+            );
+
+            $patronMedidas = '/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/';
+
+            if (!preg_match($patronMedidas, $medidasCapturadas, $coincidencias)) {
+                return back()
+                    ->withErrors([
+                        'medidas' => 'Captura las medidas con el formato largo x ancho x alto. Ejemplo: 20x20x20.',
+                    ])
+                    ->withInput();
+            }
+
+            $largo = (float) $coincidencias[1];
+            $ancho = (float) $coincidencias[2];
+            $alto = (float) $coincidencias[3];
+
+            if ($largo <= 0 || $ancho <= 0 || $alto <= 0) {
+                return back()
+                    ->withErrors([
+                        'medidas' => 'Las dimensiones deben ser mayores a cero.',
+                    ])
+                    ->withInput();
+            }
+
+            $pesoReal = (float) $data['peso'];
+
+            $pesoVolumetrico = ($largo * $ancho * $alto) / 5000;
+
+            $pesoFinal = (int) ceil(
+                max($pesoReal, $pesoVolumetrico)
+            );
+
+            $medidasFinal = $medidasCapturadas;
+        }
+
+        $ubicacionOrigen = $this->resolverUbicacionPostal(
+            $cpOrigen,
+            $data['colonia_origen'] ?? null
+        );
+
+        $ubicacionDestino = $this->resolverUbicacionPostal(
+            $cpDestino,
+            $data['colonia_destino'] ?? null
+        );
+
+        $cotizacion = B2cCotizacion::create([
+            'user_id' => auth()->id(),
+
+            'cp_origen' => $cpOrigen,
+            'colonia_origen' => $data['colonia_origen']
+                ?? $ubicacionOrigen['colonia'],
+            'ciudad_origen' => $data['ciudad_origen']
+                ?? $ubicacionOrigen['ciudad'],
+            'estado_origen' => $data['estado_origen']
+                ?? $ubicacionOrigen['estado'],
+
+            'cp_destino' => $cpDestino,
+            'colonia_destino' => $data['colonia_destino']
+                ?? $ubicacionDestino['colonia'],
+            'ciudad_destino' => $data['ciudad_destino']
+                ?? $ubicacionDestino['ciudad'],
+            'estado_destino' => $data['estado_destino']
+                ?? $ubicacionDestino['estado'],
+
+            'tipo_envio' => $tipoEnvio,
+            'peso' => $pesoFinal,
+            'medidas' => $medidasFinal,
+
+            'estatus' => 'COTIZADA',
+            'referencia' => 'B2C_LOGUEADO',
+        ]);
+
+        session([
+            'b2c_cotizacion_actual_id' => $cotizacion->id,
+        ]);
+
+        return redirect()->route(
+            'b2c.opciones',
+            $cotizacion->id
+        );
+    }
+
     public function seleccionar(Request $request, B2cCotizacion $cotizacion)
     {
         $data = $request->validate([
@@ -164,33 +316,51 @@ class CotizacionPublicaController extends Controller
         return redirect()->route('b2c.checkout', $cotizacion->id);
     }
 
-    public function seleccionarNuevoEnvio(Request $request, B2cCotizacion $cotizacion)
-    {
+    public function seleccionarNuevoEnvio(
+        Request $request,
+        B2cCotizacion $cotizacion
+    ) {
         $data = $request->validate([
-            'logistico' => ['required', 'string', 'max:100'],
-            'servicio' => ['required', 'string', 'max:100'],
-            'metodo_pago' => ['nullable', 'string'],
+            'logistico' => [
+                'required',
+                'string',
+                'max:100',
+            ],
+            'servicio' => [
+                'required',
+                'string',
+                'max:100',
+            ],
         ]);
 
         if ($cotizacion->user_id !== auth()->id()) {
             abort(403);
         }
 
-        $option = $this->findSelectedOption($cotizacion, $data['logistico'], $data['servicio']);
+        $option = $this->findSelectedOption(
+            $cotizacion,
+            $data['logistico'],
+            $data['servicio']
+        );
 
         if (!$option) {
-            return back()->with('error', 'La opción seleccionada no es válida.');
+            return back()->with(
+                'error',
+                'La opción seleccionada no es válida.'
+            );
         }
 
-        $this->applyPricingToCotizacion($cotizacion, $option);
+        $this->applyPricingToCotizacion(
+            $cotizacion,
+            $option
+        );
 
         $cotizacion->refresh();
 
-        if (($data['metodo_pago'] ?? null) === 'saldo') {
-            return $this->pagarConSaldo($cotizacion);
-        }
-
-        return redirect()->route('b2c.pago', $cotizacion->id);
+        return redirect()->route(
+            'b2c.checkout',
+            $cotizacion->id
+        );
     }
 
 public function checkout(B2cCotizacion $cotizacion)
@@ -262,7 +432,17 @@ public function procesarCheckout(Request $request, B2cCotizacion $cotizacion)
         'valor_declarado' => ['nullable', 'numeric', 'min:0'],
         'requiere_seguro_envio' => ['nullable', 'boolean'],
         'referencia' => ['nullable', 'string', 'max:255'],
+
+        'metodo_pago' => [
+            'nullable',
+            'in:mercado_pago,saldo',
+        ],
     ]);
+
+        $metodoPago = $data['metodo_pago']
+        ?? 'mercado_pago';
+
+    unset($data['metodo_pago']);
 
     $ubicacionOrigen = $this->resolverUbicacionPostal(
         $cotizacion->cp_origen,
@@ -326,9 +506,17 @@ public function procesarCheckout(Request $request, B2cCotizacion $cotizacion)
         'estatus' => 'CHECKOUT_COMPLETO',
     ]);
 
-    return redirect()
-        ->route('b2c.pago', $cotizacion->id);
-}
+    if ($metodoPago === 'saldo') {
+        return $this->pagarConSaldo(
+            $cotizacion->fresh()
+        );
+    }
+
+    return redirect()->route(
+        'b2c.pago',
+        $cotizacion->id
+    );
+    }
 
 public function pago(B2cCotizacion $cotizacion)
 {
@@ -665,6 +853,27 @@ public function dashboardB2c()
 {
     $userId = auth()->id();
 
+    $cotizacionActual = null;
+
+    $cotizacionActualId = session(
+        'b2c_cotizacion_actual_id'
+    );
+
+    if ($cotizacionActualId) {
+        $cotizacionActual = B2cCotizacion::where(
+            'id',
+            $cotizacionActualId
+        )
+            ->where('user_id', $userId)
+            ->first();
+
+        if (!$cotizacionActual) {
+            session()->forget(
+                'b2c_cotizacion_actual_id'
+            );
+        }
+    }
+
     $totalCotizaciones = B2cCotizacion::where('user_id', $userId)->count();
 
     $totalPagadas = B2cCotizacion::where('user_id', $userId)
@@ -689,7 +898,8 @@ public function dashboardB2c()
         'totalPagadas',
         'totalGuias',
         'totalErrores',
-        'ultimosEnvios'
+        'ultimosEnvios',
+        'cotizacionActual'
     ));
 }
 
@@ -929,6 +1139,21 @@ public function pagarConSaldo(B2cCotizacion $cotizacion)
         abort(403);
     }
 
+    if (
+        $cotizacion->estatus !==
+        'CHECKOUT_COMPLETO'
+    ) {
+        return redirect()
+            ->route(
+                'b2c.checkout',
+                $cotizacion->id
+            )
+            ->with(
+                'error',
+                'Completa los datos del envío antes de pagar con saldo.'
+            );
+    }
+
     $total = (float) $cotizacion->precio;
 
     $saldo = B2cSaldo::firstOrCreate(
@@ -964,6 +1189,10 @@ public function pagarConSaldo(B2cCotizacion $cotizacion)
             'payment_external_reference' => 'SALDO-' . $cotizacion->id,
         ]);
     });
+
+    session()->forget(
+        'b2c_metodo_pago_' . $cotizacion->id
+    );
 
     return redirect()
         ->route('b2c.pago.success', $cotizacion->id)
@@ -1330,5 +1559,16 @@ public function opcionesB2c(B2cCotizacion $cotizacion)
                 ?? $row->colonia
                 ?? $colonia,
         ];
+    }
+
+    public function limpiarCotizadorRapidoB2c()
+    {
+        session()->forget(
+            'b2c_cotizacion_actual_id'
+        );
+
+        return redirect()->to(
+            route('b2c.dashboard') . '#cotizador'
+        );
     }
 }

@@ -335,6 +335,93 @@
             }
         }
 
+        .modal-pago{
+            display:none;
+            position:fixed;
+            inset:0;
+            background:rgba(15,23,42,.62);
+            z-index:9999;
+            align-items:center;
+            justify-content:center;
+            padding:20px;
+        }
+
+        .modal-card{
+            width:min(420px, 100%);
+            background:#ffffff;
+            border-radius:18px;
+            padding:28px;
+            box-shadow:0 24px 60px rgba(0,0,0,.28);
+        }
+
+        .modal-card h2{
+            margin:0 0 10px;
+        }
+
+        .modal-text{
+            color:#64748b;
+            margin:0 0 18px;
+            line-height:1.5;
+        }
+
+        .modal-total{
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            padding:14px;
+            margin-bottom:16px;
+            background:#f8fafc;
+            border-radius:12px;
+            font-weight:900;
+        }
+
+        .modal-payment-btn{
+            width:100%;
+            border:none;
+            border-radius:12px;
+            padding:14px 18px;
+            margin-top:10px;
+            color:#ffffff;
+            font-size:15px;
+            font-weight:900;
+            cursor:pointer;
+        }
+
+        .modal-payment-btn.mercado-pago{
+            background:#f97316;
+        }
+
+        .modal-payment-btn.saldo{
+            background:#16a34a;
+        }
+
+        .modal-payment-btn:disabled{
+            opacity:.45;
+            cursor:not-allowed;
+        }
+
+        .modal-saldo-info{
+            padding:10px 12px;
+            margin-top:10px;
+            border-radius:10px;
+            background:#fef2f2;
+            color:#991b1b;
+            font-weight:800;
+            font-size:13px;
+        }
+
+        .modal-cancel{
+            display:block;
+            width:100%;
+            margin-top:14px;
+            padding:10px;
+            background:transparent;
+            border:none;
+            color:#475569;
+            font-weight:800;
+            cursor:pointer;
+        }
+
     </style>
 </head>
 
@@ -378,8 +465,19 @@
         <div class="title">Completa los datos de tu guía</div>
         <div class="subtitle">Captura remitente, destinatario y contenido del paquete.</div>
 
-        <form method="POST" action="/b2c/checkout/{{ $cotizacion->id }}">
+        <form
+            id="checkout_form"
+            method="POST"
+            action="/b2c/checkout/{{ $cotizacion->id }}"
+        >
             @csrf
+
+            <input
+                type="hidden"
+                name="metodo_pago"
+                id="metodo_pago"
+                value="{{ old('metodo_pago', 'mercado_pago') }}"
+            >
 
             <div class="grid">
                     <section class="card">
@@ -583,118 +681,484 @@
                         El pago se realizará en línea. Una vez confirmado, se generará la guía correspondiente.
                     </p>
 
-                    <button class="btn" type="submit">Continuar a pago</button>
+                    @if(auth()->check() && !$isPublicCheckout)
+                        <button
+                            class="btn"
+                            type="button"
+                            id="continuar_pago_btn"
+                        >
+                            Continuar a pago
+                        </button>
+                    @else
+                        <button class="btn" type="submit">
+                            Continuar a pago
+                        </button>
+                    @endif
 
                     @if(auth()->check() && !$isPublicCheckout)
                     <div class="saldo-box">
 
                         <div class="saldo-line">
-                            <span>Saldo disponible</span>
-                            <strong>${{ number_format($saldo->saldo ?? 0, 2) }}</strong>
-                        </div>
+                                <span>Saldo disponible</span>
 
-                        <div class="saldo-line">
-                            <span>Costo guía</span>
-                            <strong>${{ number_format($cotizacion->precio ?? 0, 2) }}</strong>
-                        </div>
-
-                        @if(($saldo->saldo ?? 0) >= ($cotizacion->precio ?? 0))
-
-                            <button
-                                type="submit"
-                                form="pagar-saldo-form"
-                                class="btn saldo-btn"
-                            >
-                                Pagar con saldo prepago
-                            </button>
-
-                        @else
-
-                            <div class="saldo-error">
-                                Saldo insuficiente para pagar esta guía.
+                                <strong id="saldo_disponible_text">
+                                    ${{ number_format($saldo->saldo ?? 0, 2) }}
+                                </strong>
                             </div>
 
-                            <a href="{{ route('b2c.prepago') }}" class="saldo-recargar">
+                            <div class="saldo-line">
+                                <span>Costo de envío</span>
+
+                                <strong id="saldo_costo_envio">
+                                    ${{ number_format($precioBaseResumen, 2) }}
+                                </strong>
+                            </div>
+
+                            <div class="saldo-line">
+                                <span>Protección + IVA</span>
+
+                                <strong id="saldo_seguro_total">
+                                    $0.00
+                                </strong>
+                            </div>
+
+                            <div class="saldo-line" style="
+                                border-top:1px solid #cbd5e1;
+                                padding-top:12px;
+                            ">
+                                <span>Total a pagar</span>
+
+                                <strong id="saldo_total_pagar">
+                                    ${{ number_format($totalResumen, 2) }}
+                                </strong>
+                            </div>
+
+                            <div
+                                id="saldo_estado"
+                                class="saldo-error"
+                                style="display:none;"
+                            ></div>
+
+                            <a
+                                href="{{ route('b2c.prepago') }}"
+                                class="saldo-recargar"
+                                id="saldo_recargar"
+                            >
                                 Recargar saldo
                             </a>
-
                         @endif
-
-                    </div>
-                    @endif
+                    </div>                
                 </aside>
             </div>
         </form>
     </main>
 </div>
+
 @if(auth()->check() && !$isPublicCheckout)
-<form id="pagar-saldo-form" method="POST" action="{{ route('b2c.pago.saldo', $cotizacion->id) }}">
-    @csrf
-</form>
+<div id="modalPago" class="modal-pago">
+    <div class="modal-card">
+        <h2>¿Cómo deseas pagar?</h2>
+
+        <p class="modal-text">
+            Los datos del envío están completos. Selecciona el método de pago para continuar.
+        </p>
+
+        <div class="modal-total">
+            <span>Total a pagar</span>
+
+            <strong id="modal_total_pagar">
+                ${{ number_format($totalResumen, 2) }} MXN
+            </strong>
+        </div>
+
+        <button
+            type="button"
+            id="pagar_mercado_pago"
+            class="modal-payment-btn mercado-pago"
+        >
+            Mercado Pago
+        </button>
+
+        <button
+            type="button"
+            id="pagar_saldo"
+            class="modal-payment-btn saldo"
+        >
+            Saldo prepago
+        </button>
+
+        <div
+            id="modal_saldo_estado"
+            class="modal-saldo-info"
+            style="display:none;"
+        ></div>
+
+        <button
+            type="button"
+            class="modal-cancel"
+            id="cerrar_modal_pago"
+        >
+            Cancelar
+        </button>
+    </div>
+</div>
 @endif
 
 <script>
-    const precioBaseEnvio = {{ (float) ($cotizacion->precio_sin_seguro ?: $cotizacion->precio) }};
+document.addEventListener('DOMContentLoaded', function () {
+    const precioBaseEnvio = {{
+        (float) ($cotizacion->precio_sin_seguro ?: $cotizacion->precio)
+    }};
+
+    const saldoDisponible = {{
+        (float) ($saldo->saldo ?? 0)
+    }};
+
     const seguroPorcentaje = 2;
     const seguroIvaPorcentaje = 16;
 
-    const valorDeclaradoInput = document.getElementById('valor_declarado');
-    const requiereSeguroInput = document.getElementById('requiere_seguro_envio');
-    const seguroPreview = document.getElementById('seguro_monto_preview');
-    const totalPreview = document.getElementById('total_con_seguro_preview');
-    const resumenSeguro = document.getElementById('resumen_seguro');
-    const resumenTotal = document.getElementById('resumen_total');
-    const insuranceError = document.getElementById('insurance_error');
+    const checkoutForm =
+        document.getElementById('checkout_form');
 
-    const seguroBasePreview = document.getElementById('seguro_base_preview');
-    const seguroIvaPreview = document.getElementById('seguro_iva_preview');
-    const resumenSeguroBase = document.getElementById('resumen_seguro_base');
-    const resumenSeguroIva = document.getElementById('resumen_seguro_iva');
+    const metodoPagoInput =
+        document.getElementById('metodo_pago');
+
+    const valorDeclaradoInput =
+        document.getElementById('valor_declarado');
+
+    const requiereSeguroInput =
+        document.getElementById('requiere_seguro_envio');
+
+    const insuranceError =
+        document.getElementById('insurance_error');
+
+    const seguroPreview =
+        document.getElementById('seguro_monto_preview');
+
+    const totalPreview =
+        document.getElementById('total_con_seguro_preview');
+
+    const seguroBasePreview =
+        document.getElementById('seguro_base_preview');
+
+    const seguroIvaPreview =
+        document.getElementById('seguro_iva_preview');
+
+    const resumenSeguroBase =
+        document.getElementById('resumen_seguro_base');
+
+    const resumenSeguroIva =
+        document.getElementById('resumen_seguro_iva');
+
+    const resumenTotal =
+        document.getElementById('resumen_total');
+
+    const saldoCostoEnvio =
+        document.getElementById('saldo_costo_envio');
+
+    const saldoSeguroTotal =
+        document.getElementById('saldo_seguro_total');
+
+    const saldoTotalPagar =
+        document.getElementById('saldo_total_pagar');
+
+    const saldoEstado =
+        document.getElementById('saldo_estado');
+
+    const modal =
+        document.getElementById('modalPago');
+
+    const modalTotal =
+        document.getElementById('modal_total_pagar');
+
+    const modalSaldoEstado =
+        document.getElementById('modal_saldo_estado');
+
+    const continuarPagoBtn =
+        document.getElementById('continuar_pago_btn');
+
+    const pagarMercadoPagoBtn =
+        document.getElementById('pagar_mercado_pago');
+
+    const pagarSaldoBtn =
+        document.getElementById('pagar_saldo');
+
+    const cerrarModalBtn =
+        document.getElementById('cerrar_modal_pago');
 
     function money(value) {
-        return '$' + Number(value || 0).toFixed(2) + ' MXN';
+        return '$' +
+            Number(value || 0).toFixed(2) +
+            ' MXN';
     }
 
     function calcularSeguroVisual() {
-        const valorDeclarado = parseFloat(valorDeclaradoInput?.value || 0) || 0;
-        const requiereSeguro = requiereSeguroInput?.checked || false;
+        const valorDeclarado =
+            parseFloat(
+                valorDeclaradoInput?.value || 0
+            ) || 0;
+
+        const requiereSeguro =
+            requiereSeguroInput?.checked || false;
 
         let seguroBase = 0;
         let seguroIva = 0;
         let seguroMonto = 0;
 
-        if (requiereSeguro && valorDeclarado > 0) {
-            seguroBase = valorDeclarado * (seguroPorcentaje / 100);
-            seguroIva = seguroBase * (seguroIvaPorcentaje / 100);
-            seguroMonto = seguroBase + seguroIva;
+        if (
+            requiereSeguro &&
+            valorDeclarado > 0
+        ) {
+            seguroBase =
+                valorDeclarado *
+                (seguroPorcentaje / 100);
+
+            seguroIva =
+                seguroBase *
+                (seguroIvaPorcentaje / 100);
+
+            seguroMonto =
+                seguroBase + seguroIva;
         }
 
-        const total = precioBaseEnvio + seguroMonto;
+        const total =
+            precioBaseEnvio + seguroMonto;
 
-        if (seguroPreview) seguroPreview.textContent = money(seguroMonto);
-        if (seguroBasePreview) seguroBasePreview.textContent = money(seguroBase);
-        if (seguroIvaPreview) seguroIvaPreview.textContent = money(seguroIva);
-        if (resumenSeguroBase) resumenSeguroBase.textContent = money(seguroBase);
-        if (resumenSeguroIva) resumenSeguroIva.textContent = money(seguroIva);
-        if (totalPreview) totalPreview.textContent = money(total);
-        if (resumenSeguro) resumenSeguro.textContent = money(seguroMonto);
-        if (resumenTotal) resumenTotal.textContent = money(total);
+        if (seguroPreview) {
+            seguroPreview.textContent =
+                money(seguroMonto);
+        }
+
+        if (seguroBasePreview) {
+            seguroBasePreview.textContent =
+                money(seguroBase);
+        }
+
+        if (seguroIvaPreview) {
+            seguroIvaPreview.textContent =
+                money(seguroIva);
+        }
+
+        if (resumenSeguroBase) {
+            resumenSeguroBase.textContent =
+                money(seguroBase);
+        }
+
+        if (resumenSeguroIva) {
+            resumenSeguroIva.textContent =
+                money(seguroIva);
+        }
+
+        if (totalPreview) {
+            totalPreview.textContent =
+                money(total);
+        }
+
+        if (resumenTotal) {
+            resumenTotal.textContent =
+                money(total);
+        }
+
+        if (saldoCostoEnvio) {
+            saldoCostoEnvio.textContent =
+                money(precioBaseEnvio);
+        }
+
+        if (saldoSeguroTotal) {
+            saldoSeguroTotal.textContent =
+                money(seguroMonto);
+        }
+
+        if (saldoTotalPagar) {
+            saldoTotalPagar.textContent =
+                money(total);
+        }
+
+        if (modalTotal) {
+            modalTotal.textContent =
+                money(total);
+        }
 
         if (insuranceError) {
-            insuranceError.style.display = requiereSeguro && valorDeclarado <= 0 ? 'block' : 'none';
+            insuranceError.style.display =
+                requiereSeguro &&
+                valorDeclarado <= 0
+                    ? 'block'
+                    : 'none';
         }
+
+        const saldoSuficiente =
+            saldoDisponible >= total;
+
+        if (pagarSaldoBtn) {
+            pagarSaldoBtn.disabled =
+                !saldoSuficiente;
+        }
+
+        const mensajeSaldo =
+            saldoSuficiente
+                ? 'Saldo suficiente para realizar el pago.'
+                : 'Saldo insuficiente. Necesitas ' +
+                  money(total - saldoDisponible) +
+                  ' adicionales.';
+
+        if (saldoEstado) {
+            saldoEstado.textContent =
+                mensajeSaldo;
+
+            saldoEstado.style.display =
+                saldoSuficiente
+                    ? 'none'
+                    : 'block';
+        }
+
+        if (modalSaldoEstado) {
+            modalSaldoEstado.textContent =
+                mensajeSaldo;
+
+            modalSaldoEstado.style.display =
+                saldoSuficiente
+                    ? 'none'
+                    : 'block';
+        }
+
+        return {
+            valorDeclarado,
+            requiereSeguro,
+            seguroMonto,
+            total,
+            saldoSuficiente
+        };
+    }
+
+    function formularioValidoParaPagar() {
+        const calculo =
+            calcularSeguroVisual();
+
+        if (
+            checkoutForm &&
+            !checkoutForm.reportValidity()
+        ) {
+            return false;
+        }
+
+        if (
+            calculo.requiereSeguro &&
+            calculo.valorDeclarado <= 0
+        ) {
+            if (insuranceError) {
+                insuranceError.style.display =
+                    'block';
+            }
+
+            valorDeclaradoInput?.focus();
+
+            return false;
+        }
+
+        return true;
+    }
+
+    function abrirModalPago() {
+        if (!formularioValidoParaPagar()) {
+            return;
+        }
+
+        if (modal) {
+            modal.style.display = 'flex';
+        }
+    }
+
+    function cerrarModalPago() {
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+
+    function enviarPago(metodoPago) {
+        if (!checkoutForm || !metodoPagoInput) {
+            return;
+        }
+
+        metodoPagoInput.value =
+            metodoPago;
+
+        cerrarModalPago();
+
+        checkoutForm.requestSubmit();
     }
 
     if (valorDeclaradoInput) {
-        valorDeclaradoInput.addEventListener('input', calcularSeguroVisual);
-        valorDeclaradoInput.addEventListener('change', calcularSeguroVisual);
+        valorDeclaradoInput.addEventListener(
+            'input',
+            calcularSeguroVisual
+        );
+
+        valorDeclaradoInput.addEventListener(
+            'change',
+            calcularSeguroVisual
+        );
     }
 
     if (requiereSeguroInput) {
-        requiereSeguroInput.addEventListener('change', calcularSeguroVisual);
+        requiereSeguroInput.addEventListener(
+            'change',
+            calcularSeguroVisual
+        );
+    }
+
+    if (continuarPagoBtn) {
+        continuarPagoBtn.addEventListener(
+            'click',
+            abrirModalPago
+        );
+    }
+
+    if (pagarMercadoPagoBtn) {
+        pagarMercadoPagoBtn.addEventListener(
+            'click',
+            function () {
+                enviarPago('mercado_pago');
+            }
+        );
+    }
+
+    if (pagarSaldoBtn) {
+        pagarSaldoBtn.addEventListener(
+            'click',
+            function () {
+                const calculo =
+                    calcularSeguroVisual();
+
+                if (!calculo.saldoSuficiente) {
+                    return;
+                }
+
+                enviarPago('saldo');
+            }
+        );
+    }
+
+    if (cerrarModalBtn) {
+        cerrarModalBtn.addEventListener(
+            'click',
+            cerrarModalPago
+        );
+    }
+
+    if (modal) {
+        modal.addEventListener(
+            'click',
+            function (event) {
+                if (event.target === modal) {
+                    cerrarModalPago();
+                }
+            }
+        );
     }
 
     calcularSeguroVisual();
+});
 </script>
 </body>
 </html>

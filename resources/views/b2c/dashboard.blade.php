@@ -192,6 +192,11 @@
             cursor:pointer
         }
     </style>
+
+    <link
+        rel="stylesheet"
+        href="{{ asset('css/zigo-cotizador.css') }}"
+    >
 </head>
 <body>
 
@@ -246,58 +251,14 @@
             </div>
         </div>
 
-        <div id="cotizador" class="cotizador-box">
-            <h2>Cotizador rápido </h2>
-
-            <form method="POST" action="/b2c/cotizar">
-                @csrf
-
-                <div class="cotizador-grid">
-
-                    <div class="field autocomplete-wrap">
-                        <label>Origen</label>
-                        <input type="text" id="cp_origen" name="cp_origen" placeholder="Código postal origen" maxlength="120" autocomplete="off" required>
-                        <input type="hidden" id="colonia_origen" name="colonia_origen">
-                        <input type="hidden" id="ciudad_origen" name="ciudad_origen">
-                        <input type="hidden" id="estado_origen" name="estado_origen">
-                        <div id="colonias_origen_list" class="suggestions"></div>
-                    </div>
-
-                    <div class="field autocomplete-wrap">
-                        <label>Destino</label>
-                        <input type="text" id="cp_destino" name="cp_destino" placeholder="Código postal destino" maxlength="120" autocomplete="off" required>
-                        <input type="hidden" id="colonia_destino" name="colonia_destino">
-                        <input type="hidden" id="ciudad_destino" name="ciudad_destino">
-                        <input type="hidden" id="estado_destino" name="estado_destino">
-                        <div id="colonias_destino_list" class="suggestions"></div>
-                    </div>
-
-                    <div class="field">
-                        <label>Tipo envío</label>
-                        <select name="tipo_envio" required>
-                            <option value="caja">Caja</option>
-                            <option value="sobre">Sobre</option>
-                        </select>
-                    </div>
-
-                    <div class="field">
-                        <label>Peso</label>
-                        <input name="peso" type="number" step="0.1" min="0.1" placeholder="Peso kg" required>
-                    </div>
-
-                    <div class="field">
-                        <label>Medidas</label>
-                        <input name="medidas" placeholder="20x20x20">
-                    </div>
-
-                    <div class="field">
-                        <label>&nbsp;</label>
-                        <button type="submit" class="cotizador-btn">Cotizar</button>
-                    </div>
-
-                </div>
-            </form>
-        </div>
+        @include('b2c.partials.cotizador', [
+            'cotizadorAction' => route('b2c.cotizador-rapido'),
+            'cotizadorPublico' => false,
+            'cotizacionActual' => $cotizacionActual ?? null,
+            'limpiarRoute' => $cotizacionActual
+                ? route('b2c.cotizador-rapido.limpiar')
+                : null,
+        ])
 
         @if(session('cotizacion_id') && session('opciones'))
             <div class="card opciones-cotizacion">
@@ -379,6 +340,6 @@
         </div>
             </main>
         </div>
-<script src="/js/b2c-cp-autocomplete.js"></script>
+<script src="{{ asset('js/zigo-cotizador.js') }}"></script>
 </body>
 </html>

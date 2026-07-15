@@ -302,36 +302,71 @@
                 <h1>Opciones disponibles</h1>
 
                 @foreach($opciones as $opcion)
-                    <div class="option">
+                    <form
+                        method="POST"
+                        action="{{ route('b2c.seleccionar.nuevo', $cotizacion->id) }}"
+                        class="option"
+                    >
+                        @csrf
+
+                        <input
+                            type="hidden"
+                            name="logistico"
+                            value="{{ $opcion['logistico'] }}"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="servicio"
+                            value="{{ $opcion['servicio'] }}"
+                        >
+
                         <div>
                             @if($opcion['logistico'] === 'FedEx')
-                                <img class="logo-carrier" src="{{ asset('img/fedex.png') }}" alt="FedEx">
+                                <img
+                                    class="logo-carrier"
+                                    src="{{ asset('img/fedex.png') }}"
+                                    alt="FedEx"
+                                >
                             @elseif($opcion['logistico'] === 'Estafeta')
-                                <img class="logo-carrier" src="{{ asset('img/estafeta.png') }}" alt="Estafeta">
+                                <img
+                                    class="logo-carrier"
+                                    src="{{ asset('img/estafeta.png') }}"
+                                    alt="Estafeta"
+                                >
                             @elseif($opcion['logistico'] === 'DHL')
-                                <img class="logo-carrier" src="{{ asset('img/dhl.png') }}" alt="DHL">
+                                <img
+                                    class="logo-carrier"
+                                    src="{{ asset('img/dhl.png') }}"
+                                    alt="DHL"
+                                >
                             @endif
                         </div>
 
                         <div>
-                            <div class="name">{{ $opcion['logistico'] }}</div>
-                            <div class="service">{{ $opcion['servicio'] }}</div>
+                            <div class="name">
+                                {{ $opcion['logistico'] }}
+                            </div>
+
+                            <div class="service">
+                                {{ $opcion['servicio'] }}
+                            </div>
                         </div>
 
-                        <div>{{ $opcion['entrega'] }}</div>
+                        <div>
+                            {{ $opcion['entrega'] }}
+                        </div>
 
-                        <div class="price">${{ number_format($opcion['precio'], 2) }}</div>
+                        <div class="price">
+                            ${{ number_format($opcion['precio'], 2) }}
+                        </div>
 
                         <div class="actions">
-                            <button class="btn" type="button"
-                                onclick="abrirModalPago(
-                                    '{{ $opcion['logistico'] }}',
-                                    '{{ $opcion['servicio'] }}'
-                                )">
+                            <button class="btn" type="submit">
                                 Seleccionar
                             </button>
                         </div>
-                    </div>
+                    </form>
                 @endforeach
             </div>
 
@@ -352,58 +387,5 @@
             </aside>
         </div>
     </main>
-
-<div id="modalPago" class="modal-pago">
-    <div class="modal-card">
-        <h2>¿Cómo deseas pagar?</h2>
-
-        <p class="modal-text">
-            Selecciona el método de pago para continuar con tu guía.
-        </p>
-
-        <form method="POST" action="{{ route('b2c.seleccionar.nuevo', $cotizacion->id) }}" style="margin-top:10px;">
-            @csrf
-            <input type="hidden" name="logistico" id="mp_logistico">
-            <input type="hidden" name="servicio" id="mp_servicio">
-            <button class="btn" type="submit">Mercado Pago</button>
-        </form>
-
-        @if(($saldo->saldo ?? 0) > 0)
-            <form method="POST" action="{{ route('b2c.seleccionar.nuevo', $cotizacion->id) }}" style="margin-top:10px;">
-                @csrf
-                <input type="hidden" name="logistico" id="saldo_logistico">
-                <input type="hidden" name="servicio" id="saldo_servicio">
-                <input type="hidden" name="metodo_pago" value="saldo">
-                <button class="btn btn-saldo" type="submit">Saldo prepago</button>
-            </form>
-        @endif
-
-        <button type="button" class="modal-cancel" onclick="cerrarModalPago()">
-            Cancelar
-        </button>
-    </div>
-</div>
-
-<script>
-    function abrirModalPago(logistico, servicio) {
-        document.getElementById('mp_logistico').value = logistico;
-        document.getElementById('mp_servicio').value = servicio;
-
-        const saldoLogistico = document.getElementById('saldo_logistico');
-        const saldoServicio = document.getElementById('saldo_servicio');
-
-        if (saldoLogistico && saldoServicio) {
-            saldoLogistico.value = logistico;
-            saldoServicio.value = servicio;
-        }
-
-        document.getElementById('modalPago').style.display = 'flex';
-    }
-
-    function cerrarModalPago() {
-        document.getElementById('modalPago').style.display = 'none';
-    }
-</script>
-
 </body>
 </html>

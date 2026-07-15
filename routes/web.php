@@ -81,6 +81,20 @@ Route::get('/b2c/dashboard', [CotizacionPublicaController::class, 'dashboardB2c'
 //Mis Envios 
 Route::middleware(['auth'])->group(function () {
 
+    //Cotizador b2c logueado en zigo
+    Route::post('/b2c/cotizador-rapido', [
+        CotizacionPublicaController::class,
+        'cotizadorRapidoB2c'
+    ])->name('b2c.cotizador-rapido');
+
+    Route::get(
+    '/b2c/cotizador-rapido/limpiar',
+    [
+        CotizacionPublicaController::class,
+        'limpiarCotizadorRapidoB2c'
+    ]
+    )->name('b2c.cotizador-rapido.limpiar');
+
     Route::get('/b2c/mis-envios', [CotizacionPublicaController::class, 'misEnviosB2c'])
         ->name('b2c.mis-envios');
 
