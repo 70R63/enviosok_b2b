@@ -7,9 +7,10 @@ use App\Http\Controllers\B2C\CotizacionPublicaController;
 use App\Http\Controllers\API\CPController;
 use App\Http\Controllers\B2cMisEnviosController;
 use App\Http\Controllers\Admin\B2cIncidenciaAdminController;
-use App\Http\Controllers\Crm\CrmClientController;
+use App\Http\Controllers\CRM\CrmClientController;
 use App\Http\Controllers\Web\PostalCodeLookupController;
 use App\Http\Controllers\Web\LandingProspectController;
+use App\Http\Controllers\Web\WaitlistController;
 use App\Http\Controllers\CRM\CrmPricingController;
 use App\Models\B2cCotizacion;
 
@@ -431,6 +432,21 @@ Route::get('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'c
 
 Route::post('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'procesarCheckout'])
     ->name('b2c.checkout.procesar');
+
+//LANDING PARA PROXIMAMENTE 
+Route::get('/', [WaitlistController::class, 'index'])
+    ->name('home');
+
+Route::get('/proximamente', [WaitlistController::class, 'index'])
+    ->name('waitlist.index');
+
+Route::post('/proximamente/registro', [WaitlistController::class, 'store'])
+    ->middleware('throttle:10,1')
+    ->name('waitlist.store');
+
+Route::get('/portal-zigo', function () {
+    return view('index');
+})->name('portal.original');
 
 // ===============================
 // LANDING / PROSPECTOS
