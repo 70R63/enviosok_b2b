@@ -168,52 +168,258 @@
                                     @if($envio->estado_destino) - {{ $envio->estado_destino }} @endif
                                 </td>
                                 <td>${{ number_format($envio->precio ?? 0, 2) }}</td>
-                                <td>{{ $envio->payment_status ?? $envio->estatus ?? '-' }}</td>
-                                <td>{{ $envio->guia_estatus ?? 'SIN_GUIA' }}</td>
+                                <td>{{ $envio->payment_status_label }}</td>
+                                <td>{{ $envio->guia_estatus_label }}</td>
                                 <td>{{ $envio->tracking_number ?? '-' }}</td>
                                 <td>
+                                    @php
+                                        $estado = strtoupper(
+                                            (string) ($envio->estatus ?? '')
+                                        );
+
+                                        $estadoGuia = strtoupper(
+                                            (string) (
+                                                $envio->guia_estatus
+                                                ?? 'SIN_GUIA'
+                                            )
+                                        );
+
+                                        $estadoPago = strtolower(
+                                            (string) (
+                                                $envio->payment_status
+                                                ?? ''
+                                            )
+                                        );
+
+                                        $estaPagada =
+                                            in_array(
+                                                $estado,
+                                                [
+                                                    'PAGADA',
+                                                    'GUIA_GENERADA',
+                                                ],
+                                                true
+                                            )
+                                            ||
+                                            in_array(
+                                                $estadoPago,
+                                                [
+                                                    'approved',
+                                                    'saldo_prepago',
+                                                ],
+                                                true
+                                            );
+
+                                        $tieneGuia =
+                                            !empty($envio->guia_id)
+                                            || !empty($envio->tracking_number)
+                                            || !empty($envio->documento)
+                                            || $estadoGuia === 'GENERADA';
+
+                                        $tieneDirecciones =
+                                            !empty($envio->remitente_nombre)
+                                            && !empty($envio->remitente_direccion)
+                                            && !empty($envio->destinatario_nombre)
+                                            && !empty($envio->destinatario_direccion);
+
+                                        $errorProveedor =
+                                            in_array(
+                                                $estadoGuia,
+                                                [
+                                                    'ERROR_PROVEEDOR',
+                                                    'ERROR_GENERACION_GUIA',
+                                                ],
+                                                true
+                                            );
+
+                                        $errorPeso =
+                                            $estadoGuia ===
+                                            'ERROR_VALIDACION_PESO';
+
+                                        $puedeEliminar =
+                                            !$estaPagada
+                                            && !$tieneGuia;
+                                    @endphp
+
                                     <div class="actions-wrap">
-                                        <button type="button" class="actions-btn">Acción ▾</button>
+                                        <button
+                                            type="button"
+                                            class="actions-btn"
+                                        >
+                                            Acción ▾
+                                        </button>
 
                                         <div class="actions-menu">
-                                            <a href="{{ route('b2c.envios.detalle', $envio->id) }}">
+                                            <a
+                                                href="{{ route(
+                                                    'b2c.envios.detalle',
+                                                    $envio->id
+                                                ) }}"
+                                            >
                                                 Ver detalle
                                             </a>
 
-                                            @if(($envio->precio ?? 0) > 0 && !$envio->tracking_number && !in_array($envio->estatus, ['PAGADA', 'GUIA_GENERADA']))
-                                                <a href="{{ route('b2c.pago', $envio->id) }}">
-                                                    Pagar ahora
+                                            {{-- Captura de direcciones terminada --}}
+                                            @if(
+                                                $estado ===
+                                                'DIRECCION_CAPTURADA'
+                                            )
+                                                <a
+                                                    href="{{ route(
+                                                        'b2c.paquete',
+                                                        $envio->id
+                                                    ) }}"
+                                                >
+                                                    Continuar con paquete
                                                 </a>
                                             @endif
 
-                                            <form method="POST" action="{{ route('b2c.envios.duplicar', $envio->id) }}">
+                                            {{-- Paquete capturado sin servicio --}}
+                                            @if(
+                                                $estado ===
+                                                'PAQUETE_CAPTURADO'
+                                            )
+                                                <a
+                                                    href="{{ route(
+                                                        'b2c.opciones',
+                                                        $envio->id
+                                                    ) }}"
+                                                >
+                                                    Seleccionar servicio
+                                                </a>
+                                            @endif
+
+                                            {{-- Servicio seleccionado sin pago --}}
+                                            @if(
+                                                $estado === 'SELECCIONADA'
+                                                && !$estaPagada
+                                            )
+                                                @if($tieneDirecciones)
+                                                    <a
+                                                        href="{{ route(
+                                                            'b2c.confirmar',
+                                                            $envio->id
+                                                        ) }}"
+                                                    >
+                                                        Confirmar y pagar
+                                                    </a>
+                                                @else
+                                                    <a
+                                                        href="{{ route(
+                                                            'b2c.checkout',
+                                                            $envio->id
+                                                        ) }}"
+                                                    >
+                                                        Completar datos y pagar
+                                                    </a>
+                                                @endif
+                                            @endif
+
+                                            {{-- Pago realizado sin guía --}}
+                                            @if(
+                                                $estaPagada
+                                                && !$tieneGuia
+                                                && !$errorPeso
+                                            )
+                                                <form
+                                                    method="POST"
+                                                    action="{{ route(
+                                                        'b2c.guia.generar',
+                                                        $envio->id
+                                                    ) }}"
+                                                >
+                                                    @csrf
+
+                                                    <button type="submit">
+                                                        {{ $errorProveedor
+                                                            ? 'Reintentar generación'
+                                                            : 'Generar guía'
+                                                        }}
+                                                    </button>
+                                                </form>
+                                            @endif
+
+                                            {{-- Errores que requieren revisión --}}
+                                            @if(
+                                                $estaPagada
+                                                && !$tieneGuia
+                                                && (
+                                                    $errorProveedor
+                                                    || $errorPeso
+                                                )
+                                            )
+                                                <a
+                                                    href="{{ route(
+                                                        'b2c.incidencias'
+                                                    ) }}"
+                                                >
+                                                    Reportar incidencia
+                                                </a>
+                                            @endif
+
+                                            {{-- Duplicar envío --}}
+                                            <form
+                                                method="POST"
+                                                action="{{ route(
+                                                    'b2c.envios.duplicar',
+                                                    $envio->id
+                                                ) }}"
+                                            >
                                                 @csrf
-                                                <button type="submit">Duplicar envío</button>
+
+                                                <button type="submit">
+                                                    Duplicar envío
+                                                </button>
                                             </form>
 
-                                            @if($envio->tracking_number)
-                                                <a href="{{ url('/rastreo?tracking_number=' . $envio->tracking_number) }}">
+                                            {{-- Acciones de una guía generada --}}
+                                            @if(!empty($envio->tracking_number))
+                                                <a
+                                                    href="{{ url(
+                                                        '/rastreo?tracking_number='
+                                                        . urlencode(
+                                                            $envio->tracking_number
+                                                        )
+                                                    ) }}"
+                                                >
                                                     Rastrear
                                                 </a>
                                             @endif
 
-                                            @if($envio->documento)
-                                                <a href="{{ asset('storage/' . basename($envio->documento)) }}" target="_blank">
+                                            @if(!empty($envio->documento))
+                                                <a
+                                                    href="{{ asset(
+                                                        'storage/'
+                                                        . basename(
+                                                            $envio->documento
+                                                        )
+                                                    ) }}"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                >
                                                     Descargar guía
                                                 </a>
                                             @endif
 
-                                            @if(in_array($envio->estatus, ['PAGADA', 'ERROR_GENERACION_GUIA']) && !$envio->tracking_number)
-                                                <form method="POST" action="{{ route('b2c.guia.generar', $envio->id) }}">
+                                            {{-- Nunca eliminar pagos o guías --}}
+                                            @if($puedeEliminar)
+                                                <form
+                                                    method="POST"
+                                                    action="{{ route(
+                                                        'b2c.envios.eliminar',
+                                                        $envio->id
+                                                    ) }}"
+                                                >
                                                     @csrf
-                                                    <button type="submit">Generar guía</button>
-                                                </form>
-                                            @endif
 
-                                            @if(!$envio->tracking_number && !$envio->documento)
-                                                <form method="POST" action="{{ route('b2c.envios.eliminar', $envio->id) }}">
-                                                    @csrf
-                                                    <button type="submit" onclick="return confirm('¿Eliminar esta cotización?')">
+                                                    <button
+                                                        type="submit"
+                                                        onclick="
+                                                            return confirm(
+                                                                '¿Eliminar esta cotización?'
+                                                            )
+                                                        "
+                                                    >
                                                         Eliminar cotización
                                                     </button>
                                                 </form>

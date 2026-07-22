@@ -42,6 +42,20 @@ Route::post('/b2c/cotizacion/{cotizacion}/seleccionar', [CotizacionPublicaContro
 
 Route::post('/b2c/cotizacion/{cotizacion}/seleccionar-nuevo', [CotizacionPublicaController::class, 'seleccionarNuevoEnvio'])
     ->name('b2c.seleccionar.nuevo');
+
+Route::get(
+    '/b2c/confirmar/{cotizacion}',
+    [CotizacionPublicaController::class, 'confirmarEnvio']
+)
+    ->middleware('auth')
+    ->name('b2c.confirmar');
+
+Route::post(
+    '/b2c/confirmar/{cotizacion}',
+    [CotizacionPublicaController::class, 'procesarConfirmacion']
+)
+    ->middleware('auth')
+    ->name('b2c.confirmar.procesar');
 			
 /*provisional pago */
 Route::get('/b2c/pago/{cotizacion}', [CotizacionPublicaController::class, 'pago'])

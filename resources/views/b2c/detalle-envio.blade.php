@@ -75,10 +75,14 @@
                 <div class="value">${{ number_format($cotizacion->precio ?? 0, 2) }} MXN</div>
 
                 <div class="label">Estatus</div>
-                <div class="value">{{ $cotizacion->estatus ?? '-' }}</div>
+                <div class="value">
+                    {{ $cotizacion->estatus_label }}
+                </div>
 
                 <div class="label">Estado guía</div>
-                <div class="value">{{ $cotizacion->guia_estatus ?? 'SIN_GUIA' }}</div>
+                <div class="value">
+                    {{ $cotizacion->guia_estatus_label }}
+                </div>
             </div>
 
             <div class="card">
@@ -168,8 +172,10 @@
                 <div class="label">ID de pago</div>
                 <div class="value">{{ $cotizacion->payment_id ?? 'No disponible' }}</div>
 
-                <div class="label">Estatus Mercado Pago</div>
-                <div class="value">{{ $cotizacion->payment_status ?? 'No disponible' }}</div>
+                <div class="label">Estado del pago</div>
+                <div class="value">
+                    {{ $cotizacion->payment_status_label }}
+                </div>
 
                 <div class="label">Referencia externa</div>
                 <div class="value">{{ $cotizacion->payment_external_reference ?? 'No disponible' }}</div>
@@ -185,7 +191,9 @@
                 <div class="value">${{ number_format($cotizacion->valor_declarado ?? 0, 2) }}</div>
 
                 <div class="label">Referencia</div>
-                <div class="value">{{ $cotizacion->referencia ?? '-' }}</div>
+                <div class="value">
+                    ZIGO-{{ $cotizacion->id }}
+                </div>
             </div>
         </div>
 

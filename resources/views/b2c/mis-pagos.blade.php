@@ -110,8 +110,8 @@
                             <th>Servicio</th>
                             <th>Total</th>
                             <th>ID pago</th>
-                            <th>Estatus MP</th>
-                            <th>Estatus envío</th>
+                            <th>Estado del pago</th>
+                            <th>Estado del envío</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
@@ -124,8 +124,8 @@
                                 <td>{{ $pago->servicio ?? '-' }}</td>
                                 <td>${{ number_format($pago->precio ?? 0, 2) }} MXN</td>
                                 <td>{{ $pago->payment_id ?? '-' }}</td>
-                                <td>{{ $pago->payment_status ?? '-' }}</td>
-                                <td>{{ $pago->estatus ?? '-' }}</td>
+                                <td>{{ $pago->payment_status_label }}</td>
+                                <td>{{ $pago->estatus_label }}</td>
                                 <td>
                                     <a href="{{ route('b2c.envios.detalle', $pago->id) }}" class="btn primary">
                                         Ver envío

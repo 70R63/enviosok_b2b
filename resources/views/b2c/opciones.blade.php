@@ -65,8 +65,11 @@
         font-size:16px;
     }
 
-    .content{
-        padding:40px;
+    .content {
+        width: 100%;
+        max-width: 1540px;
+        margin: 0 auto;
+        padding: 28px 30px;
     }
 
     .title{
@@ -82,18 +85,20 @@
 
     /* ===== NUEVO LAYOUT ===== */
 
-    .options-layout{
-        display:grid;
-        grid-template-columns:1fr 340px;
-        gap:24px;
-        align-items:start;
+    .options-layout {
+        display: grid;
+        grid-template-columns:
+            minmax(0, 1fr)
+            minmax(360px, 410px);
+        gap: 22px;
+        align-items: start;
     }
 
-    .card{
-        background:#fff;
-        border-radius:18px;
-        padding:28px;
-        box-shadow:0 10px 24px rgba(0,0,0,.08);
+    .card {
+        background: #fff;
+        border-radius: 16px;
+        padding: 22px;
+        box-shadow: 0 8px 22px rgba(15,23,42,.08);
     }
 
     .side-card{

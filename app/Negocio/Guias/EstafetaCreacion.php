@@ -31,6 +31,8 @@ Class EstafetaCreacion {
 
 	private $response;
     private $cotizaciones;
+    private ?int $guiaId = null;
+    private bool $omitirCobroSaldoLegacy = false;
 	
 	/**
      * Se busca obtener las tarifas de FEDEX basado en el KG .
@@ -79,8 +81,12 @@ Class EstafetaCreacion {
     	$data = $this->cotizacion($data);
 
     	Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__);
-        if ($data['tipoPagoId'] ===2) {
-            $this->saldo($data);    
+        if (
+            ($data['tipoPagoId'] ?? null) === 2
+            &&
+            !$this->omitirCobroSaldoLegacy
+        ) {
+            $this->saldo($data);
         }
     	
         
@@ -171,7 +177,11 @@ Class EstafetaCreacion {
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__);
         Log::debug($data);
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__);
-        $this->saldo($data);    
+        if (
+            !$this->omitirCobroSaldoLegacy
+        ) {
+            $this->saldo($data);
+        }
         
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__);
         $cotizaciones = $this->resumenCotizacion($data);
@@ -223,9 +233,18 @@ Class EstafetaCreacion {
 
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__);
         //Log::debug($data);
-        $id = Guia::create($data)->id;
-        $this->notices[] ="Exito";
-        $this->notices[] = sprintf("El registro de la solicitud se genero con exito con el ID %s ", $id);
+        $guia = Guia::create($data);
+
+        $this->guiaId = (int) $guia->id;
+
+        $id = $this->guiaId;
+
+        $this->notices[] = 'Exito';
+
+        $this->notices[] = sprintf(
+            'El registro de la solicitud se genero con exito con el ID %s',
+            $id
+        );
 
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__);
         $data = $this->validaPaquete($data, $id);
@@ -890,5 +909,17 @@ Class EstafetaCreacion {
         return $this->cotizaciones;
     }
 
+    public function getGuiaId(): ?int
+    {
+        return $this->guiaId;
+    }
 
+    public function omitirCobroSaldoLegacy(
+        bool $omitir = true
+    ): self {
+        $this->omitirCobroSaldoLegacy =
+            $omitir;
+
+        return $this;
+    }
 }

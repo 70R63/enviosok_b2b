@@ -29,7 +29,12 @@ class B2cDireccion extends Model
         'estado',
         'principal',
         'activo',
-        'alias',
         'favorita',
+    ];
+
+    protected $casts = [
+        'principal' => 'boolean',
+        'activo' => 'boolean',
+        'favorita' => 'boolean',
     ];
 }

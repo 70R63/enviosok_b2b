@@ -3,13 +3,13 @@
 namespace App\Http\Controllers\B2C;
 
 use App\Http\Controllers\Controller;
-use App\Negocio\Guias\EstafetaCreacion;
 use App\Models\B2cSaldo;
 use App\Models\B2cMovimientoSaldo;
 use App\Models\B2cCotizacion;
 use App\Models\User;
 use App\Models\Roles\Roles;
 use App\Models\Guia;
+use App\Negocio\Guias\EstafetaCreacion;
 use App\Models\B2cDireccion;
 use App\Models\B2cIdentityVerification;
 use App\Models\B2cIncidencia;
@@ -337,6 +337,30 @@ class CotizacionPublicaController extends Controller
             abort(403);
         }
 
+        // Estafeta permite hasta 70.999 kg facturables.
+        $pesoFacturable = (float) (
+            $cotizacion->peso_facturable
+            ?: $cotizacion->peso
+        );
+
+        if (
+            strcasecmp(
+                trim($data['logistico']),
+                'Estafeta'
+            ) === 0
+            &&
+            $pesoFacturable > 67.999
+        ) {
+            return back()->with(
+                'error',
+                'El peso facturable de '
+                . number_format($pesoFacturable, 2)
+                . ' kg supera el máximo permitido por Estafeta '
+                . '(70.99 kg). Reduce el peso o las dimensiones '
+                . 'del paquete.'
+            );
+        }
+
         $option = $this->findSelectedOption(
             $cotizacion,
             $data['logistico'],
@@ -356,6 +380,16 @@ class CotizacionPublicaController extends Controller
         );
 
         $cotizacion->refresh();
+
+        if (
+            $cotizacion->referencia ===
+            'B2C_NUEVO_ENVIO'
+        ) {
+            return redirect()->route(
+                'b2c.confirmar',
+                $cotizacion->id
+            );
+        }
 
         return redirect()->route(
             'b2c.checkout',
@@ -398,115 +432,217 @@ public function checkout(B2cCotizacion $cotizacion)
         $cotizacion->refresh();
     }
 
-    return view('b2c.checkout', compact('cotizacion'));
+    $isPublicCheckout =
+        $cotizacion->referencia === 'LANDING_PUBLICA'
+        && empty($cotizacion->user_id);
+
+    if (
+        !$isPublicCheckout
+        && $cotizacion->user_id
+        && (
+            !auth()->check()
+            || $cotizacion->user_id !== auth()->id()
+        )
+    ) {
+        abort(403);
+    }
+
+    $saldo = null;
+
+    $direccionesOrigen = collect();
+    $direccionesDestino = collect();
+
+    if (
+        auth()->check()
+        && !$isPublicCheckout
+        && $cotizacion->user_id === auth()->id()
+    ) {
+        $saldo = B2cSaldo::firstOrCreate(
+            [
+                'user_id' => auth()->id(),
+            ],
+            [
+                'saldo' => 0,
+            ]
+        );
+
+        /*
+        * Solo mostrar direcciones del mismo CP.
+        * Cambiar el CP después de cotizar alteraría
+        * cobertura, servicio y precio.
+        */
+        $cpOrigen = substr(
+            preg_replace(
+                '/\D/',
+                '',
+                (string) $cotizacion->cp_origen
+            ),
+            0,
+            5
+        );
+
+        $cpDestino = substr(
+            preg_replace(
+                '/\D/',
+                '',
+                (string) $cotizacion->cp_destino
+            ),
+            0,
+            5
+        );
+
+        $direccionesOrigen = B2cDireccion::where(
+            'user_id',
+            auth()->id()
+        )
+            ->where('activo', true)
+            ->where('tipo', 'ORIGEN')
+            ->where('cp', $cpOrigen)
+            ->orderByDesc('favorita')
+            ->orderByDesc('principal')
+            ->latest()
+            ->get();
+
+        $direccionesDestino = B2cDireccion::where(
+            'user_id',
+            auth()->id()
+        )
+            ->where('activo', true)
+            ->where('tipo', 'DESTINO')
+            ->where('cp', $cpDestino)
+            ->orderByDesc('favorita')
+            ->orderByDesc('principal')
+            ->latest()
+            ->get();
+    }
+
+    return view(
+        'b2c.checkout',
+        compact(
+            'cotizacion',
+            'saldo',
+            'isPublicCheckout',
+            'direccionesOrigen',
+            'direccionesDestino'
+        )
+    );
 }
 
-public function procesarCheckout(Request $request, B2cCotizacion $cotizacion)
-{
+public function confirmarEnvio(
+    B2cCotizacion $cotizacion
+) {
+    if ($cotizacion->user_id !== auth()->id()) {
+        abort(403);
+    }
+
+    if (
+        !$cotizacion->logistico ||
+        !$cotizacion->servicio ||
+        (float) $cotizacion->precio <= 0
+    ) {
+        return redirect()
+            ->route('b2c.opciones', $cotizacion->id)
+            ->with(
+                'error',
+                'Primero selecciona una paquetería válida.'
+            );
+    }
+
+    $tieneDirecciones =
+        !empty($cotizacion->remitente_nombre) &&
+        !empty($cotizacion->remitente_telefono) &&
+        !empty($cotizacion->remitente_direccion) &&
+        !empty($cotizacion->remitente_num_ext) &&
+        !empty($cotizacion->destinatario_nombre) &&
+        !empty($cotizacion->destinatario_telefono) &&
+        !empty($cotizacion->destinatario_direccion) &&
+        !empty($cotizacion->destinatario_num_ext);
+
+    if (!$tieneDirecciones) {
+        return redirect()
+            ->route('b2c.checkout', $cotizacion->id)
+            ->with(
+                'error',
+                'Completa los datos del remitente y destinatario.'
+            );
+    }
+
+    if (
+        empty($cotizacion->contenido) ||
+        empty($cotizacion->tipo_envio) ||
+        (float) $cotizacion->peso <= 0
+    ) {
+        return redirect()
+            ->route('b2c.paquete', $cotizacion->id)
+            ->with(
+                'error',
+                'Completa la información del paquete.'
+            );
+    }
+
+    $saldo = B2cSaldo::firstOrCreate(
+        ['user_id' => auth()->id()],
+        ['saldo' => 0]
+    );
+
+    return view(
+        'b2c.confirmar-envio',
+        compact('cotizacion', 'saldo')
+    );
+}
+
+public function procesarConfirmacion(
+    Request $request,
+    B2cCotizacion $cotizacion
+) {
+    if ($cotizacion->user_id !== auth()->id()) {
+        abort(403);
+    }
+
     $data = $request->validate([
-        'remitente_nombre' => ['required', 'string', 'max:255'],
-        'remitente_telefono' => ['required', 'string', 'max:30'],
-        'remitente_email' => ['required', 'email', 'max:255'],
-        'remitente_direccion' => ['required', 'string', 'max:255'],
-
-        'remitente_num_ext' => ['required', 'string', 'max:50'],
-        'remitente_num_int' => ['nullable', 'string', 'max:50'],
-
-        // Se dejan nullable porque si el frontend no los llena,
-        // se resuelven por CP/colonia antes de guardar.
-        'ciudad_origen' => ['nullable', 'string', 'max:100'],
-        'estado_origen' => ['nullable', 'string', 'max:100'],
-
-        'destinatario_num_ext' => ['required', 'string', 'max:50'],
-        'destinatario_num_int' => ['nullable', 'string', 'max:50'],
-
-        'ciudad_destino' => ['nullable', 'string', 'max:100'],
-        'estado_destino' => ['nullable', 'string', 'max:100'],
-
-        'destinatario_nombre' => ['required', 'string', 'max:255'],
-        'destinatario_telefono' => ['required', 'string', 'max:30'],
-        'destinatario_email' => ['nullable', 'email', 'max:255'],
-        'destinatario_direccion' => ['required', 'string', 'max:255'],
-
-        'contenido' => ['required', 'string', 'max:255'],
-        'valor_declarado' => ['nullable', 'numeric', 'min:0'],
-        'requiere_seguro_envio' => ['nullable', 'boolean'],
-        'referencia' => ['nullable', 'string', 'max:255'],
-
         'metodo_pago' => [
-            'nullable',
+            'required',
             'in:mercado_pago,saldo',
         ],
     ]);
 
-        $metodoPago = $data['metodo_pago']
-        ?? 'mercado_pago';
-
-    unset($data['metodo_pago']);
-
-    $ubicacionOrigen = $this->resolverUbicacionPostal(
-        $cotizacion->cp_origen,
-        $cotizacion->colonia_origen
-    );
-
-    $ubicacionDestino = $this->resolverUbicacionPostal(
-        $cotizacion->cp_destino,
-        $cotizacion->colonia_destino
-    );
-
-    $data['ciudad_origen'] = $data['ciudad_origen']
-        ?: ($ubicacionOrigen['ciudad'] ?? $cotizacion->ciudad_origen);
-
-    $data['estado_origen'] = $data['estado_origen']
-        ?: ($ubicacionOrigen['estado'] ?? $cotizacion->estado_origen);
-
-    $data['ciudad_destino'] = $data['ciudad_destino']
-        ?: ($ubicacionDestino['ciudad'] ?? $cotizacion->ciudad_destino);
-
-    $data['estado_destino'] = $data['estado_destino']
-        ?: ($ubicacionDestino['estado'] ?? $cotizacion->estado_destino);
-
-    if (!$data['ciudad_origen'] || !$data['estado_origen'] || !$data['ciudad_destino'] || !$data['estado_destino']) {
-        return back()
-            ->withInput()
-            ->with('error', 'No fue posible completar ciudad/estado con el código postal seleccionado. Captura los datos manualmente.');
+    if (
+        !$cotizacion->logistico ||
+        !$cotizacion->servicio ||
+        (float) $cotizacion->precio <= 0
+    ) {
+        return redirect()
+            ->route('b2c.opciones', $cotizacion->id)
+            ->with(
+                'error',
+                'La cotización no tiene una paquetería válida.'
+            );
     }
 
-    $requiereSeguro = (bool) ($data['requiere_seguro_envio'] ?? false);
-    $valorDeclarado = (float) ($data['valor_declarado'] ?? 0);
+    $tieneDirecciones =
+        !empty($cotizacion->remitente_nombre) &&
+        !empty($cotizacion->remitente_telefono) &&
+        !empty($cotizacion->remitente_direccion) &&
+        !empty($cotizacion->remitente_num_ext) &&
+        !empty($cotizacion->destinatario_nombre) &&
+        !empty($cotizacion->destinatario_telefono) &&
+        !empty($cotizacion->destinatario_direccion) &&
+        !empty($cotizacion->destinatario_num_ext);
 
-    if ($requiereSeguro && $valorDeclarado <= 0) {
-        return back()
-            ->withInput()
-            ->with('error', 'Para proteger tu envío, captura un valor declarado mayor a 0.');
+    if (!$tieneDirecciones) {
+        return redirect()
+            ->route('b2c.checkout', $cotizacion->id)
+            ->with(
+                'error',
+                'Completa los datos del envío antes de pagar.'
+            );
     }
-
-    $precioSinSeguro = (float) ($cotizacion->precio_sin_seguro ?: $cotizacion->precio);
-    $seguroPorcentaje = 2.00;
-    $seguroIvaPorcentaje = 16.00;
-    $seguroMonto = 0.00;
-
-    if ($requiereSeguro) {
-        $seguroBase = $valorDeclarado * ($seguroPorcentaje / 100);
-        $seguroIva = $seguroBase * ($seguroIvaPorcentaje / 100);
-        $seguroMonto = round($seguroBase + $seguroIva, 2);
-    }
-
-    $precioFinal = round($precioSinSeguro + $seguroMonto, 2);
 
     $cotizacion->update([
-        ...$data,
-        'valor_declarado' => $valorDeclarado,
-        'requiere_seguro_envio' => $requiereSeguro,
-        'seguro_porcentaje' => $seguroPorcentaje,
-        'seguro_iva_porcentaje' => $seguroIvaPorcentaje,
-        'seguro_monto' => $seguroMonto,
-        'precio_sin_seguro' => $precioSinSeguro,
-        'precio' => $precioFinal,
         'estatus' => 'CHECKOUT_COMPLETO',
     ]);
 
-    if ($metodoPago === 'saldo') {
+    if ($data['metodo_pago'] === 'saldo') {
         return $this->pagarConSaldo(
             $cotizacion->fresh()
         );
@@ -516,7 +652,601 @@ public function procesarCheckout(Request $request, B2cCotizacion $cotizacion)
         'b2c.pago',
         $cotizacion->id
     );
+}
+
+public function procesarCheckout(
+    Request $request,
+    B2cCotizacion $cotizacion
+) {
+    $isPublicCheckout =
+        $cotizacion->referencia === 'LANDING_PUBLICA'
+        && empty($cotizacion->user_id);
+
+    /*
+     * Una cotización autenticada solamente puede ser
+     * procesada por su propietario.
+     */
+    if (!$isPublicCheckout) {
+        if (
+            !auth()->check()
+            || $cotizacion->user_id !== auth()->id()
+        ) {
+            abort(403);
+        }
     }
+
+    $data = $request->validate([
+        'remitente_nombre' => [
+            'required',
+            'string',
+            'max:255',
+        ],
+
+        'remitente_telefono' => [
+            'required',
+            'string',
+            'max:30',
+        ],
+
+        'remitente_email' => [
+            'required',
+            'email',
+            'max:255',
+        ],
+
+        'remitente_direccion' => [
+            'required',
+            'string',
+            'max:255',
+        ],
+
+        'remitente_num_ext' => [
+            'required',
+            'string',
+            'max:50',
+        ],
+
+        'remitente_num_int' => [
+            'nullable',
+            'string',
+            'max:50',
+        ],
+
+        'ciudad_origen' => [
+            'nullable',
+            'string',
+            'max:100',
+        ],
+
+        'estado_origen' => [
+            'nullable',
+            'string',
+            'max:100',
+        ],
+
+        'destinatario_nombre' => [
+            'required',
+            'string',
+            'max:255',
+        ],
+
+        'destinatario_telefono' => [
+            'required',
+            'string',
+            'max:30',
+        ],
+
+        'destinatario_email' => [
+            'nullable',
+            'email',
+            'max:255',
+        ],
+
+        'destinatario_direccion' => [
+            'required',
+            'string',
+            'max:255',
+        ],
+
+        'destinatario_num_ext' => [
+            'required',
+            'string',
+            'max:50',
+        ],
+
+        'destinatario_num_int' => [
+            'nullable',
+            'string',
+            'max:50',
+        ],
+
+        'ciudad_destino' => [
+            'nullable',
+            'string',
+            'max:100',
+        ],
+
+        'estado_destino' => [
+            'nullable',
+            'string',
+            'max:100',
+        ],
+
+        'contenido' => [
+            'required',
+            'string',
+            'max:255',
+        ],
+
+        'valor_declarado' => [
+            'nullable',
+            'numeric',
+            'min:0',
+        ],
+
+        'requiere_seguro_envio' => [
+            'nullable',
+            'boolean',
+        ],
+
+        'direccion_origen_id' => [
+            'nullable',
+            'integer',
+            'exists:b2c_direcciones,id',
+        ],
+
+        'direccion_destino_id' => [
+            'nullable',
+            'integer',
+            'exists:b2c_direcciones,id',
+        ],
+
+        'guardar_origen' => [
+            'nullable',
+            'boolean',
+        ],
+
+        'guardar_destino' => [
+            'nullable',
+            'boolean',
+        ],
+
+        'alias_origen' => [
+            'nullable',
+            'string',
+            'max:100',
+        ],
+
+        'alias_destino' => [
+            'nullable',
+            'string',
+            'max:100',
+        ],
+    ]);
+
+    $normalizarCp = static function (
+        ?string $valor
+    ): string {
+        return substr(
+            preg_replace(
+                '/\D/',
+                '',
+                (string) $valor
+            ),
+            0,
+            5
+        );
+    };
+
+    $cpOrigen = $normalizarCp(
+        $cotizacion->cp_origen
+    );
+
+    $cpDestino = $normalizarCp(
+        $cotizacion->cp_destino
+    );
+
+    /*
+     * Verificar que las direcciones seleccionadas sean
+     * propiedad del usuario, estén activas y correspondan
+     * al tipo y CP de la cotización.
+     */
+    $direccionOrigenId =
+        $data['direccion_origen_id']
+        ?? null;
+
+    $direccionDestinoId =
+        $data['direccion_destino_id']
+        ?? null;
+
+    if (
+        !$isPublicCheckout
+        && $direccionOrigenId
+    ) {
+        $direccionOrigenValida =
+            B2cDireccion::where(
+                'id',
+                $direccionOrigenId
+            )
+                ->where(
+                    'user_id',
+                    auth()->id()
+                )
+                ->where('tipo', 'ORIGEN')
+                ->where('activo', true)
+                ->where('cp', $cpOrigen)
+                ->exists();
+
+        if (!$direccionOrigenValida) {
+            return back()
+                ->withInput()
+                ->with(
+                    'error',
+                    'La dirección de origen seleccionada '
+                    . 'no es válida para este envío.'
+                );
+        }
+    }
+
+    if (
+        !$isPublicCheckout
+        && $direccionDestinoId
+    ) {
+        $direccionDestinoValida =
+            B2cDireccion::where(
+                'id',
+                $direccionDestinoId
+            )
+                ->where(
+                    'user_id',
+                    auth()->id()
+                )
+                ->where('tipo', 'DESTINO')
+                ->where('activo', true)
+                ->where('cp', $cpDestino)
+                ->exists();
+
+        if (!$direccionDestinoValida) {
+            return back()
+                ->withInput()
+                ->with(
+                    'error',
+                    'La dirección de destino seleccionada '
+                    . 'no es válida para este envío.'
+                );
+        }
+    }
+
+    $ubicacionOrigen =
+        $this->resolverUbicacionPostal(
+            $cpOrigen,
+            $cotizacion->colonia_origen
+        );
+
+    $ubicacionDestino =
+        $this->resolverUbicacionPostal(
+            $cpDestino,
+            $cotizacion->colonia_destino
+        );
+
+    $data['ciudad_origen'] =
+        $data['ciudad_origen']
+        ?: (
+            $ubicacionOrigen['ciudad']
+            ?? $cotizacion->ciudad_origen
+        );
+
+    $data['estado_origen'] =
+        $data['estado_origen']
+        ?: (
+            $ubicacionOrigen['estado']
+            ?? $cotizacion->estado_origen
+        );
+
+    $data['ciudad_destino'] =
+        $data['ciudad_destino']
+        ?: (
+            $ubicacionDestino['ciudad']
+            ?? $cotizacion->ciudad_destino
+        );
+
+    $data['estado_destino'] =
+        $data['estado_destino']
+        ?: (
+            $ubicacionDestino['estado']
+            ?? $cotizacion->estado_destino
+        );
+
+    if (
+        !$data['ciudad_origen']
+        || !$data['estado_origen']
+        || !$data['ciudad_destino']
+        || !$data['estado_destino']
+    ) {
+        return back()
+            ->withInput()
+            ->with(
+                'error',
+                'No fue posible completar ciudad y estado '
+                . 'con los códigos postales seleccionados.'
+            );
+    }
+
+    /*
+     * Protección del envío.
+     */
+    $requiereSeguro = (bool) (
+        $data['requiere_seguro_envio']
+        ?? false
+    );
+
+    $valorDeclarado = round(
+        (float) (
+            $data['valor_declarado']
+            ?? 0
+        ),
+        2
+    );
+
+    if (
+        $requiereSeguro
+        && $valorDeclarado <= 0
+    ) {
+        return back()
+            ->withInput()
+            ->with(
+                'error',
+                'Para proteger tu envío, captura un '
+                . 'valor declarado mayor a cero.'
+            );
+    }
+
+    $precioSinSeguro = round(
+        (float) (
+            $cotizacion->precio_sin_seguro
+            ?: $cotizacion->precio
+        ),
+        2
+    );
+
+    $seguroPorcentaje = 2.00;
+    $seguroIvaPorcentaje = 16.00;
+
+    $seguroMonto = 0.00;
+
+    if ($requiereSeguro) {
+        $seguroBase = round(
+            $valorDeclarado
+            * ($seguroPorcentaje / 100),
+            2
+        );
+
+        $seguroIva = round(
+            $seguroBase
+            * ($seguroIvaPorcentaje / 100),
+            2
+        );
+
+        $seguroMonto = round(
+            $seguroBase + $seguroIva,
+            2
+        );
+    }
+
+    $precioFinal = round(
+        $precioSinSeguro + $seguroMonto,
+        2
+    );
+
+    /*
+     * Datos exclusivos del formulario de direcciones.
+     * No pertenecen a b2c_cotizaciones.
+     */
+    $guardarOrigen = (bool) (
+        $data['guardar_origen']
+        ?? false
+    );
+
+    $guardarDestino = (bool) (
+        $data['guardar_destino']
+        ?? false
+    );
+
+    $aliasOrigen = trim(
+        (string) (
+            $data['alias_origen']
+            ?? ''
+        )
+    );
+
+    $aliasDestino = trim(
+        (string) (
+            $data['alias_destino']
+            ?? ''
+        )
+    );
+
+    $aliasOrigen =
+        $aliasOrigen !== ''
+            ? $aliasOrigen
+            : 'Origen';
+
+    $aliasDestino =
+        $aliasDestino !== ''
+            ? $aliasDestino
+            : 'Destino';
+
+    $datosCotizacion = $data;
+
+    unset(
+        $datosCotizacion['direccion_origen_id'],
+        $datosCotizacion['direccion_destino_id'],
+        $datosCotizacion['guardar_origen'],
+        $datosCotizacion['guardar_destino'],
+        $datosCotizacion['alias_origen'],
+        $datosCotizacion['alias_destino']
+    );
+
+    $userId = auth()->id();
+
+    DB::transaction(
+        function () use (
+            $cotizacion,
+            $datosCotizacion,
+            $valorDeclarado,
+            $requiereSeguro,
+            $seguroPorcentaje,
+            $seguroIvaPorcentaje,
+            $seguroMonto,
+            $precioSinSeguro,
+            $precioFinal,
+            $isPublicCheckout,
+            $userId,
+            $direccionOrigenId,
+            $direccionDestinoId,
+            $guardarOrigen,
+            $guardarDestino,
+            $aliasOrigen,
+            $aliasDestino,
+            $data,
+            $cpOrigen,
+            $cpDestino
+        ) {
+            $cotizacion->update([
+                ...$datosCotizacion,
+
+                'valor_declarado' =>
+                    $valorDeclarado,
+
+                'requiere_seguro_envio' =>
+                    $requiereSeguro,
+
+                'seguro_porcentaje' =>
+                    $seguroPorcentaje,
+
+                'seguro_iva_porcentaje' =>
+                    $seguroIvaPorcentaje,
+
+                'seguro_monto' =>
+                    $seguroMonto,
+
+                'precio_sin_seguro' =>
+                    $precioSinSeguro,
+
+                'precio' =>
+                    $precioFinal,
+
+                'estatus' =>
+                    'CHECKOUT_COMPLETO',
+            ]);
+
+            /*
+             * El checkout público no administra
+             * direcciones guardadas.
+             */
+            if (
+                $isPublicCheckout
+                || !$userId
+            ) {
+                return;
+            }
+
+            /*
+             * Solo crear una dirección cuando:
+             * - no se seleccionó una existente;
+             * - el usuario marcó Guardar.
+             */
+            if (
+                !$direccionOrigenId
+                && $guardarOrigen
+            ) {
+                B2cDireccion::firstOrCreate(
+                    [
+                        'user_id' => $userId,
+                        'tipo' => 'ORIGEN',
+                        'calle' =>
+                            $data['remitente_direccion'],
+                        'num_ext' =>
+                            $data['remitente_num_ext'],
+                        'cp' => $cpOrigen,
+                    ],
+                    [
+                        'alias' => $aliasOrigen,
+                        'nombre' =>
+                            $data['remitente_nombre'],
+                        'email' =>
+                            $data['remitente_email'],
+                        'telefono' =>
+                            $data['remitente_telefono'],
+                        'num_int' =>
+                            $data['remitente_num_int']
+                            ?? null,
+                        'colonia' =>
+                            $cotizacion->colonia_origen,
+                        'ciudad' =>
+                            $data['ciudad_origen'],
+                        'estado' =>
+                            $data['estado_origen'],
+                        'principal' => false,
+                        'activo' => true,
+                        'favorita' => false,
+                    ]
+                );
+            }
+
+            if (
+                !$direccionDestinoId
+                && $guardarDestino
+            ) {
+                B2cDireccion::firstOrCreate(
+                    [
+                        'user_id' => $userId,
+                        'tipo' => 'DESTINO',
+                        'calle' =>
+                            $data['destinatario_direccion'],
+                        'num_ext' =>
+                            $data['destinatario_num_ext'],
+                        'cp' => $cpDestino,
+                    ],
+                    [
+                        'alias' => $aliasDestino,
+                        'nombre' =>
+                            $data['destinatario_nombre'],
+                        'email' =>
+                            $data['destinatario_email']
+                            ?? null,
+                        'telefono' =>
+                            $data['destinatario_telefono'],
+                        'num_int' =>
+                            $data['destinatario_num_int']
+                            ?? null,
+                        'colonia' =>
+                            $cotizacion->colonia_destino,
+                        'ciudad' =>
+                            $data['ciudad_destino'],
+                        'estado' =>
+                            $data['estado_destino'],
+                        'principal' => false,
+                        'activo' => true,
+                        'favorita' => false,
+                    ]
+                );
+            }
+        }
+    );
+
+    if ($isPublicCheckout) {
+        return redirect()->route(
+            'b2c.pago',
+            $cotizacion->id
+        );
+    }
+
+    return redirect()->route(
+        'b2c.confirmar',
+        $cotizacion->id
+    );
+}
 
 public function pago(B2cCotizacion $cotizacion)
 {
@@ -621,74 +1351,335 @@ public function pagoPending(Request $request, B2cCotizacion $cotizacion)
     return view('b2c.pago-pending', compact('cotizacion'));
 }
 
-public function generarGuia(B2cCotizacion $cotizacion)
-{
-    if ($cotizacion->estatus !== 'PAGADA') {
-        abort(403, 'La cotización aún no está pagada.');
+public function generarGuia(
+    B2cCotizacion $cotizacion
+) {
+    /*
+     * Seguridad: solamente el propietario puede generar
+     * o recuperar la guía de la cotización.
+     */
+    if ($cotizacion->user_id !== auth()->id()) {
+        abort(403);
     }
 
-    if ($cotizacion->logistico !== 'Estafeta') {
-        return 'Por ahora conectaremos primero Estafeta. Logístico actual: ' . $cotizacion->logistico;
+    /*
+     * Idempotencia:
+     * Si la cotización ya tiene una guía válida, no se vuelve
+     * a consumir Estafeta Label.
+     */
+    if ($cotizacion->guia_id) {
+        $guiaExistente = Guia::withoutGlobalScopes()
+            ->find($cotizacion->guia_id);
+
+        $trackingExistente = trim(
+            (string) (
+                $guiaExistente?->tracking_number
+                ?: $cotizacion->tracking_number
+                ?: ''
+            )
+        );
+
+        $trackingValido =
+            $trackingExistente !== ''
+            && !str_contains(
+                $trackingExistente,
+                'Exception'
+            )
+            && !str_contains(
+                $trackingExistente,
+                'SAXParseException'
+            );
+
+        if ($guiaExistente && $trackingValido) {
+            $cotizacion->update([
+                'tracking_number' =>
+                    $guiaExistente->tracking_number,
+
+                'documento' =>
+                    $guiaExistente->documento,
+
+                'guia_estatus' => 'GENERADA',
+                'estatus' => 'GUIA_GENERADA',
+            ]);
+
+            $pdfUrl = $guiaExistente->documento
+                ? asset(
+                    'storage/'
+                    . basename(
+                        $guiaExistente->documento
+                    )
+                )
+                : null;
+
+            return redirect()
+                ->route(
+                    'b2c.pago.success',
+                    $cotizacion->id
+                )
+                ->with(
+                    'success',
+                    'La guía ya fue generada. Tracking: '
+                    . $trackingExistente
+                )
+                ->with(
+                    'pdf_url',
+                    $pdfUrl
+                );
+        }
     }
 
-    $payload = $this->buildEstafetaPayload($cotizacion);
+    /*
+     * Solo una cotización pagada o con error previo
+     * puede intentar generar la guía.
+     */
+    $estadosPermitidos = [
+        'PAGADA',
+        'ERROR_GENERACION_GUIA',
+    ];
 
-try {
-    $generador = new EstafetaCreacion();
-    $generador->parseoApi($payload);
-} catch (\Throwable $e) {
-    \Log::error('Error generando guía B2C', [
-        'cotizacion_id' => $cotizacion->id,
-        'error' => $e->getMessage(),
-    ]);
+    if (
+        !in_array(
+            $cotizacion->estatus,
+            $estadosPermitidos,
+            true
+        )
+    ) {
+        abort(
+            403,
+            'La cotización aún no está pagada.'
+        );
+    }
 
-    $cotizacion->update([
-        'guia_estatus' => 'ERROR_PROVEEDOR',
-        'estatus' => 'ERROR_GENERACION_GUIA',
-    ]);
+    /*
+     * Por ahora la generación automática está habilitada
+     * únicamente para Estafeta.
+     */
+    if (
+        strcasecmp(
+            trim((string) $cotizacion->logistico),
+            'Estafeta'
+        ) !== 0
+    ) {
+        return back()->with(
+            'error',
+            'La generación de guía todavía no está disponible '
+            . 'para el logístico seleccionado: '
+            . $cotizacion->logistico
+        );
+    }
 
-    return back()->with('error', 'No fue posible generar la guía. Error proveedor: ' . $e->getMessage());
-}
+    $payload = [];
+    $generador = null;
+    $guia = null;
 
-    $guia = Guia::withoutGlobalScopes()->orderBy('id', 'desc')->first();
+    try {
+        $payload = $this->buildEstafetaPayload(
+            $cotizacion
+        );
 
-    $tracking = $guia->tracking_number ?? null;
+        $pesoFacturable = (float) (
+            $cotizacion->peso_facturable
+            ?: $cotizacion->peso
+        );
 
-    if (!$tracking || str_contains($tracking, 'Exception') || str_contains($tracking, 'SAXParseException')) {
+        if ($pesoFacturable > 70.999) {
+            $cotizacion->update([
+                'guia_estatus' =>
+                    'ERROR_VALIDACION_PESO',
+            ]);
+
+            return back()->with(
+                'error',
+                'La guía no puede generarse porque el peso '
+                . 'facturable de '
+                . number_format($pesoFacturable, 2)
+                . ' kg supera el máximo permitido por Estafeta '
+                . '(70.99 kg). El pago permanece registrado.'
+            );
+        }
+
         $cotizacion->update([
-            'guia_id' => $guia->id ?? null,
-            'tracking_number' => null,
-            'documento' => null,
-            'guia_estatus' => 'ERROR_PROVEEDOR',
-            'estatus' => 'ERROR_GENERACION_GUIA',
+            'guia_estatus' => 'GENERANDO',
         ]);
 
-        return back()->with('error', 'Estafeta rechazó el payload: ' . ($tracking ?? 'Sin detalle'));
+        $generador = (
+            new EstafetaCreacion()
+        )->omitirCobroSaldoLegacy();
+
+        $generador->parseoApi($payload);
+
+        /*
+         * Recuperamos exactamente el ID creado por
+         * EstafetaCreacion.
+         */
+        $guiaId = $generador->getGuiaId();
+
+        if (!$guiaId) {
+            throw new \RuntimeException(
+                'El proveedor no devolvió el identificador '
+                . 'de la guía creada.'
+            );
+        }
+
+        $guia = Guia::withoutGlobalScopes()
+            ->find($guiaId);
+
+        if (!$guia) {
+            throw new \RuntimeException(
+                'La guía fue procesada, pero no fue '
+                . 'encontrada en el sistema.'
+            );
+        }
+
+        $tracking = trim(
+            (string) $guia->tracking_number
+        );
+
+        if (
+            $tracking === ''
+            || str_contains(
+                $tracking,
+                'Exception'
+            )
+            || str_contains(
+                $tracking,
+                'SAXParseException'
+            )
+        ) {
+            throw new \RuntimeException(
+                'Estafeta rechazó el payload: '
+                . (
+                    $tracking !== ''
+                        ? $tracking
+                        : 'Sin detalle'
+                )
+            );
+        }
+
+        /*
+         * La cotización se relaciona únicamente con
+         * la guía creada por este proceso.
+         */
+        $cotizacion->update([
+            'guia_id' => $guia->id,
+            'tracking_number' =>
+                $guia->tracking_number,
+
+            'documento' =>
+                $guia->documento,
+
+            'guia_estatus' => 'GENERADA',
+            'estatus' => 'GUIA_GENERADA',
+        ]);
+    } catch (\Throwable $e) {
+        /*
+         * Si Estafeta alcanzó a crear el registro de guía
+         * antes de una falla posterior, conservamos ese ID.
+         * En el siguiente intento se recuperará sin volver
+         * a solicitar otra etiqueta.
+         */
+        $guiaIdParcial = $generador
+            ? $generador->getGuiaId()
+            : null;
+
+        \Log::error(
+            'Error generando guía B2C',
+            [
+                'cotizacion_id' =>
+                    $cotizacion->id,
+
+                'guia_id_parcial' =>
+                    $guiaIdParcial,
+
+                'exception' =>
+                    get_class($e),
+
+                'error' =>
+                    $e->getMessage(),
+
+                'file' =>
+                    $e->getFile(),
+
+                'line' =>
+                    $e->getLine(),
+
+                'trace' =>
+                    $e->getTraceAsString(),
+
+                'payload_keys' =>
+                    array_keys($payload),
+            ]
+        );
+
+        $cotizacion->update([
+            'guia_id' =>
+                $guiaIdParcial
+                ?: $cotizacion->guia_id,
+
+            'guia_estatus' =>
+                'ERROR_PROVEEDOR',
+
+            'estatus' =>
+                'ERROR_GENERACION_GUIA',
+        ]);
+
+        return back()->with(
+            'error',
+            'No fue posible generar la guía. '
+            . $e->getMessage()
+        );
     }
 
-    $cotizacion->update([
-        'guia_id' => $guia->id ?? null,
-        'tracking_number' => $guia->tracking_number ?? null,
-        'documento' => $guia->documento ?? null,
-        'guia_estatus' => 'GENERADA',
-        'estatus' => 'GUIA_GENERADA',
-    ]);
+    $cotizacion->refresh();
 
-    $pdfUrl = asset('storage/' . basename($cotizacion->documento));
+    $pdfUrl = $cotizacion->documento
+        ? asset(
+            'storage/'
+            . basename(
+                $cotizacion->documento
+            )
+        )
+        : null;
 
     return redirect()
-        ->route('b2c.pago.success', $cotizacion->id)
-        ->with('success', 'Guía generada correctamente. Tracking: ' . ($guia->tracking_number ?? 'N/A'))
-        ->with('pdf_url', $pdfUrl);
-    }
+        ->route(
+            'b2c.pago.success',
+            $cotizacion->id
+        )
+        ->with(
+            'success',
+            'Guía generada correctamente. Tracking: '
+            . $cotizacion->tracking_number
+        )
+        ->with(
+            'pdf_url',
+            $pdfUrl
+        );
+}
 
 private function buildEstafetaPayload(B2cCotizacion $cotizacion): array
 {
     $cpOrigen = substr($cotizacion->cp_origen, 0, 5);
     $cpDestino = substr($cotizacion->cp_destino, 0, 5);
+    /*
+     * Referencia visible en la etiqueta.
+     * No enviar marcadores internos como
+     * B2C_NUEVO_ENVIO o B2C_LOGUEADO.
+     */
+    $referenciaEtiqueta =
+        'ZIGO-' . $cotizacion->id;
 
-    [$alto, $largo, $ancho] = array_pad(
-        array_map('trim', explode('x', strtolower($cotizacion->medidas ?? '20x20x20'))),
+    [$largo, $ancho, $alto] = array_pad(
+        array_map(
+            'trim',
+            explode(
+                'x',
+                strtolower(
+                    $cotizacion->medidas
+                    ?? '20x20x20'
+                )
+            )
+        ),
         3,
         20
     );
@@ -712,7 +1703,7 @@ private function buildEstafetaPayload(B2cCotizacion $cotizacion): array
         'labelDefinition' => [
             'wayBillDocument' => [
                 'content' => $cotizacion->contenido ?? 'Paquete',
-                'aditionalInfo' => $cotizacion->referencia ?: 'SIN REFERENCIA',
+                'aditionalInfo' => $referenciaEtiqueta ?: 'SIN REFERENCIA',
             ],
             'itemDescription' => [
                 'parcelId' => 4,
@@ -750,7 +1741,7 @@ private function buildEstafetaPayload(B2cCotizacion $cotizacion): array
                         'countryName' => 'MEX',
                         'ciudad' => $cotizacion->ciudad_origen,
                         'entidad' => $cotizacion->estado_origen,
-                        'addressReference' => $cotizacion->referencia ?: 'SIN REFERENCIA',
+                        'addressReference' => $referenciaEtiqueta ?: 'SIN REFERENCIA',
                         'externalNum' => $cotizacion->remitente_num_ext,
                         'indoorInformation' => $cotizacion->remitente_num_int ?? 'SN',
                     ],
@@ -777,7 +1768,7 @@ private function buildEstafetaPayload(B2cCotizacion $cotizacion): array
                             'countryName' => 'MEX',
                             'ciudad' => $cotizacion->ciudad_destino,
                             'entidad' => $cotizacion->estado_destino,
-                            'addressReference' => $cotizacion->referencia ?: 'SIN REFERENCIA',
+                            'addressReference' => $referenciaEtiqueta ?: 'SIN REFERENCIA',
                             'externalNum' => $cotizacion->destinatario_num_ext,
                             'indoorInformation' => $cotizacion->destinatario_num_int ?? 'SN',
                         ],
@@ -876,16 +1867,50 @@ public function dashboardB2c()
 
     $totalCotizaciones = B2cCotizacion::where('user_id', $userId)->count();
 
-    $totalPagadas = B2cCotizacion::where('user_id', $userId)
-        ->where('estatus', 'PAGADA')
+    $totalPagadas = B2cCotizacion::where(
+        'user_id',
+        $userId
+    )
+        ->where(function ($query) {
+            $query
+                ->whereIn(
+                    'estatus',
+                    [
+                        'PAGADA',
+                        'GUIA_GENERADA',
+                    ]
+                )
+                ->orWhereIn(
+                    'payment_status',
+                    [
+                        'approved',
+                        'saldo_prepago',
+                    ]
+                );
+        })
         ->count();
 
     $totalGuias = B2cCotizacion::where('user_id', $userId)
         ->whereNotNull('tracking_number')
         ->count();
 
-    $totalErrores = B2cCotizacion::where('user_id', $userId)
-        ->where('estatus', 'like', '%ERROR%')
+    $totalErrores = B2cCotizacion::where(
+        'user_id',
+        $userId
+    )
+        ->where(function ($query) {
+            $query
+                ->where(
+                    'estatus',
+                    'like',
+                    '%ERROR%'
+                )
+                ->orWhere(
+                    'guia_estatus',
+                    'like',
+                    'ERROR%'
+                );
+        })
         ->count();
 
     $ultimosEnvios = B2cCotizacion::where('user_id', $userId)
@@ -923,12 +1948,29 @@ public function detalleEnvioB2c(B2cCotizacion $cotizacion)
 
 public function misPagosB2c()
 {
-    $pagos = B2cCotizacion::where('user_id', auth()->id())
-        ->whereNotNull('payment_id')
+    $pagos = B2cCotizacion::where(
+        'user_id',
+        auth()->id()
+    )
+        ->where(function ($query) {
+            $query
+                ->whereNotNull(
+                    'payment_id'
+                )
+                ->orWhereNotNull(
+                    'payment_status'
+                )
+                ->orWhereNotNull(
+                    'payment_external_reference'
+                );
+        })
         ->latest()
         ->get();
 
-    return view('b2c.mis-pagos', compact('pagos'));
+    return view(
+        'b2c.mis-pagos',
+        compact('pagos')
+    );
 }
 
 public function nuevoEnvioB2c()
@@ -989,6 +2031,7 @@ public function guardarNuevoEnvioB2c(Request $request)
 
     $cotizacion = B2cCotizacion::create([
         'user_id' => auth()->id(),
+        'referencia' => 'B2C_NUEVO_ENVIO',
 
         'cp_origen' => $data['cp_origen'],
         'colonia_origen' => $data['colonia_origen'],
@@ -1281,32 +2324,226 @@ public function guardarIncidenciaB2c(Request $request)
         ->with('success', 'Incidencia registrada correctamente.');
 }
 
-public function guardarPaqueteB2c(\Illuminate\Http\Request $request, \App\Models\B2cCotizacion $cotizacion)
-{
+public function guardarPaqueteB2c(
+    Request $request,
+    B2cCotizacion $cotizacion
+) {
     if ($cotizacion->user_id !== auth()->id()) {
         abort(403);
     }
 
+    if (
+        $cotizacion->guia_id ||
+        $cotizacion->estatus === 'GUIA_GENERADA'
+    ) {
+        return back()->with(
+            'error',
+            'No es posible modificar un envío que ya tiene guía.'
+        );
+    }
+
     $data = $request->validate([
-        'tipo_envio' => ['required', 'string', 'max:30'],
-        'peso' => ['required', 'numeric', 'min:0.1'],
-        'largo' => ['required', 'numeric', 'min:1'],
-        'ancho' => ['required', 'numeric', 'min:1'],
-        'alto' => ['required', 'numeric', 'min:1'],
-        'contenido' => ['required', 'string', 'max:255'],
-        'valor_declarado' => ['nullable', 'numeric', 'min:0'],
-        'acepta_no_prohibidos' => ['accepted'],
+        'tipo_envio' => [
+            'required',
+            'in:caja,sobre',
+        ],
+
+        'peso' => [
+            'nullable',
+            'required_if:tipo_envio,caja',
+            'numeric',
+            'min:0.1',
+        ],
+
+        'largo' => [
+            'nullable',
+            'required_if:tipo_envio,caja',
+            'numeric',
+            'min:1',
+        ],
+
+        'ancho' => [
+            'nullable',
+            'required_if:tipo_envio,caja',
+            'numeric',
+            'min:1',
+        ],
+
+        'alto' => [
+            'nullable',
+            'required_if:tipo_envio,caja',
+            'numeric',
+            'min:1',
+        ],
+
+        'contenido' => [
+            'required',
+            'string',
+            'max:255',
+        ],
+
+        'valor_declarado' => [
+            'nullable',
+            'numeric',
+            'min:0',
+        ],
+
+        'requiere_seguro_envio' => [
+            'nullable',
+            'boolean',
+        ],
+
+        'acepta_no_prohibidos' => [
+            'accepted',
+        ],
     ]);
+
+    $tipoEnvio = strtolower(
+        trim($data['tipo_envio'])
+    );
+
+    /*
+     * Cálculo del peso facturable.
+     */
+    if ($tipoEnvio === 'sobre') {
+        $pesoReal = 1.00;
+        $pesoVolumetrico = 0.00;
+        $pesoFacturable = 1.00;
+        $medidas = null;
+    } else {
+        $pesoReal = round(
+            (float) $data['peso'],
+            2
+        );
+
+        $largo = (float) $data['largo'];
+        $ancho = (float) $data['ancho'];
+        $alto = (float) $data['alto'];
+
+        $pesoVolumetrico = round(
+            ($largo * $ancho * $alto) / 5000,
+            2
+        );
+
+        $pesoFacturable = (float) ceil(
+            max(
+                $pesoReal,
+                $pesoVolumetrico
+            )
+        );
+
+        $formatearMedida = static function (
+            float $valor
+        ): string {
+            return rtrim(
+                rtrim(
+                    number_format(
+                        $valor,
+                        2,
+                        '.',
+                        ''
+                    ),
+                    '0'
+                ),
+                '.'
+            );
+        };
+
+        $medidas =
+            $formatearMedida($largo)
+            . 'x'
+            . $formatearMedida($ancho)
+            . 'x'
+            . $formatearMedida($alto);
+    }
+
+    /*
+     * Cálculo de protección.
+     */
+    $valorDeclarado = round(
+        (float) ($data['valor_declarado'] ?? 0),
+        2
+    );
+
+    $requiereSeguro = (bool) (
+        $data['requiere_seguro_envio'] ?? false
+    );
+
+    if (
+        $requiereSeguro &&
+        $valorDeclarado <= 0
+    ) {
+        return back()
+            ->withInput()
+            ->with(
+                'error',
+                'Para proteger tu envío debes capturar '
+                . 'un valor declarado mayor a cero.'
+            );
+    }
+
+    $seguroPorcentaje = 2.00;
+    $seguroIvaPorcentaje = 16.00;
+
+    $seguroBase = 0.00;
+    $seguroIva = 0.00;
+    $seguroMonto = 0.00;
+
+    if ($requiereSeguro) {
+        $seguroBase = round(
+            $valorDeclarado
+            * ($seguroPorcentaje / 100),
+            2
+        );
+
+        $seguroIva = round(
+            $seguroBase
+            * ($seguroIvaPorcentaje / 100),
+            2
+        );
+
+        $seguroMonto = round(
+            $seguroBase + $seguroIva,
+            2
+        );
+    }
 
     $cotizacion->update([
-        'tipo_envio' => $data['tipo_envio'],
-        'peso' => $data['peso'],
-        'medidas' => $data['largo'].'x'.$data['ancho'].'x'.$data['alto'],
+        'tipo_envio' => $tipoEnvio,
+
+        /*
+         * peso conserva el valor utilizado para cotizar.
+         */
+        'peso' => $pesoFacturable,
+        'peso_real' => $pesoReal,
+        'peso_volumetrico' => $pesoVolumetrico,
+        'peso_facturable' => $pesoFacturable,
+
+        'medidas' => $medidas,
         'contenido' => $data['contenido'],
-        'valor_declarado' => $data['valor_declarado'] ?? 0,
+
+        'valor_declarado' => $valorDeclarado,
+        'requiere_seguro_envio' => $requiereSeguro,
+        'seguro_porcentaje' => $seguroPorcentaje,
+        'seguro_iva_porcentaje' => $seguroIvaPorcentaje,
+        'seguro_monto' => $seguroMonto,
+
+        /*
+         * Se debe seleccionar nuevamente el servicio
+         * y calcular su precio.
+         */
+        'logistico' => null,
+        'servicio' => null,
+        'precio' => null,
+        'precio_sin_seguro' => null,
+
+        'estatus' => 'PAQUETE_CAPTURADO',
     ]);
 
-    return redirect()->route('b2c.opciones', $cotizacion->id);
+    return redirect()->route(
+        'b2c.opciones',
+        $cotizacion->id
+    );
 }
 
 public function opcionesB2c(B2cCotizacion $cotizacion)
@@ -1437,38 +2674,119 @@ public function opcionesB2c(B2cCotizacion $cotizacion)
         return null;
     }
 
-    private function applyPricingToCotizacion(B2cCotizacion $cotizacion, array $option): void
-    {
+    private function applyPricingToCotizacion(
+        B2cCotizacion $cotizacion,
+        array $option
+    ): void {
         $pricing = $option['pricing'];
+
+        /*
+        * Precio final de la mensajería después de aplicar
+        * margen, ajuste y descuento ZIGO.
+        */
+        $precioEnvio = round(
+            (float) $pricing['final_price'],
+            2
+        );
+
+        /*
+        * En Nuevo envío la protección ya fue seleccionada
+        * en la pantalla Paquete.
+        *
+        * En Cotizador rápido todavía se selecciona en Checkout,
+        * por lo que aquí normalmente será cero.
+        */
+        $proteccionTotal = 0.00;
+
+        if (
+            (bool) $cotizacion->requiere_seguro_envio &&
+            (float) $cotizacion->seguro_monto > 0
+        ) {
+            $proteccionTotal = round(
+                (float) $cotizacion->seguro_monto,
+                2
+            );
+        }
+
+        /*
+        * Total que pagará el cliente.
+        */
+        $precioTotal = round(
+            $precioEnvio + $proteccionTotal,
+            2
+        );
 
         $cotizacion->update([
             'logistico' => $option['logistico'],
             'servicio' => $option['servicio'],
 
-            // Campo existente: debe guardar el precio final que paga el cliente.
-            'precio' => $pricing['final_price'],
+            /*
+            * Desglose comercial.
+            */
+            'precio_sin_seguro' => $precioEnvio,
 
-            // Auditoría pricing ZIGO.
-            'provider_base_price' => $pricing['base_price'],
-            'zigo_margin_percentage' => $pricing['margin_percentage'],
-            'zigo_fixed_fee' => $pricing['fixed_fee'],
-            'zigo_margin_amount' => $pricing['margin_amount'],
+            /*
+            * precio es el total que paga el cliente:
+            * mensajería + protección.
+            */
+            'precio' => $precioTotal,
 
-            'zigo_adjustment_type' => $pricing['adjustment_type'],
-            'zigo_adjustment_value' => $pricing['adjustment_value'],
-            'zigo_adjustment_amount' => $pricing['adjustment_amount'],
+            /*
+            * Auditoría de pricing ZIGO.
+            * Estos campos corresponden al precio de mensajería,
+            * sin incorporar la protección.
+            */
+            'provider_base_price' =>
+                $pricing['base_price'],
 
-            'zigo_discount_type' => $pricing['discount_type'],
-            'zigo_discount_value' => $pricing['discount_value'],
-            'zigo_discount_amount' => $pricing['discount_amount'],
+            'zigo_margin_percentage' =>
+                $pricing['margin_percentage'],
 
-            'zigo_final_price' => $pricing['final_price'],
-            'zigo_profit_amount' => $pricing['profit_amount'],
-            'zigo_customer_segment' => $pricing['customer_segment'],
+            'zigo_fixed_fee' =>
+                $pricing['fixed_fee'],
 
-            'zigo_pricing_rule_id' => $pricing['pricing_rule_id'],
-            'zigo_pricing_adjustment_id' => $pricing['adjustment_id'],
-            'zigo_client_pricing_rule_id' => $pricing['client_pricing_rule_id'],
+            'zigo_margin_amount' =>
+                $pricing['margin_amount'],
+
+            'zigo_adjustment_type' =>
+                $pricing['adjustment_type'],
+
+            'zigo_adjustment_value' =>
+                $pricing['adjustment_value'],
+
+            'zigo_adjustment_amount' =>
+                $pricing['adjustment_amount'],
+
+            'zigo_discount_type' =>
+                $pricing['discount_type'],
+
+            'zigo_discount_value' =>
+                $pricing['discount_value'],
+
+            'zigo_discount_amount' =>
+                $pricing['discount_amount'],
+
+            /*
+            * Mantener zigo_final_price como precio final
+            * exclusivo de mensajería.
+            */
+            'zigo_final_price' =>
+                $precioEnvio,
+
+            'zigo_profit_amount' =>
+                $pricing['profit_amount'],
+
+            'zigo_customer_segment' =>
+                $pricing['customer_segment'],
+
+            'zigo_pricing_rule_id' =>
+                $pricing['pricing_rule_id'],
+
+            'zigo_pricing_adjustment_id' =>
+                $pricing['adjustment_id'],
+
+            'zigo_client_pricing_rule_id' =>
+                $pricing['client_pricing_rule_id'],
 
             'estatus' => 'SELECCIONADA',
         ]);

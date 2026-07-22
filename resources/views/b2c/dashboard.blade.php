@@ -330,7 +330,7 @@
                                 <td>{{ $envio->logistico ?? '-' }}</td>
                                 <td>{{ $envio->servicio ?? '-' }}</td>
                                 <td>${{ number_format($envio->precio ?? 0, 2) }}</td>
-                                <td>{{ $envio->estatus ?? '-' }}</td>
+                                <td>{{ $envio->estatus_label }}</td>
                                 <td>{{ $envio->tracking_number ?? '-' }}</td>
                             </tr>
                         @endforeach

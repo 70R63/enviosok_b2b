@@ -298,6 +298,59 @@
             padding:20px;
         }
 
+        .saved-address-box {
+            margin-bottom: 18px;
+            padding: 14px;
+            border: 1px solid #bfdbfe;
+            border-radius: 12px;
+            background: #eff6ff;
+        }
+
+        .saved-address-box select {
+            margin-bottom: 8px;
+        }
+
+        .saved-address-note {
+            margin-bottom: 12px;
+            color: #475569;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .save-address-check {
+            display: flex;
+            align-items: flex-start;
+            gap: 9px;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+
+        .save-address-check input[type="checkbox"] {
+            flex: 0 0 auto;
+            width: 17px;
+            height: 17px;
+            min-height: auto;
+            margin: 1px 0 0;
+        }
+
+        .save-address-check span {
+            color: #334155;
+            font-size: 13px;
+        }
+
+        .manage-addresses-link {
+            display: inline-block;
+            margin-top: 8px;
+            color: #3151d3;
+            font-size: 13px;
+            font-weight: 800;
+            text-decoration: none;
+        }
+
+        .manage-addresses-link:hover {
+            text-decoration: underline;
+        }
+
         @media(max-width:900px){
             .layout{grid-template-columns:1fr}
             .sidebar{display:none}
@@ -333,93 +386,6 @@
                 grid-column:auto !important;
                 grid-row:auto !important;
             }
-        }
-
-        .modal-pago{
-            display:none;
-            position:fixed;
-            inset:0;
-            background:rgba(15,23,42,.62);
-            z-index:9999;
-            align-items:center;
-            justify-content:center;
-            padding:20px;
-        }
-
-        .modal-card{
-            width:min(420px, 100%);
-            background:#ffffff;
-            border-radius:18px;
-            padding:28px;
-            box-shadow:0 24px 60px rgba(0,0,0,.28);
-        }
-
-        .modal-card h2{
-            margin:0 0 10px;
-        }
-
-        .modal-text{
-            color:#64748b;
-            margin:0 0 18px;
-            line-height:1.5;
-        }
-
-        .modal-total{
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            padding:14px;
-            margin-bottom:16px;
-            background:#f8fafc;
-            border-radius:12px;
-            font-weight:900;
-        }
-
-        .modal-payment-btn{
-            width:100%;
-            border:none;
-            border-radius:12px;
-            padding:14px 18px;
-            margin-top:10px;
-            color:#ffffff;
-            font-size:15px;
-            font-weight:900;
-            cursor:pointer;
-        }
-
-        .modal-payment-btn.mercado-pago{
-            background:#f97316;
-        }
-
-        .modal-payment-btn.saldo{
-            background:#16a34a;
-        }
-
-        .modal-payment-btn:disabled{
-            opacity:.45;
-            cursor:not-allowed;
-        }
-
-        .modal-saldo-info{
-            padding:10px 12px;
-            margin-top:10px;
-            border-radius:10px;
-            background:#fef2f2;
-            color:#991b1b;
-            font-weight:800;
-            font-size:13px;
-        }
-
-        .modal-cancel{
-            display:block;
-            width:100%;
-            margin-top:14px;
-            padding:10px;
-            background:transparent;
-            border:none;
-            color:#475569;
-            font-weight:800;
-            cursor:pointer;
         }
 
     </style>
@@ -472,16 +438,88 @@
         >
             @csrf
 
-            <input
-                type="hidden"
-                name="metodo_pago"
-                id="metodo_pago"
-                value="{{ old('metodo_pago', 'mercado_pago') }}"
-            >
-
             <div class="grid">
                     <section class="card">
                         <h2>Remitente</h2>
+
+                        @if(
+                            auth()->check()
+                            && !$isPublicCheckout
+                        )
+                            <div class="saved-address-box">
+                                <label for="direccion_origen_id">
+                                    Usar dirección guardada
+                                </label>
+
+                                <select
+                                    id="direccion_origen_id"
+                                    name="direccion_origen_id"
+                                >
+                                    <option value="">
+                                        Capturar una dirección para este envío
+                                    </option>
+
+                                    @foreach(
+                                        $direccionesOrigen
+                                        as $direccion
+                                    )
+                                        <option
+                                            value="{{ $direccion->id }}"
+                                        >
+                                            {{ $direccion->alias
+                                                ?: $direccion->nombre
+                                            }}
+                                            —
+                                            {{ $direccion->calle }}
+                                            {{ $direccion->num_ext }}
+                                        </option>
+                                    @endforeach
+                                </select>
+
+                                <div class="saved-address-note">
+                                    Solo se muestran direcciones correspondientes
+                                    al CP {{ $cotizacion->cp_origen }}.
+                                    Seleccionarla no modifica el registro guardado.
+                                </div>
+
+                                <label class="save-address-check">
+                                    <input
+                                        type="hidden"
+                                        name="guardar_origen"
+                                        value="0"
+                                    >
+
+                                    <input
+                                        type="checkbox"
+                                        id="guardar_origen"
+                                        name="guardar_origen"
+                                        value="1"
+                                    >
+
+                                    <span>
+                                        Guardar esta dirección como una nueva
+                                        dirección de origen
+                                    </span>
+                                </label>
+
+                                <input
+                                    type="text"
+                                    id="alias_origen"
+                                    name="alias_origen"
+                                    maxlength="100"
+                                    placeholder="Alias, por ejemplo: Casa u Oficina"
+                                >
+
+                                <a
+                                    href="{{ route(
+                                        'b2c.mis-direcciones'
+                                    ) }}"
+                                    class="manage-addresses-link"
+                                >
+                                    Administrar mis direcciones
+                                </a>
+                            </div>
+                        @endif
 
                         <div class="form-grid">
                             <div>
@@ -533,6 +571,85 @@
 
                     <section class="card">
                         <h2>Destinatario</h2>
+
+                        @if(
+                            auth()->check()
+                            && !$isPublicCheckout
+                        )
+                            <div class="saved-address-box">
+                                <label for="direccion_destino_id">
+                                    Usar dirección guardada
+                                </label>
+
+                                <select
+                                    id="direccion_destino_id"
+                                    name="direccion_destino_id"
+                                >
+                                    <option value="">
+                                        Capturar una dirección para este envío
+                                    </option>
+
+                                    @foreach(
+                                        $direccionesDestino
+                                        as $direccion
+                                    )
+                                        <option
+                                            value="{{ $direccion->id }}"
+                                        >
+                                            {{ $direccion->alias
+                                                ?: $direccion->nombre
+                                            }}
+                                            —
+                                            {{ $direccion->calle }}
+                                            {{ $direccion->num_ext }}
+                                        </option>
+                                    @endforeach
+                                </select>
+
+                                <div class="saved-address-note">
+                                    Solo se muestran direcciones correspondientes
+                                    al CP {{ $cotizacion->cp_destino }}.
+                                    Seleccionarla no modifica el registro guardado.
+                                </div>
+
+                                <label class="save-address-check">
+                                    <input
+                                        type="hidden"
+                                        name="guardar_destino"
+                                        value="0"
+                                    >
+
+                                    <input
+                                        type="checkbox"
+                                        id="guardar_destino"
+                                        name="guardar_destino"
+                                        value="1"
+                                    >
+
+                                    <span>
+                                        Guardar esta dirección como una nueva
+                                        dirección de destino
+                                    </span>
+                                </label>
+
+                                <input
+                                    type="text"
+                                    id="alias_destino"
+                                    name="alias_destino"
+                                    maxlength="100"
+                                    placeholder="Alias, por ejemplo: Cliente frecuente"
+                                >
+
+                                <a
+                                    href="{{ route(
+                                        'b2c.mis-direcciones'
+                                    ) }}"
+                                    class="manage-addresses-link"
+                                >
+                                    Administrar mis direcciones
+                                </a>
+                            </div>
+                        @endif
 
                         <div class="form-grid">
                             <div>
@@ -591,21 +708,20 @@
                                 <input type="text" name="contenido" placeholder="Ej. ropa, documentos, accesorios" required>
                             </div>
 
-                            <div>
+                            <div class="full">
                                 <label>Valor declarado</label>
+
                                 <input
                                     type="number"
                                     name="valor_declarado"
                                     id="valor_declarado"
                                     min="0"
                                     step="0.01"
-                                    value="{{ old('valor_declarado', $cotizacion->valor_declarado ?? 0) }}"
+                                    value="{{ old(
+                                        'valor_declarado',
+                                        $cotizacion->valor_declarado ?? 0
+                                    ) }}"
                                 >
-                            </div>
-
-                            <div>
-                                <label>Referencia opcional</label>
-                                <input type="text" name="referencia" value="{{ old('referencia', $cotizacion->referencia) }}">
                             </div>
 
                             <div class="insurance-box">
@@ -683,69 +799,83 @@
 
                     @if(auth()->check() && !$isPublicCheckout)
                         <button
+                            type="submit"
                             class="btn"
-                            type="button"
-                            id="continuar_pago_btn"
                         >
-                            Continuar a pago
+                            Revisar y continuar
                         </button>
                     @else
-                        <button class="btn" type="submit">
+                        <button
+                            type="submit"
+                            class="btn"
+                        >
                             Continuar a pago
                         </button>
                     @endif
 
                     @if(auth()->check() && !$isPublicCheckout)
-                    <div class="saldo-box">
+                            <div class="saldo-box">
+                                <div class="saldo-line">
+                                    <span>Saldo disponible</span>
 
-                        <div class="saldo-line">
-                                <span>Saldo disponible</span>
+                                    <strong id="saldo_disponible_text">
+                                        ${{ number_format(
+                                            $saldo->saldo ?? 0,
+                                            2
+                                        ) }}
+                                    </strong>
+                                </div>
 
-                                <strong id="saldo_disponible_text">
-                                    ${{ number_format($saldo->saldo ?? 0, 2) }}
-                                </strong>
+                                <div class="saldo-line">
+                                    <span>Costo de envío</span>
+
+                                    <strong id="saldo_costo_envio">
+                                        ${{ number_format(
+                                            $precioBaseResumen,
+                                            2
+                                        ) }}
+                                    </strong>
+                                </div>
+
+                                <div class="saldo-line">
+                                    <span>Protección + IVA</span>
+
+                                    <strong id="saldo_seguro_total">
+                                        $0.00
+                                    </strong>
+                                </div>
+
+                                <div
+                                    class="saldo-line"
+                                    style="
+                                        border-top:1px solid #cbd5e1;
+                                        padding-top:12px;
+                                    "
+                                >
+                                    <span>Total a pagar</span>
+
+                                    <strong id="saldo_total_pagar">
+                                        ${{ number_format(
+                                            $totalResumen,
+                                            2
+                                        ) }}
+                                    </strong>
+                                </div>
+
+                                <div
+                                    id="saldo_estado"
+                                    class="saldo-error"
+                                    style="display:none;"
+                                ></div>
+
+                                <a
+                                    href="{{ route('b2c.prepago') }}"
+                                    class="saldo-recargar"
+                                    id="saldo_recargar"
+                                >
+                                    Recargar saldo
+                                </a>
                             </div>
-
-                            <div class="saldo-line">
-                                <span>Costo de envío</span>
-
-                                <strong id="saldo_costo_envio">
-                                    ${{ number_format($precioBaseResumen, 2) }}
-                                </strong>
-                            </div>
-
-                            <div class="saldo-line">
-                                <span>Protección + IVA</span>
-
-                                <strong id="saldo_seguro_total">
-                                    $0.00
-                                </strong>
-                            </div>
-
-                            <div class="saldo-line" style="
-                                border-top:1px solid #cbd5e1;
-                                padding-top:12px;
-                            ">
-                                <span>Total a pagar</span>
-
-                                <strong id="saldo_total_pagar">
-                                    ${{ number_format($totalResumen, 2) }}
-                                </strong>
-                            </div>
-
-                            <div
-                                id="saldo_estado"
-                                class="saldo-error"
-                                style="display:none;"
-                            ></div>
-
-                            <a
-                                href="{{ route('b2c.prepago') }}"
-                                class="saldo-recargar"
-                                id="saldo_recargar"
-                            >
-                                Recargar saldo
-                            </a>
                         @endif
                     </div>                
                 </aside>
@@ -754,411 +884,465 @@
     </main>
 </div>
 
-@if(auth()->check() && !$isPublicCheckout)
-<div id="modalPago" class="modal-pago">
-    <div class="modal-card">
-        <h2>¿Cómo deseas pagar?</h2>
-
-        <p class="modal-text">
-            Los datos del envío están completos. Selecciona el método de pago para continuar.
-        </p>
-
-        <div class="modal-total">
-            <span>Total a pagar</span>
-
-            <strong id="modal_total_pagar">
-                ${{ number_format($totalResumen, 2) }} MXN
-            </strong>
-        </div>
-
-        <button
-            type="button"
-            id="pagar_mercado_pago"
-            class="modal-payment-btn mercado-pago"
-        >
-            Mercado Pago
-        </button>
+        <script>
+            document.addEventListener(
+                'DOMContentLoaded',
+                function () {
+                    const precioBaseEnvio = @json(
+                        (float) (
+                            $cotizacion->precio_sin_seguro
+                            ?: $cotizacion->precio
+                        )
+                    );
+
+                    const saldoDisponible = @json(
+                        auth()->check() && isset($saldo)
+                            ? (float) $saldo->saldo
+                            : 0
+                    );
+
+                    const seguroPorcentaje = 2;
+                    const seguroIvaPorcentaje = 16;
+
+                    const valorDeclaradoInput =
+                        document.getElementById(
+                            'valor_declarado'
+                        );
+
+                    const requiereSeguroInput =
+                        document.getElementById(
+                            'requiere_seguro_envio'
+                        );
+
+                    const insuranceError =
+                        document.getElementById(
+                            'insurance_error'
+                        );
+
+                    const seguroPreview =
+                        document.getElementById(
+                            'seguro_monto_preview'
+                        );
+
+                    const totalPreview =
+                        document.getElementById(
+                            'total_con_seguro_preview'
+                        );
+
+                    const seguroBasePreview =
+                        document.getElementById(
+                            'seguro_base_preview'
+                        );
+
+                    const seguroIvaPreview =
+                        document.getElementById(
+                            'seguro_iva_preview'
+                        );
+
+                    const resumenSeguroBase =
+                        document.getElementById(
+                            'resumen_seguro_base'
+                        );
+
+                    const resumenSeguroIva =
+                        document.getElementById(
+                            'resumen_seguro_iva'
+                        );
+
+                    const resumenTotal =
+                        document.getElementById(
+                            'resumen_total'
+                        );
+
+                    const saldoCostoEnvio =
+                        document.getElementById(
+                            'saldo_costo_envio'
+                        );
+
+                    const saldoSeguroTotal =
+                        document.getElementById(
+                            'saldo_seguro_total'
+                        );
+
+                    const saldoTotalPagar =
+                        document.getElementById(
+                            'saldo_total_pagar'
+                        );
+
+                    const saldoEstado =
+                        document.getElementById(
+                            'saldo_estado'
+                        );
+
+                    function money(value) {
+                        return '$'
+                            + Number(value || 0).toFixed(2)
+                            + ' MXN';
+                    }
+
+                    function calcularSeguroVisual() {
+                        const valorDeclarado =
+                            parseFloat(
+                                valorDeclaradoInput?.value
+                                || 0
+                            ) || 0;
+
+                        const requiereSeguro =
+                            requiereSeguroInput?.checked
+                            || false;
+
+                        let seguroBase = 0;
+                        let seguroIva = 0;
+                        let seguroMonto = 0;
+
+                        if (
+                            requiereSeguro
+                            && valorDeclarado > 0
+                        ) {
+                            seguroBase =
+                                valorDeclarado
+                                * (
+                                    seguroPorcentaje
+                                    / 100
+                                );
+
+                            seguroIva =
+                                seguroBase
+                                * (
+                                    seguroIvaPorcentaje
+                                    / 100
+                                );
+
+                            seguroMonto =
+                                seguroBase
+                                + seguroIva;
+                        }
+
+                        const total =
+                            precioBaseEnvio
+                            + seguroMonto;
+
+                        if (seguroPreview) {
+                            seguroPreview.textContent =
+                                money(seguroMonto);
+                        }
+
+                        if (seguroBasePreview) {
+                            seguroBasePreview.textContent =
+                                money(seguroBase);
+                        }
+
+                        if (seguroIvaPreview) {
+                            seguroIvaPreview.textContent =
+                                money(seguroIva);
+                        }
+
+                        if (resumenSeguroBase) {
+                            resumenSeguroBase.textContent =
+                                money(seguroBase);
+                        }
+
+                        if (resumenSeguroIva) {
+                            resumenSeguroIva.textContent =
+                                money(seguroIva);
+                        }
+
+                        if (totalPreview) {
+                            totalPreview.textContent =
+                                money(total);
+                        }
+
+                        if (resumenTotal) {
+                            resumenTotal.textContent =
+                                money(total);
+                        }
+
+                        if (saldoCostoEnvio) {
+                            saldoCostoEnvio.textContent =
+                                money(precioBaseEnvio);
+                        }
+
+                        if (saldoSeguroTotal) {
+                            saldoSeguroTotal.textContent =
+                                money(seguroMonto);
+                        }
+
+                        if (saldoTotalPagar) {
+                            saldoTotalPagar.textContent =
+                                money(total);
+                        }
+
+                        if (insuranceError) {
+                            insuranceError.style.display =
+                                requiereSeguro
+                                && valorDeclarado <= 0
+                                    ? 'block'
+                                    : 'none';
+                        }
+
+                        if (saldoEstado) {
+                            const saldoSuficiente =
+                                saldoDisponible >= total;
+
+                            saldoEstado.textContent =
+                                saldoSuficiente
+                                    ? ''
+                                    : 'Saldo insuficiente. Necesitas '
+                                        + money(
+                                            total
+                                            - saldoDisponible
+                                        )
+                                        + ' adicionales.';
+
+                            saldoEstado.style.display =
+                                saldoSuficiente
+                                    ? 'none'
+                                    : 'block';
+                        }
+                    }
+
+                    valorDeclaradoInput?.addEventListener(
+                        'input',
+                        calcularSeguroVisual
+                    );
+
+                    valorDeclaradoInput?.addEventListener(
+                        'change',
+                        calcularSeguroVisual
+                    );
+
+                    requiereSeguroInput?.addEventListener(
+                        'change',
+                        calcularSeguroVisual
+                    );
 
-        <button
-            type="button"
-            id="pagar_saldo"
-            class="modal-payment-btn saldo"
-        >
-            Saldo prepago
-        </button>
-
-        <div
-            id="modal_saldo_estado"
-            class="modal-saldo-info"
-            style="display:none;"
-        ></div>
-
-        <button
-            type="button"
-            class="modal-cancel"
-            id="cerrar_modal_pago"
-        >
-            Cancelar
-        </button>
-    </div>
-</div>
-@endif
-
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const precioBaseEnvio = {{
-        (float) ($cotizacion->precio_sin_seguro ?: $cotizacion->precio)
-    }};
-
-    const saldoDisponible = {{
-        (float) ($saldo->saldo ?? 0)
-    }};
-
-    const seguroPorcentaje = 2;
-    const seguroIvaPorcentaje = 16;
-
-    const checkoutForm =
-        document.getElementById('checkout_form');
-
-    const metodoPagoInput =
-        document.getElementById('metodo_pago');
-
-    const valorDeclaradoInput =
-        document.getElementById('valor_declarado');
-
-    const requiereSeguroInput =
-        document.getElementById('requiere_seguro_envio');
-
-    const insuranceError =
-        document.getElementById('insurance_error');
-
-    const seguroPreview =
-        document.getElementById('seguro_monto_preview');
-
-    const totalPreview =
-        document.getElementById('total_con_seguro_preview');
-
-    const seguroBasePreview =
-        document.getElementById('seguro_base_preview');
-
-    const seguroIvaPreview =
-        document.getElementById('seguro_iva_preview');
-
-    const resumenSeguroBase =
-        document.getElementById('resumen_seguro_base');
-
-    const resumenSeguroIva =
-        document.getElementById('resumen_seguro_iva');
-
-    const resumenTotal =
-        document.getElementById('resumen_total');
-
-    const saldoCostoEnvio =
-        document.getElementById('saldo_costo_envio');
-
-    const saldoSeguroTotal =
-        document.getElementById('saldo_seguro_total');
-
-    const saldoTotalPagar =
-        document.getElementById('saldo_total_pagar');
-
-    const saldoEstado =
-        document.getElementById('saldo_estado');
-
-    const modal =
-        document.getElementById('modalPago');
-
-    const modalTotal =
-        document.getElementById('modal_total_pagar');
-
-    const modalSaldoEstado =
-        document.getElementById('modal_saldo_estado');
-
-    const continuarPagoBtn =
-        document.getElementById('continuar_pago_btn');
-
-    const pagarMercadoPagoBtn =
-        document.getElementById('pagar_mercado_pago');
-
-    const pagarSaldoBtn =
-        document.getElementById('pagar_saldo');
-
-    const cerrarModalBtn =
-        document.getElementById('cerrar_modal_pago');
-
-    function money(value) {
-        return '$' +
-            Number(value || 0).toFixed(2) +
-            ' MXN';
-    }
-
-    function calcularSeguroVisual() {
-        const valorDeclarado =
-            parseFloat(
-                valorDeclaradoInput?.value || 0
-            ) || 0;
-
-        const requiereSeguro =
-            requiereSeguroInput?.checked || false;
-
-        let seguroBase = 0;
-        let seguroIva = 0;
-        let seguroMonto = 0;
-
-        if (
-            requiereSeguro &&
-            valorDeclarado > 0
-        ) {
-            seguroBase =
-                valorDeclarado *
-                (seguroPorcentaje / 100);
-
-            seguroIva =
-                seguroBase *
-                (seguroIvaPorcentaje / 100);
-
-            seguroMonto =
-                seguroBase + seguroIva;
-        }
-
-        const total =
-            precioBaseEnvio + seguroMonto;
-
-        if (seguroPreview) {
-            seguroPreview.textContent =
-                money(seguroMonto);
-        }
-
-        if (seguroBasePreview) {
-            seguroBasePreview.textContent =
-                money(seguroBase);
-        }
-
-        if (seguroIvaPreview) {
-            seguroIvaPreview.textContent =
-                money(seguroIva);
-        }
-
-        if (resumenSeguroBase) {
-            resumenSeguroBase.textContent =
-                money(seguroBase);
-        }
-
-        if (resumenSeguroIva) {
-            resumenSeguroIva.textContent =
-                money(seguroIva);
-        }
-
-        if (totalPreview) {
-            totalPreview.textContent =
-                money(total);
-        }
-
-        if (resumenTotal) {
-            resumenTotal.textContent =
-                money(total);
-        }
-
-        if (saldoCostoEnvio) {
-            saldoCostoEnvio.textContent =
-                money(precioBaseEnvio);
-        }
-
-        if (saldoSeguroTotal) {
-            saldoSeguroTotal.textContent =
-                money(seguroMonto);
-        }
-
-        if (saldoTotalPagar) {
-            saldoTotalPagar.textContent =
-                money(total);
-        }
-
-        if (modalTotal) {
-            modalTotal.textContent =
-                money(total);
-        }
-
-        if (insuranceError) {
-            insuranceError.style.display =
-                requiereSeguro &&
-                valorDeclarado <= 0
-                    ? 'block'
-                    : 'none';
-        }
-
-        const saldoSuficiente =
-            saldoDisponible >= total;
-
-        if (pagarSaldoBtn) {
-            pagarSaldoBtn.disabled =
-                !saldoSuficiente;
-        }
-
-        const mensajeSaldo =
-            saldoSuficiente
-                ? 'Saldo suficiente para realizar el pago.'
-                : 'Saldo insuficiente. Necesitas ' +
-                  money(total - saldoDisponible) +
-                  ' adicionales.';
-
-        if (saldoEstado) {
-            saldoEstado.textContent =
-                mensajeSaldo;
-
-            saldoEstado.style.display =
-                saldoSuficiente
-                    ? 'none'
-                    : 'block';
-        }
-
-        if (modalSaldoEstado) {
-            modalSaldoEstado.textContent =
-                mensajeSaldo;
-
-            modalSaldoEstado.style.display =
-                saldoSuficiente
-                    ? 'none'
-                    : 'block';
-        }
-
-        return {
-            valorDeclarado,
-            requiereSeguro,
-            seguroMonto,
-            total,
-            saldoSuficiente
-        };
-    }
-
-    function formularioValidoParaPagar() {
-        const calculo =
-            calcularSeguroVisual();
-
-        if (
-            checkoutForm &&
-            !checkoutForm.reportValidity()
-        ) {
-            return false;
-        }
-
-        if (
-            calculo.requiereSeguro &&
-            calculo.valorDeclarado <= 0
-        ) {
-            if (insuranceError) {
-                insuranceError.style.display =
-                    'block';
-            }
-
-            valorDeclaradoInput?.focus();
-
-            return false;
-        }
-
-        return true;
-    }
-
-    function abrirModalPago() {
-        if (!formularioValidoParaPagar()) {
-            return;
-        }
-
-        if (modal) {
-            modal.style.display = 'flex';
-        }
-    }
-
-    function cerrarModalPago() {
-        if (modal) {
-            modal.style.display = 'none';
-        }
-    }
-
-    function enviarPago(metodoPago) {
-        if (!checkoutForm || !metodoPagoInput) {
-            return;
-        }
-
-        metodoPagoInput.value =
-            metodoPago;
-
-        cerrarModalPago();
-
-        checkoutForm.requestSubmit();
-    }
-
-    if (valorDeclaradoInput) {
-        valorDeclaradoInput.addEventListener(
-            'input',
-            calcularSeguroVisual
-        );
-
-        valorDeclaradoInput.addEventListener(
-            'change',
-            calcularSeguroVisual
-        );
-    }
-
-    if (requiereSeguroInput) {
-        requiereSeguroInput.addEventListener(
-            'change',
-            calcularSeguroVisual
-        );
-    }
-
-    if (continuarPagoBtn) {
-        continuarPagoBtn.addEventListener(
-            'click',
-            abrirModalPago
-        );
-    }
-
-    if (pagarMercadoPagoBtn) {
-        pagarMercadoPagoBtn.addEventListener(
-            'click',
-            function () {
-                enviarPago('mercado_pago');
-            }
-        );
-    }
-
-    if (pagarSaldoBtn) {
-        pagarSaldoBtn.addEventListener(
-            'click',
-            function () {
-                const calculo =
                     calcularSeguroVisual();
-
-                if (!calculo.saldoSuficiente) {
-                    return;
                 }
+            );
+        </script>
+        @if(
+        auth()->check()
+        && !$isPublicCheckout
+    )
+    <script>
+    document.addEventListener(
+        'DOMContentLoaded',
+        function () {
+            const form =
+                document.getElementById(
+                    'checkout_form'
+                );
 
-                enviarPago('saldo');
+            const direccionesOrigen =
+                @json(
+                    $direccionesOrigen
+                        ->keyBy('id')
+                );
+
+            const direccionesDestino =
+                @json(
+                    $direccionesDestino
+                        ->keyBy('id')
+                );
+
+            const selectorOrigen =
+                document.getElementById(
+                    'direccion_origen_id'
+                );
+
+            const selectorDestino =
+                document.getElementById(
+                    'direccion_destino_id'
+                );
+
+            const guardarOrigen =
+                document.getElementById(
+                    'guardar_origen'
+                );
+
+            const guardarDestino =
+                document.getElementById(
+                    'guardar_destino'
+                );
+
+            const aliasOrigen =
+                document.getElementById(
+                    'alias_origen'
+                );
+
+            const aliasDestino =
+                document.getElementById(
+                    'alias_destino'
+                );
+
+            function campo(nombre) {
+                return form.querySelector(
+                    '[name="' + nombre + '"]'
+                );
             }
-        );
-    }
 
-    if (cerrarModalBtn) {
-        cerrarModalBtn.addEventListener(
-            'click',
-            cerrarModalPago
-        );
-    }
+            function asignar(nombre, valor) {
+                const input = campo(nombre);
 
-    if (modal) {
-        modal.addEventListener(
-            'click',
-            function (event) {
-                if (event.target === modal) {
-                    cerrarModalPago();
+                if (input) {
+                    input.value =
+                        valor ?? '';
                 }
             }
-        );
-    }
 
-    calcularSeguroVisual();
-});
-</script>
-</body>
+            function llenarOrigen(direccion) {
+                asignar(
+                    'remitente_nombre',
+                    direccion.nombre
+                );
+
+                asignar(
+                    'remitente_telefono',
+                    direccion.telefono
+                );
+
+                asignar(
+                    'remitente_email',
+                    direccion.email
+                );
+
+                asignar(
+                    'remitente_direccion',
+                    direccion.calle
+                );
+
+                asignar(
+                    'remitente_num_ext',
+                    direccion.num_ext
+                );
+
+                asignar(
+                    'remitente_num_int',
+                    direccion.num_int
+                );
+
+                asignar(
+                    'ciudad_origen',
+                    direccion.ciudad
+                );
+
+                asignar(
+                    'estado_origen',
+                    direccion.estado
+                );
+            }
+
+            function llenarDestino(direccion) {
+                asignar(
+                    'destinatario_nombre',
+                    direccion.nombre
+                );
+
+                asignar(
+                    'destinatario_telefono',
+                    direccion.telefono
+                );
+
+                asignar(
+                    'destinatario_email',
+                    direccion.email
+                );
+
+                asignar(
+                    'destinatario_direccion',
+                    direccion.calle
+                );
+
+                asignar(
+                    'destinatario_num_ext',
+                    direccion.num_ext
+                );
+
+                asignar(
+                    'destinatario_num_int',
+                    direccion.num_int
+                );
+
+                asignar(
+                    'ciudad_destino',
+                    direccion.ciudad
+                );
+
+                asignar(
+                    'estado_destino',
+                    direccion.estado
+                );
+            }
+
+            function actualizarGuardar(
+                selector,
+                checkbox,
+                alias
+            ) {
+                const usaGuardada =
+                    selector.value !== '';
+
+                checkbox.checked = false;
+                checkbox.disabled = usaGuardada;
+
+                alias.value = '';
+                alias.disabled = usaGuardada;
+            }
+
+            selectorOrigen?.addEventListener(
+                'change',
+                function () {
+                    const direccion =
+                        direccionesOrigen[
+                            this.value
+                        ];
+
+                    if (direccion) {
+                        llenarOrigen(direccion);
+                    }
+
+                    actualizarGuardar(
+                        selectorOrigen,
+                        guardarOrigen,
+                        aliasOrigen
+                    );
+                }
+            );
+
+            selectorDestino?.addEventListener(
+                'change',
+                function () {
+                    const direccion =
+                        direccionesDestino[
+                            this.value
+                        ];
+
+                    if (direccion) {
+                        llenarDestino(direccion);
+                    }
+
+                    actualizarGuardar(
+                        selectorDestino,
+                        guardarDestino,
+                        aliasDestino
+                    );
+                }
+            );
+
+            actualizarGuardar(
+                selectorOrigen,
+                guardarOrigen,
+                aliasOrigen
+            );
+
+            actualizarGuardar(
+                selectorDestino,
+                guardarDestino,
+                aliasDestino
+            );
+        }
+    );
+    </script>
+    @endif
+    </body>
 </html>

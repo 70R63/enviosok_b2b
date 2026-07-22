@@ -213,4 +213,9 @@ return [
         // 'ExampleClass' => App\Example\ExampleClass::class,
     ])->toArray(),
 
+    'zigo_launch_at' => env(
+        'ZIGO_LAUNCH_AT',
+        '2026-08-05T21:59:06-06:00'
+    ),
+
 ];

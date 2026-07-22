@@ -289,7 +289,7 @@
 
         <div class="countdown" id="countdown">
             <div class="count-box">
-                <strong id="days">20</strong>
+                <strong id="days">00</strong>
                 <span>Días</span>
             </div>
             <div class="count-box">
@@ -363,30 +363,144 @@
 </main>
 
 <script>
-    const launchDate = new Date();
-    launchDate.setDate(launchDate.getDate() + 20);
-    launchDate.setHours(0, 0, 0, 0);
+document.addEventListener(
+    'DOMContentLoaded',
+    function () {
+        /*
+         * Fecha fija de lanzamiento.
+         * No se vuelve a calcular al recargar la página.
+         */
+        const launchDate = new Date(
+            @json(config('app.zigo_launch_at'))
+        ).getTime();
 
-    function updateCountdown() {
-        const now = new Date().getTime();
-        const distance = launchDate.getTime() - now;
+        const daysElement =
+            document.getElementById('days');
 
-        if (distance <= 0) {
-            document.getElementById('days').textContent = '00';
-            document.getElementById('hours').textContent = '00';
-            document.getElementById('minutes').textContent = '00';
-            document.getElementById('seconds').textContent = '00';
-            return;
+        const hoursElement =
+            document.getElementById('hours');
+
+        const minutesElement =
+            document.getElementById('minutes');
+
+        const secondsElement =
+            document.getElementById('seconds');
+
+        function pad(value) {
+            return String(value).padStart(
+                2,
+                '0'
+            );
         }
 
-        document.getElementById('days').textContent = Math.floor(distance / (1000 * 60 * 60 * 24));
-        document.getElementById('hours').textContent = String(Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))).padStart(2, '0');
-        document.getElementById('minutes').textContent = String(Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60))).padStart(2, '0');
-        document.getElementById('seconds').textContent = String(Math.floor((distance % (1000 * 60)) / 1000)).padStart(2, '0');
-    }
+        function updateCountdown() {
+            const now = Date.now();
 
-    updateCountdown();
-    setInterval(updateCountdown, 1000);
+            const distance =
+                launchDate - now;
+
+            if (distance <= 0) {
+                daysElement.textContent =
+                    '00';
+
+                hoursElement.textContent =
+                    '00';
+
+                minutesElement.textContent =
+                    '00';
+
+                secondsElement.textContent =
+                    '00';
+
+                return false;
+            }
+
+            const days = Math.floor(
+                distance
+                / (
+                    1000
+                    * 60
+                    * 60
+                    * 24
+                )
+            );
+
+            const hours = Math.floor(
+                (
+                    distance
+                    % (
+                        1000
+                        * 60
+                        * 60
+                        * 24
+                    )
+                )
+                / (
+                    1000
+                    * 60
+                    * 60
+                )
+            );
+
+            const minutes = Math.floor(
+                (
+                    distance
+                    % (
+                        1000
+                        * 60
+                        * 60
+                    )
+                )
+                / (
+                    1000
+                    * 60
+                )
+            );
+
+            const seconds = Math.floor(
+                (
+                    distance
+                    % (
+                        1000
+                        * 60
+                    )
+                )
+                / 1000
+            );
+
+            daysElement.textContent =
+                pad(days);
+
+            hoursElement.textContent =
+                pad(hours);
+
+            minutesElement.textContent =
+                pad(minutes);
+
+            secondsElement.textContent =
+                pad(seconds);
+
+            return true;
+        }
+
+        updateCountdown();
+
+        const countdownInterval =
+            setInterval(
+                function () {
+                    const activo =
+                        updateCountdown();
+
+                    if (!activo) {
+                        clearInterval(
+                            countdownInterval
+                        );
+                    }
+                },
+                1000
+            );
+    }
+);
 </script>
 
 </body>
