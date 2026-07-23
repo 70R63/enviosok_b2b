@@ -123,6 +123,16 @@ Route::post('/b2c/envios/{cotizacion}/duplicar', [CotizacionPublicaController::c
 Route::post('/b2c/envios/{cotizacion}/eliminar', [CotizacionPublicaController::class, 'eliminarCotizacionB2c'])
     ->name('b2c.envios.eliminar');
 
+//Facturar
+Route::post(
+    '/b2c/envios/{cotizacion}/facturar',
+    [
+        CotizacionPublicaController::class,
+        'solicitarFacturaB2c',
+    ]
+)
+    ->name('b2c.envios.facturar');
+
 //Mis Pagos
 Route::get('/b2c/mis-pagos', [CotizacionPublicaController::class, 'misPagosB2c'])
     ->middleware('auth')
@@ -177,6 +187,18 @@ Route::get('/b2c/configuracion', [CotizacionPublicaController::class, 'configura
 
 Route::post('/b2c/configuracion/identidad', [CotizacionPublicaController::class, 'guardarIdentidadB2c'])
     ->name('b2c.configuracion.identidad.guardar');
+
+Route::post(
+    '/b2c/configuracion/datos-fiscales',
+    [
+        CotizacionPublicaController::class,
+        'guardarDatosFiscalesB2c',
+    ]
+)
+    ->middleware('auth')
+    ->name(
+        'b2c.configuracion.fiscal.guardar'
+    );
 
 //Incidencias
 Route::get('/b2c/incidencias', [CotizacionPublicaController::class, 'incidenciasB2c'])

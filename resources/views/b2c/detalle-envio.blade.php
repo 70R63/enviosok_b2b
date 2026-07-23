@@ -25,6 +25,185 @@
         .success{background:#16a34a;color:white}
         .warning{background:#f59e0b;color:white;border:none;cursor:pointer}
         @media(max-width:900px){.layout{grid-template-columns:1fr}.sidebar{display:none}.grid{grid-template-columns:1fr}.content{padding:24px}}
+
+        /* Detalle compacto detalle de envio */
+        .detail-grid {
+            gap: 14px;
+            align-items: start;
+        }
+
+        .detail-grid .card {
+            min-height: 0 !important;
+            height: auto !important;
+            padding: 16px 18px;
+        }
+
+        .detail-grid .card h2 {
+            margin: 0 0 12px;
+            font-size: 19px;
+        }
+
+        .detail-grid .label {
+            margin-top: 8px;
+            font-size: 11px;
+        }
+
+        .detail-grid .value {
+            margin-top: 2px;
+            font-size: 14px;
+            line-height: 1.35;
+        }
+
+        .detail-grid .btn {
+            margin-top: 12px;
+        }
+
+        .detail-alert {
+            margin-bottom: 16px;
+            padding: 13px 15px;
+            border-radius: 11px;
+            font-weight: 800;
+        }
+
+        .detail-alert.success {
+            border: 1px solid #bbf7d0;
+            background: #ecfdf5;
+            color: #166534;
+        }
+
+        .detail-alert.error {
+            border: 1px solid #fecaca;
+            background: #fef2f2;
+            color: #991b1b;
+        }
+
+        .invoice-actions {
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .invoice-note {
+            margin: 8px 0 0;
+            color: #64748b;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .invoice-status {
+            display: inline-block;
+            padding: 7px 10px;
+            border-radius: 999px;
+            background: #dbeafe;
+            color: #1d4ed8;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .invoice-disabled {
+            padding: 11px 13px;
+            border-radius: 10px;
+            background: #f1f5f9;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .invoice-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: rgba(15, 23, 42, .62);
+        }
+
+        .invoice-modal.open {
+            display: flex;
+        }
+
+        .invoice-modal-card {
+            width: min(620px, 100%);
+            max-height: 90vh;
+            overflow: auto;
+            padding: 24px;
+            border-radius: 18px;
+            background: #ffffff;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, .28);
+        }
+
+        .invoice-modal-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 16px;
+        }
+
+        .invoice-modal-header h2 {
+            margin: 0 0 5px;
+        }
+
+        .invoice-modal-header p {
+            margin: 0;
+            color: #64748b;
+        }
+
+        .invoice-close {
+            width: 36px;
+            height: 36px;
+            border: none;
+            border-radius: 50%;
+            background: #f1f5f9;
+            color: #475569;
+            font-size: 23px;
+            cursor: pointer;
+        }
+
+        .invoice-fiscal-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .invoice-fiscal-item {
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #f8fafc;
+        }
+
+        .invoice-fiscal-item span {
+            display: block;
+            margin-bottom: 4px;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .invoice-fiscal-item strong {
+            display: block;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .invoice-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        @media (max-width: 700px) {
+            .invoice-fiscal-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .invoice-modal-actions {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
@@ -61,7 +240,19 @@
         <div class="title">Detalle del envío #{{ $cotizacion->id }}</div>
         <div class="subtitle">Consulta la información completa de tu envío.</div>
 
-        <div class="grid">
+        @if(session('success'))
+            <div class="detail-alert success">
+                {{ session('success') }}
+            </div>
+        @endif
+
+        @if(session('error'))
+            <div class="detail-alert error">
+                {{ session('error') }}
+            </div>
+        @endif
+
+        <div class="grid detail-grid">
             <div class="card">
                 <h2>Resumen</h2>
 
@@ -169,16 +360,104 @@
             <div class="card">
                 <h2>Pago</h2>
 
-                <div class="label">ID de pago</div>
-                <div class="value">{{ $cotizacion->payment_id ?? 'No disponible' }}</div>
-
-                <div class="label">Estado del pago</div>
-                <div class="value">
-                    {{ $cotizacion->payment_status_label }}
+                <div class="label">
+                    ID de pago
                 </div>
 
-                <div class="label">Referencia externa</div>
-                <div class="value">{{ $cotizacion->payment_external_reference ?? 'No disponible' }}</div>
+                <div class="value">
+                    {{
+                        $cotizacion->payment_id
+                        ?: 'No disponible'
+                    }}
+                </div>
+
+                <div class="label">
+                    Estado del pago
+                </div>
+
+                <div class="value">
+                    {{
+                        $cotizacion
+                            ->payment_status_label
+                    }}
+                </div>
+
+                <div class="label">
+                    Referencia externa
+                </div>
+
+                <div class="value">
+                    {{
+                        $cotizacion
+                            ->payment_external_reference
+                        ?: 'No disponible'
+                    }}
+                </div>
+
+                <div class="invoice-actions">
+                    @if($invoiceRequest)
+                        <span class="invoice-status">
+                            @switch(
+                                $invoiceRequest->status
+                            )
+                                @case('FACTURADA')
+                                    Facturada
+                                    @break
+
+                                @case('ERROR')
+                                    Requiere atención
+                                    @break
+
+                                @case('CANCELADA')
+                                    Cancelada
+                                    @break
+
+                                @default
+                                    Factura solicitada
+                            @endswitch
+                        </span>
+
+                        <p class="invoice-note">
+                            Solicitud registrada el
+                            {{
+                                optional(
+                                    $invoiceRequest
+                                        ->solicitada_at
+                                )->format(
+                                    'd/m/Y H:i'
+                                )
+                            }}.
+                        </p>
+
+                    @elseif(!$canInvoice)
+                        <div class="invoice-disabled">
+                            La factura estará disponible
+                            cuando el pago sea aprobado.
+                        </div>
+
+                    @elseif(
+                        !$fiscalProfile
+                        || !$fiscalProfile->estaCompleto()
+                    )
+                        <a
+                            href="{{ route(
+                                'b2c.configuracion'
+                            ) }}#facturacion"
+                            class="btn warning"
+                        >
+                            Registrar datos fiscales
+                        </a>
+
+                    @else
+                        <button
+                            id="openInvoiceModal"
+                            type="button"
+                            class="btn warning"
+                        >
+                            Facturar este pago
+                        </button>
+                    @endif
+                </div>
             </div>
 
             <div class="card">
@@ -198,10 +477,265 @@
         </div>
 
         <div style="margin-top:24px">
-            <a href="{{ route('b2c.mis-envios') }}" class="btn primary">Volver a Mis envíos</a>
+            @if(request('origen') === 'pagos')
+                <a
+                    href="{{ route('b2c.mis-pagos') }}"
+                    class="btn primary"
+                >
+                    Volver a Mis pagos
+                </a>
+            @else
+                <a
+                    href="{{ route('b2c.mis-envios') }}"
+                    class="btn primary"
+                >
+                    Volver a Mis envíos
+                </a>
+            @endif
         </div>
     </main>
 </div>
 
+@if(
+    $canInvoice
+    && $fiscalProfile
+    && $fiscalProfile->estaCompleto()
+    && !$invoiceRequest
+)
+    <div
+        id="invoiceModal"
+        class="invoice-modal"
+        aria-hidden="true"
+    >
+        <div class="invoice-modal-card">
+            <div class="invoice-modal-header">
+                <div>
+                    <h2>Solicitar factura</h2>
+
+                    <p>
+                        Confirma que los datos fiscales
+                        sean correctos.
+                    </p>
+                </div>
+
+                <button
+                    id="closeInvoiceModal"
+                    type="button"
+                    class="invoice-close"
+                    aria-label="Cerrar"
+                >
+                    ×
+                </button>
+            </div>
+
+            <div class="invoice-fiscal-grid">
+                <div class="invoice-fiscal-item">
+                    <span>RFC</span>
+
+                    <strong>
+                        {{ $fiscalProfile->rfc }}
+                    </strong>
+                </div>
+
+                <div class="invoice-fiscal-item">
+                    <span>Código postal fiscal</span>
+
+                    <strong>
+                        {{
+                            $fiscalProfile
+                                ->codigo_postal_fiscal
+                        }}
+                    </strong>
+                </div>
+
+                <div class="invoice-fiscal-item">
+                    <span>Razón social</span>
+
+                    <strong>
+                        {{
+                            $fiscalProfile
+                                ->razon_social
+                        }}
+                    </strong>
+                </div>
+
+                <div class="invoice-fiscal-item">
+                    <span>Total</span>
+
+                    <strong>
+                        ${{
+                            number_format(
+                                $cotizacion->precio
+                                ?? 0,
+                                2
+                            )
+                        }} MXN
+                    </strong>
+                </div>
+
+                <div class="invoice-fiscal-item">
+                    <span>Régimen fiscal</span>
+
+                    <strong>
+                        {{
+                            $fiscalProfile
+                                ->regimen_fiscal
+                        }}
+                        -
+                        {{
+                            $regimenesFiscales[
+                                $fiscalProfile
+                                    ->regimen_fiscal
+                            ] ?? ''
+                        }}
+                    </strong>
+                </div>
+
+                <div class="invoice-fiscal-item">
+                    <span>Uso de CFDI</span>
+
+                    <strong>
+                        {{
+                            $fiscalProfile
+                                ->uso_cfdi
+                        }}
+                        -
+                        {{
+                            $usosCfdi[
+                                $fiscalProfile
+                                    ->uso_cfdi
+                            ] ?? ''
+                        }}
+                    </strong>
+                </div>
+            </div>
+
+            <form
+                method="POST"
+                action="{{ route(
+                    'b2c.envios.facturar',
+                    $cotizacion->id
+                ) }}"
+            >
+                @csrf
+
+                <div class="invoice-modal-actions">
+                    <a
+                        href="{{ route(
+                            'b2c.configuracion'
+                        ) }}#facturacion"
+                        class="btn warning"
+                    >
+                        Editar datos
+                    </a>
+
+                    <button
+                        id="cancelInvoiceModal"
+                        type="button"
+                        class="btn"
+                    >
+                        Cancelar
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="btn primary"
+                    >
+                        Confirmar solicitud
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener(
+            'DOMContentLoaded',
+            function () {
+                const modal =
+                    document.getElementById(
+                        'invoiceModal'
+                    );
+
+                const openButton =
+                    document.getElementById(
+                        'openInvoiceModal'
+                    );
+
+                const closeButton =
+                    document.getElementById(
+                        'closeInvoiceModal'
+                    );
+
+                const cancelButton =
+                    document.getElementById(
+                        'cancelInvoiceModal'
+                    );
+
+                if (
+                    !modal
+                    || !openButton
+                    || !closeButton
+                    || !cancelButton
+                ) {
+                    return;
+                }
+
+                const openModal = function () {
+                    modal.classList.add('open');
+
+                    modal.setAttribute(
+                        'aria-hidden',
+                        'false'
+                    );
+                };
+
+                const closeModal = function () {
+                    modal.classList.remove('open');
+
+                    modal.setAttribute(
+                        'aria-hidden',
+                        'true'
+                    );
+                };
+
+                openButton.addEventListener(
+                    'click',
+                    openModal
+                );
+
+                closeButton.addEventListener(
+                    'click',
+                    closeModal
+                );
+
+                cancelButton.addEventListener(
+                    'click',
+                    closeModal
+                );
+
+                modal.addEventListener(
+                    'click',
+                    function (event) {
+                        if (event.target === modal) {
+                            closeModal();
+                        }
+                    }
+                );
+
+                document.addEventListener(
+                    'keydown',
+                    function (event) {
+                        if (
+                            event.key === 'Escape'
+                        ) {
+                            closeModal();
+                        }
+                    }
+                );
+            }
+        );
+    </script>
+@endif
 </body>
 </html>

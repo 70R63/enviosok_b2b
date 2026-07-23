@@ -30,3 +30,9 @@ siteground_full_backup.sql
 
 # Deploy local scripts
 deploy-*.ps1
+/database/backups/
+/deploy_uat/
+/deploy_facturacion_uat/
+/zigo-uat-*.zip
+/zigo-uat-*.tar.gz
+/zigo-fiscal-*.tar.gz

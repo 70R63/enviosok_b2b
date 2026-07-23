@@ -388,6 +388,106 @@
             }
         }
 
+        /* =========================================================
+        AJUSTE VISUAL: DIRECCIONES GUARDADAS
+        ========================================================= */
+
+        .saved-address-box {
+            width: 100%;
+            margin: 0 0 24px;
+            padding: 16px;
+            display: grid;
+            gap: 10px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 12px;
+            box-sizing: border-box;
+        }
+
+        .saved-address-box > label:not(.save-address-check) {
+            display: block;
+            margin: 0;
+            color: #172033;
+            font-size: 14px;
+            font-weight: 900;
+        }
+
+        .saved-address-box select,
+        .saved-address-box input[type="text"] {
+            display: block;
+            width: 100%;
+            min-height: 42px;
+            padding: 10px 12px;
+            margin: 0;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-family: inherit;
+            font-size: 14px;
+            color: #172033;
+        }
+
+        .saved-address-box select:focus,
+        .saved-address-box input[type="text"]:focus {
+            border-color: #4361ee;
+            outline: 2px solid rgba(67, 97, 238, 0.12);
+        }
+
+        .saved-address-note {
+            margin: 0;
+            color: #475569;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .save-address-check {
+            display: flex;
+            align-items: flex-start;
+            gap: 9px;
+            margin: 2px 0 0;
+            color: #172033;
+            font-size: 13px;
+            font-weight: 800;
+            line-height: 1.4;
+            cursor: pointer;
+        }
+
+        .save-address-check input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            min-width: 16px;
+            margin: 1px 0 0;
+            padding: 0;
+            flex: 0 0 16px;
+            cursor: pointer;
+        }
+
+        .manage-addresses-link {
+            display: inline-block;
+            width: fit-content;
+            margin-top: 2px;
+            color: #3457db;
+            font-size: 13px;
+            font-weight: 900;
+            text-decoration: none;
+        }
+
+        .manage-addresses-link:hover {
+            text-decoration: underline;
+        }
+
+        .saved-address-box + .form-grid {
+            margin-top: 0;
+        }
+
+        @media (max-width: 900px) {
+            .saved-address-box {
+                padding: 14px;
+                margin-bottom: 20px;
+            }
+        }
+
     </style>
 </head>
 

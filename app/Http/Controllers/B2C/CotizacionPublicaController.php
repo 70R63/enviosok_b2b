@@ -8,16 +8,19 @@ use App\Models\B2cMovimientoSaldo;
 use App\Models\B2cCotizacion;
 use App\Models\User;
 use App\Models\Roles\Roles;
+use App\Models\B2cFiscalProfile;
 use App\Models\Guia;
 use App\Negocio\Guias\EstafetaCreacion;
 use App\Models\B2cDireccion;
 use App\Models\B2cIdentityVerification;
 use App\Models\B2cIncidencia;
+use App\Models\B2cInvoiceRequest;
 use App\Services\ZigoPricingService;
 use App\Services\ZigoProviderRateService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
 use Illuminate\Support\Facades\DB;
 use MercadoPago\SDK;
@@ -1937,13 +1940,257 @@ public function misEnviosB2c()
     return view('b2c.mis-envios', compact('envios'));
 }
 
-public function detalleEnvioB2c(B2cCotizacion $cotizacion)
-{
-    if ($cotizacion->user_id !== auth()->id()) {
+public function detalleEnvioB2c(
+    B2cCotizacion $cotizacion
+) {
+    $userId = (int) auth()->id();
+
+    if (
+        (int) $cotizacion->user_id
+        !== $userId
+    ) {
         abort(403);
     }
 
-    return view('b2c.detalle-envio', compact('cotizacion'));
+    $fiscalProfile =
+        B2cFiscalProfile::where(
+            'user_id',
+            $userId
+        )
+            ->where('activo', true)
+            ->first();
+
+    $invoiceRequest =
+        B2cInvoiceRequest::where(
+            'cotizacion_id',
+            $cotizacion->id
+        )
+            ->where('user_id', $userId)
+            ->first();
+
+    $paymentStatus = strtolower(
+        trim(
+            (string) $cotizacion
+                ->payment_status
+        )
+    );
+
+    $shipmentStatus = strtoupper(
+        trim(
+            (string) $cotizacion->estatus
+        )
+    );
+
+    $canInvoice =
+        in_array(
+            $paymentStatus,
+            [
+                'approved',
+                'saldo_prepago',
+            ],
+            true
+        )
+        || in_array(
+            $shipmentStatus,
+            [
+                'PAGADA',
+                'GUIA_GENERADA',
+                'ERROR_GENERACION_GUIA',
+            ],
+            true
+        );
+
+    $regimenesFiscales = config(
+        'b2c_fiscal.regimenes',
+        []
+    );
+
+    $usosCfdi = config(
+        'b2c_fiscal.usos_cfdi',
+        []
+    );
+
+    return view(
+        'b2c.detalle-envio',
+        compact(
+            'cotizacion',
+            'fiscalProfile',
+            'invoiceRequest',
+            'canInvoice',
+            'regimenesFiscales',
+            'usosCfdi'
+        )
+    );
+}
+
+public function solicitarFacturaB2c(
+    B2cCotizacion $cotizacion
+) {
+    $userId = (int) auth()->id();
+
+    if (
+        (int) $cotizacion->user_id
+        !== $userId
+    ) {
+        abort(403);
+    }
+
+    $paymentStatus = strtolower(
+        trim(
+            (string) $cotizacion
+                ->payment_status
+        )
+    );
+
+    $shipmentStatus = strtoupper(
+        trim(
+            (string) $cotizacion->estatus
+        )
+    );
+
+    $canInvoice =
+        in_array(
+            $paymentStatus,
+            [
+                'approved',
+                'saldo_prepago',
+            ],
+            true
+        )
+        || in_array(
+            $shipmentStatus,
+            [
+                'PAGADA',
+                'GUIA_GENERADA',
+                'ERROR_GENERACION_GUIA',
+            ],
+            true
+        );
+
+    if (!$canInvoice) {
+        return redirect()
+            ->route(
+                'b2c.envios.detalle',
+                [
+                    'cotizacion' =>
+                        $cotizacion->id,
+
+                    'origen' => 'pagos',
+                ]
+            )
+            ->with(
+                'error',
+                'Este pago no está aprobado y no puede facturarse.'
+            );
+    }
+
+    $fiscalProfile =
+        B2cFiscalProfile::where(
+            'user_id',
+            $userId
+        )
+            ->where('activo', true)
+            ->first();
+
+    if (
+        !$fiscalProfile
+        || !$fiscalProfile->estaCompleto()
+    ) {
+        return redirect()
+            ->route('b2c.configuracion')
+            ->with(
+                'error',
+                'Primero registra tus datos fiscales.'
+            );
+    }
+
+    $paymentMethod =
+        $paymentStatus === 'saldo_prepago'
+            ? 'SALDO_PREPAGO'
+            : 'MERCADO_PAGO';
+
+    $invoiceRequest =
+        B2cInvoiceRequest::firstOrCreate(
+            [
+                'cotizacion_id' =>
+                    $cotizacion->id,
+            ],
+            [
+                'user_id' => $userId,
+
+                'fiscal_profile_id' =>
+                    $fiscalProfile->id,
+
+                'payment_reference' =>
+                    $cotizacion
+                        ->payment_external_reference
+                    ?: $cotizacion->payment_id,
+
+                'payment_status' =>
+                    $cotizacion->payment_status,
+
+                'payment_method' =>
+                    $paymentMethod,
+
+                'metodo_pago' => 'PUE',
+
+                'forma_pago' => null,
+
+                'monto' =>
+                    (float) (
+                        $cotizacion->precio
+                        ?? 0
+                    ),
+
+                'razon_social' =>
+                    $fiscalProfile
+                        ->razon_social,
+
+                'rfc' =>
+                    $fiscalProfile->rfc,
+
+                'codigo_postal_fiscal' =>
+                    $fiscalProfile
+                        ->codigo_postal_fiscal,
+
+                'direccion_fiscal' =>
+                    $fiscalProfile
+                        ->direccion_fiscal,
+
+                'regimen_fiscal' =>
+                    $fiscalProfile
+                        ->regimen_fiscal,
+
+                'uso_cfdi' =>
+                    $fiscalProfile
+                        ->uso_cfdi,
+
+                'email_facturacion' =>
+                    $fiscalProfile
+                        ->email_facturacion,
+
+                'status' => 'SOLICITADA',
+
+                'solicitada_at' => now(),
+            ]
+        );
+
+    $message =
+        $invoiceRequest->wasRecentlyCreated
+            ? 'Solicitud de factura registrada correctamente.'
+            : 'Este pago ya tiene una solicitud de factura registrada.';
+
+    return redirect()
+        ->route(
+            'b2c.envios.detalle',
+            [
+                'cotizacion' =>
+                    $cotizacion->id,
+
+                'origen' => 'pagos',
+            ]
+        )
+        ->with('success', $message);
 }
 
 public function misPagosB2c()
@@ -2244,12 +2491,192 @@ public function pagarConSaldo(B2cCotizacion $cotizacion)
 
 public function configuracionB2c()
 {
-    $identity = B2cIdentityVerification::firstOrCreate(
-        ['user_id' => auth()->id()],
-        ['status' => 'SIN_VERIFICAR']
+    $userId = auth()->id();
+
+    $identity =
+        B2cIdentityVerification::firstOrCreate(
+            [
+                'user_id' => $userId,
+            ],
+            [
+                'status' => 'SIN_VERIFICAR',
+            ]
+        );
+
+    $fiscalProfile =
+        B2cFiscalProfile::where(
+            'user_id',
+            $userId
+        )->first();
+
+    $regimenesFiscales = config(
+        'b2c_fiscal.regimenes',
+        []
     );
 
-    return view('b2c.configuracion', compact('identity'));
+    $usosCfdi = config(
+        'b2c_fiscal.usos_cfdi',
+        []
+    );
+
+    return view(
+        'b2c.configuracion',
+        compact(
+            'identity',
+            'fiscalProfile',
+            'regimenesFiscales',
+            'usosCfdi'
+        )
+    );
+}
+
+public function guardarDatosFiscalesB2c(
+    Request $request
+) {
+    $regimenesFiscales = config(
+        'b2c_fiscal.regimenes',
+        []
+    );
+
+    $usosCfdi = config(
+        'b2c_fiscal.usos_cfdi',
+        []
+    );
+
+    $request->merge([
+        'rfc' => strtoupper(
+            preg_replace(
+                '/\s+/',
+                '',
+                (string) $request->input('rfc')
+            )
+        ),
+
+        'razon_social' => trim(
+            (string) $request->input(
+                'razon_social'
+            )
+        ),
+
+        'codigo_postal_fiscal' =>
+            preg_replace(
+                '/\D/',
+                '',
+                (string) $request->input(
+                    'codigo_postal_fiscal'
+                )
+            ),
+
+        'email_facturacion' => strtolower(
+            trim(
+                (string) $request->input(
+                    'email_facturacion'
+                )
+            )
+        ),
+    ]);
+
+    $data = $request->validate(
+        [
+            'razon_social' => [
+                'required',
+                'string',
+                'max:255',
+            ],
+
+            'rfc' => [
+                'required',
+                'string',
+                'min:12',
+                'max:13',
+                'regex:/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/',
+            ],
+
+            'codigo_postal_fiscal' => [
+                'required',
+                'digits:5',
+            ],
+
+            'direccion_fiscal' => [
+                'nullable',
+                'string',
+                'max:500',
+            ],
+
+            'regimen_fiscal' => [
+                'required',
+                Rule::in(
+                    array_keys(
+                        $regimenesFiscales
+                    )
+                ),
+            ],
+
+            'uso_cfdi' => [
+                'required',
+                Rule::in(
+                    array_keys($usosCfdi)
+                ),
+            ],
+
+            'email_facturacion' => [
+                'required',
+                'email',
+                'max:255',
+            ],
+        ],
+        [
+            'razon_social.required' =>
+                'Captura el nombre o razón social.',
+
+            'rfc.required' =>
+                'Captura el RFC.',
+
+            'rfc.regex' =>
+                'El formato del RFC no es válido.',
+
+            'codigo_postal_fiscal.required' =>
+                'Captura el código postal fiscal.',
+
+            'codigo_postal_fiscal.digits' =>
+                'El código postal fiscal debe contener 5 dígitos.',
+
+            'regimen_fiscal.required' =>
+                'Selecciona el régimen fiscal.',
+
+            'regimen_fiscal.in' =>
+                'El régimen fiscal seleccionado no es válido.',
+
+            'uso_cfdi.required' =>
+                'Selecciona el uso de CFDI.',
+
+            'uso_cfdi.in' =>
+                'El uso de CFDI seleccionado no es válido.',
+
+            'email_facturacion.required' =>
+                'Captura el correo para recibir facturas.',
+
+            'email_facturacion.email' =>
+                'El correo para facturas no es válido.',
+        ]
+    );
+
+    $data['user_id'] = auth()->id();
+    $data['activo'] = true;
+
+    B2cFiscalProfile::updateOrCreate(
+        [
+            'user_id' => auth()->id(),
+        ],
+        $data
+    );
+
+    return redirect()
+        ->route('b2c.configuracion')
+        ->with(
+            'success',
+            'Datos fiscales guardados correctamente.'
+        );
 }
 
 public function guardarIdentidadB2c(Request $request)

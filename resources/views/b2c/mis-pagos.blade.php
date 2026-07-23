@@ -127,8 +127,17 @@
                                 <td>{{ $pago->payment_status_label }}</td>
                                 <td>{{ $pago->estatus_label }}</td>
                                 <td>
-                                    <a href="{{ route('b2c.envios.detalle', $pago->id) }}" class="btn primary">
-                                        Ver envío
+                                    <a
+                                        href="{{ route(
+                                            'b2c.envios.detalle',
+                                            [
+                                                'cotizacion' => $pago->id,
+                                                'origen' => 'pagos',
+                                            ]
+                                        ) }}"
+                                        class="btn primary"
+                                    >
+                                        Ver detalle
                                     </a>
                                 </td>
                             </tr>
