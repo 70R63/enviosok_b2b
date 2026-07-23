@@ -41,6 +41,23 @@
         <a href="#">Incidencias</a>
         <a href="#">Adeudos</a>
         <a href="#">Pagos</a>
+
+        <a href="{{ route('crm.facturacion.index') }}"
+           class="{{ request()->routeIs('crm.facturacion.*') ? 'active' : '' }}">
+            Facturación
+
+            @php
+                $pendingInvoiceCount = \Illuminate\Support\Facades\Schema::hasTable('b2c_invoice_requests')
+                    ? \App\Models\B2cInvoiceRequest::whereIn('status', ['SOLICITADA', 'EN_PROCESO'])->count()
+                    : 0;
+            @endphp
+
+            @if($pendingInvoiceCount > 0)
+                <span style="float:right;background:#f59e0b;color:#111827;border-radius:999px;padding:2px 8px;font-size:12px;">
+                    {{ $pendingInvoiceCount }}
+                </span>
+            @endif
+        </a>
         <a href="#">Paqueterías</a>
 
         <a href="{{ route('crm.api-hub.index') }}"

@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\LtdController;
 use App\Http\Controllers\B2C\CotizacionPublicaController;
+use App\Http\Controllers\B2C\B2cInvoiceDocumentController;
 use App\Http\Controllers\API\CPController;
 use App\Http\Controllers\B2cMisEnviosController;
 use App\Http\Controllers\Admin\B2cIncidenciaAdminController;
@@ -12,6 +13,8 @@ use App\Http\Controllers\Web\PostalCodeLookupController;
 use App\Http\Controllers\Web\LandingProspectController;
 use App\Http\Controllers\Web\WaitlistController;
 use App\Http\Controllers\CRM\CrmPricingController;
+use App\Http\Controllers\CRM\CrmInvoiceRequestController;
+use App\Http\Controllers\CRM\CrmInvoiceDocumentController;
 use App\Models\B2cCotizacion;
 
 /*
@@ -132,6 +135,14 @@ Route::post(
     ]
 )
     ->name('b2c.envios.facturar');
+
+Route::get(
+    '/b2c/facturas/{invoiceRequest}/documentos/{format}',
+    [B2cInvoiceDocumentController::class, 'download']
+)
+    ->whereNumber('invoiceRequest')
+    ->where('format', 'pdf|xml|zip')
+    ->name('b2c.facturas.documentos.download');
 
 //Mis Pagos
 Route::get('/b2c/mis-pagos', [CotizacionPublicaController::class, 'misPagosB2c'])
@@ -393,6 +404,58 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
         Route::post('/clientes/{cliente}/seguimiento', [CrmClientController::class, 'actualizarSeguimiento'])
             ->name('clientes.seguimiento');
             
+
+        Route::get('/facturacion', [CrmInvoiceRequestController::class, 'index'])
+            ->name('facturacion.index');
+
+        Route::get('/facturacion/{invoiceRequest}', [CrmInvoiceRequestController::class, 'show'])
+            ->whereNumber('invoiceRequest')
+            ->name('facturacion.show');
+
+        Route::post(
+            '/facturacion/{invoiceRequest}/iniciar-atencion',
+            [CrmInvoiceRequestController::class, 'iniciarAtencion']
+        )
+            ->whereNumber('invoiceRequest')
+            ->name('facturacion.iniciar-atencion');
+
+
+        Route::post(
+            '/facturacion/{invoiceRequest}/gestion',
+            [CrmInvoiceRequestController::class, 'guardarGestion']
+        )
+            ->whereNumber('invoiceRequest')
+            ->name('facturacion.gestion.update');
+
+        Route::post(
+            '/facturacion/{invoiceRequest}/rechazar',
+            [CrmInvoiceRequestController::class, 'rechazar']
+        )
+            ->whereNumber('invoiceRequest')
+            ->name('facturacion.rechazar');
+
+        Route::post(
+            '/facturacion/{invoiceRequest}/cancelar',
+            [CrmInvoiceRequestController::class, 'cancelar']
+        )
+            ->whereNumber('invoiceRequest')
+            ->name('facturacion.cancelar');
+
+        Route::post(
+            '/facturacion/{invoiceRequest}/documentos',
+            [CrmInvoiceRequestController::class, 'subirDocumentos']
+        )
+            ->whereNumber('invoiceRequest')
+            ->name('facturacion.documentos.store');
+
+        Route::get(
+            '/facturacion/{invoiceRequest}/documentos/{format}',
+            [CrmInvoiceDocumentController::class, 'download']
+        )
+            ->whereNumber('invoiceRequest')
+            ->where('format', 'pdf|xml|zip')
+            ->name('facturacion.documentos.download');
+
         Route::get('/pricing', [CrmPricingController::class, 'index'])
             ->name('pricing.index');
 

@@ -732,6 +732,7 @@
                                 <select
                                     id="uso_cfdi"
                                     name="uso_cfdi"
+                                    aria-describedby="uso_cfdi_help"
                                     required
                                 >
                                     <option value="">
@@ -759,6 +760,14 @@
                                         </option>
                                     @endforeach
                                 </select>
+
+                                <div
+                                    id="uso_cfdi_help"
+                                    class="muted"
+                                    style="margin-top: 6px;"
+                                >
+                                    Selecciona primero el régimen fiscal.
+                                </div>
                             </div>
 
                             <div class="fiscal-full">
@@ -895,6 +904,123 @@
             });
         });
     });
+
+    const usosCfdiCatalogo =
+        @json($usosCfdi);
+
+    const usosCfdiPorRegimen =
+        @json($usosCfdiPorRegimen);
+
+    const regimenFiscalSelect =
+        document.getElementById(
+            'regimen_fiscal'
+        );
+
+    const usoCfdiSelect =
+        document.getElementById(
+            'uso_cfdi'
+        );
+
+    const usoCfdiHelp =
+        document.getElementById(
+            'uso_cfdi_help'
+        );
+
+    function actualizarUsosCfdi() {
+        if (
+            ! regimenFiscalSelect
+            || ! usoCfdiSelect
+        ) {
+            return;
+        }
+
+        const regimenFiscal =
+            regimenFiscalSelect.value;
+
+        const usoSeleccionado =
+            usoCfdiSelect.value;
+
+        const usosPermitidos =
+            usosCfdiPorRegimen[
+                regimenFiscal
+            ] || [];
+
+        usoCfdiSelect.innerHTML = '';
+
+        const opcionInicial =
+            document.createElement(
+                'option'
+            );
+
+        opcionInicial.value = '';
+        opcionInicial.textContent =
+            '-- Selecciona un uso de CFDI --';
+
+        usoCfdiSelect.appendChild(
+            opcionInicial
+        );
+
+        usosPermitidos.forEach(
+            function (clave) {
+                if (
+                    ! Object.prototype
+                        .hasOwnProperty.call(
+                            usosCfdiCatalogo,
+                            clave
+                        )
+                ) {
+                    return;
+                }
+
+                const opcion =
+                    document.createElement(
+                        'option'
+                    );
+
+                opcion.value = clave;
+                opcion.textContent =
+                    clave
+                    + ' - '
+                    + usosCfdiCatalogo[clave];
+
+                usoCfdiSelect.appendChild(
+                    opcion
+                );
+            }
+        );
+
+        if (
+            usosPermitidos.includes(
+                usoSeleccionado
+            )
+        ) {
+            usoCfdiSelect.value =
+                usoSeleccionado;
+        }
+
+        usoCfdiSelect.disabled =
+            regimenFiscal === '';
+
+        if (usoCfdiHelp) {
+            usoCfdiHelp.textContent =
+                regimenFiscal === ''
+                    ? 'Selecciona primero el régimen fiscal.'
+                    : 'Solo se muestran los usos compatibles con el régimen seleccionado.';
+        }
+    }
+
+    if (
+        regimenFiscalSelect
+        && usoCfdiSelect
+    ) {
+        actualizarUsosCfdi();
+
+        regimenFiscalSelect
+            .addEventListener(
+                'change',
+                actualizarUsosCfdi
+            );
+    }
 
     const fiscalSummary =
         document.getElementById(

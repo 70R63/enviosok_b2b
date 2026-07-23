@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class B2cCotizacion extends Model
 {
@@ -121,6 +122,14 @@ class B2cCotizacion extends Model
         return $this->belongsTo(
             \App\Models\User::class,
             'user_id'
+        );
+    }
+
+    public function invoiceRequest(): HasOne
+    {
+        return $this->hasOne(
+            B2cInvoiceRequest::class,
+            'cotizacion_id'
         );
     }
 

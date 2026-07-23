@@ -2104,6 +2104,17 @@ public function solicitarFacturaB2c(
             );
     }
 
+    if (
+        !$fiscalProfile->usoCfdiEsCompatible()
+    ) {
+        return redirect()
+            ->route('b2c.configuracion')
+            ->with(
+                'error',
+                'Actualiza tus datos fiscales: el uso de CFDI no es compatible con el régimen fiscal.'
+            );
+    }
+
     $paymentMethod =
         $paymentStatus === 'saldo_prepago'
             ? 'SALDO_PREPAGO'
@@ -2199,6 +2210,7 @@ public function misPagosB2c()
         'user_id',
         auth()->id()
     )
+        ->with('invoiceRequest')
         ->where(function ($query) {
             $query
                 ->whereNotNull(
@@ -2519,13 +2531,19 @@ public function configuracionB2c()
         []
     );
 
+    $usosCfdiPorRegimen = config(
+        'b2c_fiscal.usos_cfdi_por_regimen',
+        []
+    );
+
     return view(
         'b2c.configuracion',
         compact(
             'identity',
             'fiscalProfile',
             'regimenesFiscales',
-            'usosCfdi'
+            'usosCfdi',
+            'usosCfdiPorRegimen'
         )
     );
 }
@@ -2540,6 +2558,11 @@ public function guardarDatosFiscalesB2c(
 
     $usosCfdi = config(
         'b2c_fiscal.usos_cfdi',
+        []
+    );
+
+    $usosCfdiPorRegimen = config(
+        'b2c_fiscal.usos_cfdi_por_regimen',
         []
     );
 
@@ -2566,6 +2589,20 @@ public function guardarDatosFiscalesB2c(
                     'codigo_postal_fiscal'
                 )
             ),
+
+        'regimen_fiscal' => trim(
+            (string) $request->input(
+                'regimen_fiscal'
+            )
+        ),
+
+        'uso_cfdi' => strtoupper(
+            trim(
+                (string) $request->input(
+                    'uso_cfdi'
+                )
+            )
+        ),
 
         'email_facturacion' => strtolower(
             trim(
@@ -2613,10 +2650,42 @@ public function guardarDatosFiscalesB2c(
             ],
 
             'uso_cfdi' => [
+                'bail',
                 'required',
                 Rule::in(
                     array_keys($usosCfdi)
                 ),
+                function (
+                    $attribute,
+                    $value,
+                    $fail
+                ) use (
+                    $request,
+                    $usosCfdiPorRegimen
+                ) {
+                    $regimenFiscal =
+                        (string) $request->input(
+                            'regimen_fiscal'
+                        );
+
+                    $usosPermitidos =
+                        $usosCfdiPorRegimen[
+                            $regimenFiscal
+                        ] ?? [];
+
+                    if (
+                        $regimenFiscal !== ''
+                        && ! in_array(
+                            (string) $value,
+                            $usosPermitidos,
+                            true
+                        )
+                    ) {
+                        $fail(
+                            'El uso de CFDI seleccionado no es compatible con el régimen fiscal.'
+                        );
+                    }
+                },
             ],
 
             'email_facturacion' => [

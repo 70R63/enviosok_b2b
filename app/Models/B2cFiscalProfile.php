@@ -46,4 +46,23 @@ class B2cFiscalProfile extends Model
                 $this->email_facturacion
             );
     }
+
+    public function usoCfdiEsCompatible(): bool
+    {
+        $usosCfdiPorRegimen = config(
+            'b2c_fiscal.usos_cfdi_por_regimen',
+            []
+        );
+
+        $usosPermitidos =
+            $usosCfdiPorRegimen[
+                (string) $this->regimen_fiscal
+            ] ?? [];
+
+        return in_array(
+            (string) $this->uso_cfdi,
+            $usosPermitidos,
+            true
+        );
+    }
 }

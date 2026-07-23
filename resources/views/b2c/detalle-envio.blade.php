@@ -22,6 +22,7 @@
         .value{font-size:15px;font-weight:800;margin-bottom:12px;line-height:1.35;word-break:break-word}
         .btn{display:inline-block;padding:11px 15px;border-radius:10px;text-decoration:none;font-weight:900;margin-right:8px}
         .primary{background:#2563eb;color:white}
+        .secondary{background:#475569;color:white}
         .success{background:#16a34a;color:white}
         .warning{background:#f59e0b;color:white;border:none;cursor:pointer}
         @media(max-width:900px){.layout{grid-template-columns:1fr}.sidebar{display:none}.grid{grid-template-columns:1fr}.content{padding:24px}}
@@ -94,10 +95,58 @@
             display: inline-block;
             padding: 7px 10px;
             border-radius: 999px;
-            background: #dbeafe;
-            color: #1d4ed8;
             font-size: 12px;
             font-weight: 900;
+        }
+
+        .invoice-status.requested {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .invoice-status.processing {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .invoice-status.invoiced {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .invoice-status.rejected {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .invoice-status.cancelled {
+            background: #e2e8f0;
+            color: #334155;
+        }
+
+        .invoice-meta {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border: 1px solid #dbeafe;
+            border-radius: 10px;
+            background: #eff6ff;
+            color: #1e3a8a;
+            font-size: 12px;
+            line-height: 1.5;
+            overflow-wrap: anywhere;
+        }
+
+        .invoice-downloads {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        .invoice-downloads .btn {
+            margin: 0;
+            padding: 8px 10px;
+            font-size: 12px;
         }
 
         .invoice-disabled {
@@ -396,38 +445,77 @@
 
                 <div class="invoice-actions">
                     @if($invoiceRequest)
-                        <span class="invoice-status">
-                            @switch(
-                                $invoiceRequest->status
-                            )
-                                @case('FACTURADA')
-                                    Facturada
-                                    @break
+                        @php
+                            $invoiceStatusClass = match($invoiceRequest->status) {
+                                'SOLICITADA' => 'requested',
+                                'EN_PROCESO' => 'processing',
+                                'FACTURADA' => 'invoiced',
+                                'RECHAZADA' => 'rejected',
+                                'CANCELADA' => 'cancelled',
+                                default => 'cancelled',
+                            };
+                        @endphp
 
-                                @case('ERROR')
-                                    Requiere atención
-                                    @break
-
-                                @case('CANCELADA')
-                                    Cancelada
-                                    @break
-
-                                @default
-                                    Factura solicitada
-                            @endswitch
+                        <span class="invoice-status {{ $invoiceStatusClass }}">
+                            {{ $invoiceRequest->status_label }}
                         </span>
 
-                        <p class="invoice-note">
-                            Solicitud registrada el
-                            {{
-                                optional(
-                                    $invoiceRequest
-                                        ->solicitada_at
-                                )->format(
-                                    'd/m/Y H:i'
-                                )
-                            }}.
-                        </p>
+                        @switch($invoiceRequest->status)
+                            @case('SOLICITADA')
+                                <p class="invoice-note">
+                                    Factura solicitada el
+                                    {{ optional($invoiceRequest->solicitada_at)->format('d/m/Y H:i') }}.
+                                </p>
+                                @break
+
+                            @case('EN_PROCESO')
+                                <p class="invoice-note">
+                                    La factura está en preparación por el área administrativa.
+                                </p>
+                                @break
+
+                            @case('FACTURADA')
+                                <div class="invoice-meta">
+                                    <strong>Factura emitida</strong><br>
+                                    UUID: {{ $invoiceRequest->cfdi_uuid ?? '-' }}<br>
+                                    Fecha de facturación:
+                                    {{ optional($invoiceRequest->facturada_at)->format('d/m/Y H:i') ?? '-' }}
+                                </div>
+
+                                @if($invoiceRequest->puedeDescargarDocumentos())
+                                    <div class="invoice-downloads">
+                                        <a class="btn primary"
+                                           href="{{ route('b2c.facturas.documentos.download', [$invoiceRequest, 'pdf']) }}">
+                                            Descargar PDF
+                                        </a>
+                                        <a class="btn secondary"
+                                           href="{{ route('b2c.facturas.documentos.download', [$invoiceRequest, 'xml']) }}">
+                                            Descargar XML
+                                        </a>
+                                        <a class="btn success"
+                                           href="{{ route('b2c.facturas.documentos.download', [$invoiceRequest, 'zip']) }}">
+                                            Descargar ZIP
+                                        </a>
+                                    </div>
+                                @else
+                                    <p class="invoice-note">
+                                        Los documentos todavía no están disponibles para descarga.
+                                    </p>
+                                @endif
+                                @break
+
+                            @case('RECHAZADA')
+                                <p class="invoice-note">
+                                    {{ $invoiceRequest->rejection_reason ?: 'La solicitud fue rechazada. Consulta a soporte para conocer el motivo.' }}
+                                </p>
+                                @break
+
+                            @case('CANCELADA')
+                                <p class="invoice-note">
+                                    {{ $invoiceRequest->cancellation_reason ?: 'La solicitud de factura fue cancelada.' }}
+                                </p>
+                                @break
+                        @endswitch
 
                     @elseif(!$canInvoice)
                         <div class="invoice-disabled">
