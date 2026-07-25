@@ -9,6 +9,7 @@ class ApiUsageLog extends Model
     protected $fillable = [
         'api_client_id',
         'api_key_id',
+        'api_product_id',
         'endpoint',
         'method',
         'status_code',
@@ -25,5 +26,13 @@ class ApiUsageLog extends Model
     public function apiKey()
     {
         return $this->belongsTo(ApiKey::class, 'api_key_id');
+    }
+
+    public function product()
+    {
+        return $this->belongsTo(
+            ApiProduct::class,
+            'api_product_id'
+        );
     }
 }

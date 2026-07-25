@@ -379,6 +379,7 @@ Route::middleware('zigo.api')->prefix('hub')->group(function () {
         ]);
     });
 
-    Route::get('/cp/{codigoPostal}', [PostalCodeController::class, 'show']);
+    Route::get('/cp/{codigoPostal}', [PostalCodeController::class, 'show'])
+        ->middleware('zigo.product:POSTAL_CODES');
 });
 

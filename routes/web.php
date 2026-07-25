@@ -401,6 +401,12 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
         Route::post('/api-hub/{apiClient}/keys/{apiKey}/toggle', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'toggleApiKey'])
             ->name('api-hub.keys.toggle');
 
+        Route::get('/api-hub/{apiClient}/products', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'products'])
+            ->name('api-hub.products');
+
+        Route::post('/api-hub/{apiClient}/products', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'updateProducts'])
+            ->name('api-hub.products.update');
+
         Route::post('/clientes/{cliente}/seguimiento', [CrmClientController::class, 'actualizarSeguimiento'])
             ->name('clientes.seguimiento');
             

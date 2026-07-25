@@ -40,4 +40,22 @@ class ApiClient extends Model
     {
         return $this->hasMany(ApiUsageLog::class);
     }
+
+    public function clientProducts()
+    {
+        return $this->hasMany(ApiClientProduct::class);
+    }
+
+    public function products()
+    {
+        return $this->belongsToMany(
+            ApiProduct::class,
+            'api_client_products'
+        )
+            ->withPivot([
+                'active',
+                'monthly_limit',
+            ])
+            ->withTimestamps();
+    }
 }
