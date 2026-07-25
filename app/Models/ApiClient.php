@@ -46,6 +46,14 @@ class ApiClient extends Model
         return $this->hasMany(ApiClientProduct::class);
     }
 
+    public function billingRequests()
+    {
+        return $this->hasMany(
+            ApiBillingRequest::class,
+            'api_client_id'
+        );
+    }
+
     public function products()
     {
         return $this->belongsToMany(

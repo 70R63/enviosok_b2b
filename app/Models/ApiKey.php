@@ -30,4 +30,12 @@ class ApiKey extends Model
     {
         return $this->hasMany(ApiUsageLog::class);
     }
+
+    public function billingRequests()
+    {
+        return $this->hasMany(
+            ApiBillingRequest::class,
+            'api_key_id'
+        );
+    }
 }
