@@ -381,6 +381,61 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
         Route::get('/api-hub', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'index'])
             ->name('api-hub.index');
 
+        Route::get(
+            '/api-hub/billing',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'index']
+        )->name('api-hub.billing.index');
+
+        Route::get(
+            '/api-hub/billing/{apiBillingRequest}',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'show']
+        )
+            ->whereNumber('apiBillingRequest')
+            ->name('api-hub.billing.show');
+
+        Route::post(
+            '/api-hub/billing/{apiBillingRequest}/iniciar-atencion',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'startProcessing']
+        )
+            ->whereNumber('apiBillingRequest')
+            ->name('api-hub.billing.start-processing');
+
+        Route::post(
+            '/api-hub/billing/{apiBillingRequest}/gestion',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'updateManagement']
+        )
+            ->whereNumber('apiBillingRequest')
+            ->name('api-hub.billing.management.update');
+
+        Route::post(
+            '/api-hub/billing/{apiBillingRequest}/rechazar',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'reject']
+        )
+            ->whereNumber('apiBillingRequest')
+            ->name('api-hub.billing.reject');
+
+        Route::post(
+            '/api-hub/billing/{apiBillingRequest}/cancelar',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'cancel']
+        )
+            ->whereNumber('apiBillingRequest')
+            ->name('api-hub.billing.cancel');
+
+        Route::post(
+            '/api-hub/billing/{apiBillingRequest}/documentos',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'storeDocuments']
+        )
+            ->whereNumber('apiBillingRequest')
+            ->name('api-hub.billing.documents.store');
+
+        Route::get(
+            '/api-hub/billing/{apiBillingRequest}/documentos/{format}',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'downloadDocument']
+        )
+            ->whereNumber('apiBillingRequest')
+            ->whereIn('format', ['pdf', 'xml', 'zip'])
+            ->name('api-hub.billing.documents.download');
+
         Route::resource('clientes', \App\Http\Controllers\CRM\CrmClientController::class)
             ->except(['show'])
             ->names('clientes')

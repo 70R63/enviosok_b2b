@@ -194,6 +194,8 @@ class ApiBillingRequestService
         ApiBillingRequest $request,
         bool $replayed = false
     ): array {
+        $documentsReady = $request->documentsReady();
+
         return [
             'request_id' => $request->id,
             'external_id' => $request->external_id,
@@ -253,11 +255,32 @@ class ApiBillingRequestService
                 'uuid' => $request->cfdi_uuid,
                 'issued_at' =>
                     $request->issued_at?->toIso8601String(),
-                'documents_ready' =>
-                    $request->status
-                        === ApiBillingRequest::STATUS_FACTURADA
-                    && $request->pdf_path !== null
-                    && $request->xml_path !== null,
+                'documents_ready' => $documentsReady,
+                'documents' => $documentsReady
+                    ? [
+                        'pdf' => route(
+                            'api.hub.billing.invoices.documents',
+                            [
+                                'externalId' => $request->external_id,
+                                'format' => 'pdf',
+                            ]
+                        ),
+                        'xml' => route(
+                            'api.hub.billing.invoices.documents',
+                            [
+                                'externalId' => $request->external_id,
+                                'format' => 'xml',
+                            ]
+                        ),
+                        'zip' => route(
+                            'api.hub.billing.invoices.documents',
+                            [
+                                'externalId' => $request->external_id,
+                                'format' => 'zip',
+                            ]
+                        ),
+                    ]
+                    : null,
             ],
             'error' => $request->error_code
                 || $request->error_message

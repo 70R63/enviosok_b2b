@@ -3,6 +3,7 @@
 namespace App\Services\Billing;
 
 use App\Exceptions\Billing\CfdiZipValidationException;
+use App\Models\ApiBillingRequest;
 use App\Models\B2cInvoiceRequest;
 use DOMDocument;
 use DOMElement;
@@ -38,6 +39,67 @@ class CfdiZipProcessor
         UploadedFile $zipFile,
         B2cInvoiceRequest $invoiceRequest
     ): array {
+        return $this->processAndStore(
+            $zipFile,
+            (string) $invoiceRequest->rfc,
+            (float) $invoiceRequest->monto,
+            sprintf(
+                'facturacion/%d/%d',
+                $invoiceRequest->user_id,
+                $invoiceRequest->getKey()
+            )
+        );
+    }
+
+    /**
+     * @return array{
+     *     pdf_path:string,
+     *     xml_path:string,
+     *     cfdi_uuid:string,
+     *     cfdi_rfc_emisor:string,
+     *     cfdi_rfc_receptor:string,
+     *     cfdi_nombre_receptor:?string,
+     *     cfdi_total:string,
+     *     cfdi_fecha_emision:string,
+     *     cfdi_fecha_timbrado:string
+     * }
+     */
+    public function validateAndStoreApi(
+        UploadedFile $zipFile,
+        ApiBillingRequest $billingRequest
+    ): array {
+        return $this->processAndStore(
+            $zipFile,
+            (string) $billingRequest->customer_rfc,
+            (float) $billingRequest->total,
+            sprintf(
+                'facturacion/api-hub/%d/%s/%d',
+                $billingRequest->api_client_id,
+                strtolower((string) $billingRequest->environment),
+                $billingRequest->getKey()
+            )
+        );
+    }
+
+    /**
+     * @return array{
+     *     pdf_path:string,
+     *     xml_path:string,
+     *     cfdi_uuid:string,
+     *     cfdi_rfc_emisor:string,
+     *     cfdi_rfc_receptor:string,
+     *     cfdi_nombre_receptor:?string,
+     *     cfdi_total:string,
+     *     cfdi_fecha_emision:string,
+     *     cfdi_fecha_timbrado:string
+     * }
+     */
+    private function processAndStore(
+        UploadedFile $zipFile,
+        string $expectedRfc,
+        float $expectedTotal,
+        string $storagePrefix
+    ): array {
         $this->validateUploadedZip($zipFile);
 
         $temporaryDirectory = storage_path(
@@ -61,14 +123,15 @@ class CfdiZipProcessor
             $this->validatePdf($extractedFiles['pdf']);
 
             $metadata = $this->readCfdiXml($extractedFiles['xml']);
-            $this->validateAgainstRequest($metadata, $invoiceRequest);
-
-            $basePath = sprintf(
-                'facturacion/%d/%d/%s',
-                $invoiceRequest->user_id,
-                $invoiceRequest->getKey(),
-                strtolower($metadata['cfdi_uuid'])
+            $this->validateAgainstExpectedData(
+                $metadata,
+                $expectedRfc,
+                $expectedTotal
             );
+
+            $basePath = trim($storagePrefix, '/')
+                . '/'
+                . strtolower($metadata['cfdi_uuid']);
 
             $pdfPath = $basePath . '/factura.pdf';
             $xmlPath = $basePath . '/factura.xml';
@@ -599,11 +662,12 @@ class CfdiZipProcessor
     /**
      * @param array{cfdi_rfc_receptor:string, cfdi_total:string} $metadata
      */
-    private function validateAgainstRequest(
+    private function validateAgainstExpectedData(
         array $metadata,
-        B2cInvoiceRequest $invoiceRequest
+        string $expectedRfc,
+        float $expectedTotal
     ): void {
-        $requestRfc = $this->normalizeRfc($invoiceRequest->rfc);
+        $requestRfc = $this->normalizeRfc($expectedRfc);
 
         if (! hash_equals($requestRfc, $metadata['cfdi_rfc_receptor'])) {
             throw new CfdiZipValidationException(
@@ -611,7 +675,7 @@ class CfdiZipProcessor
             );
         }
 
-        $requestCents = (int) round((float) $invoiceRequest->monto * 100);
+        $requestCents = (int) round($expectedTotal * 100);
         $cfdiCents = (int) round((float) $metadata['cfdi_total'] * 100);
 
         if ($requestCents !== $cfdiCents) {

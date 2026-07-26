@@ -15,6 +15,7 @@ class ApiBillingRequest extends Model
     protected $fillable = [
         'api_client_id',
         'api_key_id',
+        'managed_by_user_id',
         'environment',
         'external_id',
         'idempotency_key',
@@ -45,7 +46,16 @@ class ApiBillingRequest extends Model
         'customer_email',
         'request_payload',
         'response_payload',
+        'internal_notes',
+        'rejection_reason',
+        'cancellation_reason',
         'cfdi_uuid',
+        'cfdi_rfc_emisor',
+        'cfdi_rfc_receptor',
+        'cfdi_nombre_receptor',
+        'cfdi_total',
+        'cfdi_fecha_emision',
+        'cfdi_fecha_timbrado',
         'pdf_path',
         'xml_path',
         'error_code',
@@ -67,6 +77,9 @@ class ApiBillingRequest extends Model
         'total' => 'decimal:2',
         'request_payload' => 'array',
         'response_payload' => 'array',
+        'cfdi_total' => 'decimal:2',
+        'cfdi_fecha_emision' => 'datetime',
+        'cfdi_fecha_timbrado' => 'datetime',
         'payment_date' => 'datetime',
         'requested_at' => 'datetime',
         'processing_at' => 'datetime',
@@ -89,6 +102,44 @@ class ApiBillingRequest extends Model
             ApiKey::class,
             'api_key_id'
         );
+    }
+
+
+    public function manager()
+    {
+        return $this->belongsTo(
+            User::class,
+            'managed_by_user_id'
+        );
+    }
+
+    public function canStartProcessing(): bool
+    {
+        return $this->status === self::STATUS_SOLICITADA;
+    }
+
+    public function canManage(): bool
+    {
+        return in_array(
+            $this->status,
+            [
+                self::STATUS_SOLICITADA,
+                self::STATUS_EN_PROCESO,
+            ],
+            true
+        );
+    }
+
+    public function canUploadDocuments(): bool
+    {
+        return $this->status === self::STATUS_EN_PROCESO;
+    }
+
+    public function documentsReady(): bool
+    {
+        return $this->status === self::STATUS_FACTURADA
+            && trim((string) $this->pdf_path) !== ''
+            && trim((string) $this->xml_path) !== '';
     }
 
     public function items()

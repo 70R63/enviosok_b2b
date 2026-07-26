@@ -399,6 +399,17 @@ Route::middleware('zigo.api')->prefix('hub')->group(function () {
                 'externalId',
                 '[A-Za-z0-9][A-Za-z0-9._:-]*'
             )->name('invoices.show');
+
+            Route::get(
+                '/invoices/{externalId}/documents/{format}',
+                [BillingInvoiceController::class, 'document']
+            )
+                ->where(
+                    'externalId',
+                    '[A-Za-z0-9][A-Za-z0-9._:-]*'
+                )
+                ->whereIn('format', ['pdf', 'xml', 'zip'])
+                ->name('invoices.documents');
         });
 });
 

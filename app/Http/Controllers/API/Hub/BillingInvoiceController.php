@@ -4,10 +4,12 @@ namespace App\Http\Controllers\API\Hub;
 
 use App\Exceptions\ApiHub\Billing\BillingApiException;
 use App\Http\Controllers\Controller;
+use App\Services\ApiHub\Billing\ApiBillingDocumentDownloadService;
 use App\Services\ApiHub\Billing\ApiBillingRequestService;
 use App\Services\ApiHub\Billing\BillingRequestValidator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
 class BillingInvoiceController extends Controller
@@ -104,6 +106,39 @@ class BillingInvoiceController extends Controller
                     'code' => 'BILLING_INTERNAL_ERROR',
                     'message' =>
                         'No fue posible consultar la solicitud de facturación.',
+                ],
+            ], 500);
+        }
+    }
+
+    public function document(
+        Request $request,
+        string $externalId,
+        string $format,
+        ApiBillingDocumentDownloadService $documents
+    ): Response|JsonResponse {
+        try {
+            $billingRequest = $this->service->findForClient(
+                $request->attributes->get('api_client'),
+                $request->attributes->get('api_key'),
+                $externalId
+            );
+
+            return $documents->download(
+                $billingRequest,
+                $format
+            );
+        } catch (BillingApiException $exception) {
+            return $this->errorResponse($exception);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'success' => false,
+                'error' => [
+                    'code' => 'BILLING_DOCUMENT_ERROR',
+                    'message' =>
+                        'No fue posible descargar el documento fiscal.',
                 ],
             ], 500);
         }

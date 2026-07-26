@@ -61,8 +61,25 @@
         <a href="#">Paqueterías</a>
 
         <a href="{{ route('crm.api-hub.index') }}"
-           class="{{ request()->routeIs('crm.api-hub.*') ? 'active' : '' }}">
+           class="{{ request()->routeIs('crm.api-hub.*') && !request()->routeIs('crm.api-hub.billing.*') ? 'active' : '' }}">
             API Hub
+        </a>
+
+        <a href="{{ route('crm.api-hub.billing.index') }}"
+           class="{{ request()->routeIs('crm.api-hub.billing.*') ? 'active' : '' }}">
+            Facturación API
+
+            @php
+                $pendingApiBillingCount = \Illuminate\Support\Facades\Schema::hasTable('api_billing_requests')
+                    ? \App\Models\ApiBillingRequest::whereIn('status', ['SOLICITADA', 'EN_PROCESO'])->count()
+                    : 0;
+            @endphp
+
+            @if($pendingApiBillingCount > 0)
+                <span style="float:right;background:#f59e0b;color:#111827;border-radius:999px;padding:2px 8px;font-size:12px;">
+                    {{ $pendingApiBillingCount }}
+                </span>
+            @endif
         </a>
 
         <a href="{{ route('crm.pricing.index') }}"
