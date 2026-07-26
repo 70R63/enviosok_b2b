@@ -17,9 +17,17 @@ class BillingRequestValidator
 
     public function validate(Request $request): array
     {
-        $idempotencyKey = trim(
+        return $this->validatePayload(
+            $request->all(),
             (string) $request->header('Idempotency-Key')
         );
+    }
+
+    public function validatePayload(
+        array $payload,
+        string $idempotencyKey
+    ): array {
+        $idempotencyKey = trim($idempotencyKey);
 
         if (
             preg_match(
@@ -34,9 +42,7 @@ class BillingRequestValidator
             );
         }
 
-        $payload = $this->normalizeInput(
-            $request->all()
-        );
+        $payload = $this->normalizeInput($payload);
 
         $validator = Validator::make(
             $payload,

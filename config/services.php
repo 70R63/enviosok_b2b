@@ -31,6 +31,40 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'zigo_internal_billing' => [
+        'enabled' => env(
+            'ZIGO_INTERNAL_BILLING_ENABLED',
+            false
+        ),
+        'api_client_id' => env(
+            'ZIGO_INTERNAL_BILLING_API_CLIENT_ID'
+        ),
+        'environment' => env(
+            'ZIGO_INTERNAL_BILLING_ENVIRONMENT',
+            'sandbox'
+        ),
+        'shipping_product_service_code' => env(
+            'ZIGO_INTERNAL_BILLING_SHIPPING_CODE'
+        ),
+        'insurance_product_service_code' => env(
+            'ZIGO_INTERNAL_BILLING_INSURANCE_CODE'
+        ),
+        'unit_code' => env(
+            'ZIGO_INTERNAL_BILLING_UNIT_CODE'
+        ),
+        'tax_object' => env(
+            'ZIGO_INTERNAL_BILLING_TAX_OBJECT'
+        ),
+        'payment_forms' => [
+            'MERCADO_PAGO' => env(
+                'ZIGO_INTERNAL_BILLING_MP_PAYMENT_FORM'
+            ),
+            'SALDO_PREPAGO' => env(
+                'ZIGO_INTERNAL_BILLING_BALANCE_PAYMENT_FORM'
+            ),
+        ],
+    ],
+
     'zigo_webhooks' => [
         'connect_timeout' => env(
             'ZIGO_WEBHOOK_CONNECT_TIMEOUT',

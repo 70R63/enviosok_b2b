@@ -142,6 +142,14 @@ class ApiBillingRequest extends Model
             && trim((string) $this->xml_path) !== '';
     }
 
+    public function b2cInvoiceRequest()
+    {
+        return $this->hasOne(
+            B2cInvoiceRequest::class,
+            'api_billing_request_id'
+        );
+    }
+
     public function webhookDeliveries()
     {
         return $this->hasMany(

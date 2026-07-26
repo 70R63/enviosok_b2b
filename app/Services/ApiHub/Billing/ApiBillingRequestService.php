@@ -22,9 +22,47 @@ class ApiBillingRequestService
         ApiKey $apiKey,
         array $payload
     ): array {
-        $environment = strtolower(
-            trim((string) $apiKey->environment)
+        return $this->createOrReplayForContext(
+            $apiClient,
+            $apiKey,
+            strtolower(trim((string) $apiKey->environment)),
+            $payload
         );
+    }
+
+    public function createOrReplayInternal(
+        ApiClient $apiClient,
+        string $environment,
+        array $payload
+    ): array {
+        $environment = strtolower(trim($environment));
+
+        if (! in_array(
+            $environment,
+            ['sandbox', 'production'],
+            true
+        )) {
+            throw new BillingApiException(
+                'El ambiente interno de facturación no es válido.',
+                'INVALID_INTERNAL_ENVIRONMENT',
+                422
+            );
+        }
+
+        return $this->createOrReplayForContext(
+            $apiClient,
+            null,
+            $environment,
+            $payload
+        );
+    }
+
+    private function createOrReplayForContext(
+        ApiClient $apiClient,
+        ?ApiKey $apiKey,
+        string $environment,
+        array $payload
+    ): array {
         $payloadHash = $this->validator->payloadHash(
             $payload
         );
@@ -95,7 +133,7 @@ class ApiBillingRequestService
 
             $request = ApiBillingRequest::create([
                 'api_client_id' => $apiClient->id,
-                'api_key_id' => $apiKey->id,
+                'api_key_id' => $apiKey?->id,
                 'environment' => $environment,
                 'external_id' => $payload['external_id'],
                 'idempotency_key' =>
