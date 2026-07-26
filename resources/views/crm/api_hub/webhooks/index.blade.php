@@ -48,6 +48,12 @@
         .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
         .inline{display:inline-block}
         code{font-size:12px;word-break:break-all}
+        details{margin-top:8px}
+        summary{cursor:pointer;font-weight:800;color:#334155}
+        .attempt{margin-top:8px;padding:10px;background:#f8fafc;border-radius:8px;font-size:12px}
+        .attempt-ok{border-left:4px solid #16a34a}
+        .attempt-error{border-left:4px solid #dc2626}
+        .response{max-width:320px;white-space:pre-wrap;word-break:break-word}
     </style>
 </head>
 <body>
@@ -123,7 +129,7 @@
         <div class="panel" style="margin-bottom:24px">
             <h2>Nuevo endpoint webhook</h2>
             <p class="muted">
-                Producción requiere HTTPS. El envío HTTP se activará en la Fase 12.5.2; por ahora los eventos quedan firmados en estado PENDING.
+                Producción requiere HTTPS. Las entregas se procesan mediante el comando y scheduler de API Hub.
             </p>
 
             <form method="POST" action="{{ route('crm.api-hub.webhooks.store', $apiClient) }}">
@@ -266,22 +272,22 @@
         </div>
 
         <div class="panel">
-            <h2>Outbox de eventos</h2>
+            <h2>Entregas e historial de webhooks</h2>
             <p class="muted">
-                La firma corresponde a HMAC SHA-256 sobre: timestamp + punto + cuerpo JSON exacto.
+                Firma HMAC SHA-256 sobre timestamp + punto + cuerpo JSON exacto. Los códigos HTTP 200 a 299 se consideran entregados.
             </p>
 
             <table>
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>Endpoint</th>
-                        <th>Evento</th>
+                        <th>Endpoint / evento</th>
                         <th>Factura externa</th>
                         <th>Estado</th>
                         <th>Intentos</th>
-                        <th>Firma</th>
-                        <th>Creado</th>
+                        <th>Última respuesta</th>
+                        <th>Próximo intento</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -289,10 +295,10 @@
                         <tr>
                             <td>{{ $delivery->id }}</td>
                             <td>
-                                {{ $delivery->endpoint?->name ?? '-' }}
+                                <strong>{{ $delivery->endpoint?->name ?? '-' }}</strong>
                                 <div class="muted">{{ $delivery->endpoint?->environment ?? '-' }}</div>
+                                <code>{{ $delivery->event }}</code>
                             </td>
-                            <td><code>{{ $delivery->event }}</code></td>
                             <td>{{ $delivery->billingRequest?->external_id ?? '-' }}</td>
                             <td>
                                 @if($delivery->status === 'DELIVERED')
@@ -304,12 +310,70 @@
                                 @else
                                     <span class="badge badge-blue">{{ $delivery->status }}</span>
                                 @endif
+
+                                @if($delivery->delivered_at)
+                                    <div class="muted">{{ $delivery->delivered_at }}</div>
+                                @endif
                             </td>
-                            <td>{{ $delivery->attempts }}/{{ $delivery->max_attempts }}</td>
                             <td>
-                                <code>{{ \Illuminate\Support\Str::limit($delivery->signature, 24) }}</code>
+                                {{ $delivery->attempts }}/{{ $delivery->max_attempts }}
+                                @if($delivery->response_time_ms !== null)
+                                    <div class="muted">{{ $delivery->response_time_ms }} ms</div>
+                                @endif
                             </td>
-                            <td>{{ $delivery->created_at }}</td>
+                            <td class="response">
+                                @if($delivery->response_status !== null)
+                                    <strong>HTTP {{ $delivery->response_status }}</strong>
+                                @else
+                                    <span class="muted">Sin respuesta HTTP</span>
+                                @endif
+
+                                @if($delivery->error_message)
+                                    <div class="muted">{{ $delivery->error_message }}</div>
+                                @endif
+
+                                @if($delivery->attemptHistory->isNotEmpty())
+                                    <details>
+                                        <summary>Ver historial</summary>
+                                        @foreach($delivery->attemptHistory as $attempt)
+                                            <div class="attempt {{ $attempt->successful ? 'attempt-ok' : 'attempt-error' }}">
+                                                <strong>Intento {{ $attempt->attempt_number }}</strong>
+                                                · {{ $attempt->started_at }}
+                                                @if($attempt->duration_ms !== null)
+                                                    · {{ $attempt->duration_ms }} ms
+                                                @endif
+                                                <br>
+                                                @if($attempt->response_status !== null)
+                                                    HTTP {{ $attempt->response_status }}
+                                                @else
+                                                    Sin respuesta HTTP
+                                                @endif
+                                                @if($attempt->error_message)
+                                                    <div>{{ $attempt->error_message }}</div>
+                                                @endif
+                                            </div>
+                                        @endforeach
+                                    </details>
+                                @endif
+                            </td>
+                            <td>
+                                {{ $delivery->next_attempt_at ?? '-' }}
+                            </td>
+                            <td>
+                                <form
+                                    method="POST"
+                                    action="{{ route('crm.api-hub.webhooks.deliveries.retry', [$apiClient, $delivery->endpoint, $delivery]) }}"
+                                    onsubmit="return confirm('¿Colocar esta entrega nuevamente en la cola? El receptor debe manejar el event_id de forma idempotente.');"
+                                >
+                                    @csrf
+                                    <button class="btn btn-orange" type="submit">
+                                        Reenviar
+                                    </button>
+                                </form>
+                                <div class="muted" style="margin-top:8px">
+                                    <code>{{ \Illuminate\Support\Str::limit($delivery->signature, 24) }}</code>
+                                </div>
+                            </td>
                         </tr>
                     @empty
                         <tr>

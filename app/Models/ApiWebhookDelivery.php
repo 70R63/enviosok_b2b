@@ -24,9 +24,12 @@ class ApiWebhookDelivery extends Model
         'signature',
         'payload_json',
         'next_attempt_at',
+        'lock_token',
+        'locked_at',
         'last_attempt_at',
         'delivered_at',
         'response_status',
+        'response_time_ms',
         'response_body',
         'error_message',
     ];
@@ -36,9 +39,11 @@ class ApiWebhookDelivery extends Model
         'max_attempts' => 'integer',
         'signature_timestamp' => 'integer',
         'next_attempt_at' => 'datetime',
+        'locked_at' => 'datetime',
         'last_attempt_at' => 'datetime',
         'delivered_at' => 'datetime',
         'response_status' => 'integer',
+        'response_time_ms' => 'integer',
     ];
 
     public function endpoint()
@@ -63,6 +68,15 @@ class ApiWebhookDelivery extends Model
             ApiBillingRequest::class,
             'api_billing_request_id'
         );
+    }
+
+
+    public function attemptHistory()
+    {
+        return $this->hasMany(
+            ApiWebhookDeliveryAttempt::class,
+            'api_webhook_delivery_id'
+        )->orderByDesc('attempt_number');
     }
 
     public function payload(): array

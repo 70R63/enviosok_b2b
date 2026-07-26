@@ -413,3 +413,15 @@ Route::middleware('zigo.api')->prefix('hub')->group(function () {
         });
 });
 
+if (app()->environment('local') || app()->environment('testing')) {
+    Route::post('/hub/testing/webhook-receiver', function (Request $request) {
+        return response()->json([
+            'received' => true,
+            'event' => $request->header('X-ZIGO-Event'),
+            'delivery_id' =>
+                $request->header('X-ZIGO-Delivery-ID'),
+            'signature_present' =>
+                $request->hasHeader('X-ZIGO-Signature'),
+        ]);
+    })->name('api.hub.testing.webhook-receiver');
+}

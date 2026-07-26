@@ -7,6 +7,7 @@ use App\Models\ApiClient;
 use App\Models\ApiWebhookDelivery;
 use App\Models\ApiWebhookEndpoint;
 use App\Services\ApiHub\Webhooks\BillingWebhookPublisher;
+use App\Services\ApiHub\Webhooks\WebhookDeliveryService;
 use App\Services\ApiHub\Webhooks\WebhookSigner;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -41,6 +42,7 @@ class CrmApiWebhookController extends Controller
             ->with([
                 'endpoint:id,name,url,environment',
                 'billingRequest:id,external_id',
+                'attemptHistory',
             ])
             ->where('api_client_id', $apiClient->id)
             ->orderByDesc('id')
@@ -196,6 +198,44 @@ class CrmApiWebhookController extends Controller
                 'Secreto webhook rotado correctamente.'
             )
             ->with('new_webhook_secret', $plainSecret);
+    }
+
+
+    public function retryDelivery(
+        ApiClient $apiClient,
+        ApiWebhookEndpoint $webhookEndpoint,
+        ApiWebhookDelivery $delivery,
+        WebhookDeliveryService $deliveryService
+    ): RedirectResponse {
+        $this->ensureOwnership($apiClient, $webhookEndpoint);
+
+        if (
+            $delivery->api_client_id !== $apiClient->id
+            || $delivery->api_webhook_endpoint_id
+                !== $webhookEndpoint->id
+        ) {
+            abort(404);
+        }
+
+        try {
+            $deliveryService->requeue($delivery);
+        } catch (\RuntimeException $exception) {
+            return redirect()
+                ->route(
+                    'crm.api-hub.webhooks.index',
+                    $apiClient
+                )
+                ->withErrors([
+                    'delivery' => $exception->getMessage(),
+                ]);
+        }
+
+        return redirect()
+            ->route('crm.api-hub.webhooks.index', $apiClient)
+            ->with(
+                'success',
+                'Entrega webhook colocada nuevamente en la cola.'
+            );
     }
 
     private function validateEndpoint(

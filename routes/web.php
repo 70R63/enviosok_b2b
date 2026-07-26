@@ -480,6 +480,11 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
             ->whereNumber('webhookEndpoint')
             ->name('api-hub.webhooks.rotate-secret');
 
+        Route::post('/api-hub/{apiClient}/webhooks/{webhookEndpoint}/entregas/{delivery}/reenviar', [\App\Http\Controllers\CRM\CrmApiWebhookController::class, 'retryDelivery'])
+            ->whereNumber('webhookEndpoint')
+            ->whereNumber('delivery')
+            ->name('api-hub.webhooks.deliveries.retry');
+
         Route::post('/clientes/{cliente}/seguimiento', [CrmClientController::class, 'actualizarSeguimiento'])
             ->name('clientes.seguimiento');
             
