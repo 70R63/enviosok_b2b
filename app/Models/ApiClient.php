@@ -54,6 +54,22 @@ class ApiClient extends Model
         );
     }
 
+    public function webhookEndpoints()
+    {
+        return $this->hasMany(
+            ApiWebhookEndpoint::class,
+            'api_client_id'
+        );
+    }
+
+    public function webhookDeliveries()
+    {
+        return $this->hasMany(
+            ApiWebhookDelivery::class,
+            'api_client_id'
+        );
+    }
+
     public function products()
     {
         return $this->belongsToMany(

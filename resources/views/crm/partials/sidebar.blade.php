@@ -44,7 +44,7 @@
 
         <a href="{{ route('crm.facturacion.index') }}"
            class="{{ request()->routeIs('crm.facturacion.*') ? 'active' : '' }}">
-            Facturación
+            Facturación B2C
 
             @php
                 $pendingInvoiceCount = \Illuminate\Support\Facades\Schema::hasTable('b2c_invoice_requests')
@@ -62,12 +62,12 @@
 
         <a href="{{ route('crm.api-hub.index') }}"
            class="{{ request()->routeIs('crm.api-hub.*') && !request()->routeIs('crm.api-hub.billing.*') ? 'active' : '' }}">
-            API Hub
+            Clientes API
         </a>
 
         <a href="{{ route('crm.api-hub.billing.index') }}"
            class="{{ request()->routeIs('crm.api-hub.billing.*') ? 'active' : '' }}">
-            Facturación API
+            Facturación de integraciones
 
             @php
                 $pendingApiBillingCount = \Illuminate\Support\Facades\Schema::hasTable('api_billing_requests')

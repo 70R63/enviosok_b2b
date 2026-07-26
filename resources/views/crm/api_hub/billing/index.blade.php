@@ -1,11 +1,11 @@
 @extends('crm.layout')
 
-@section('title', 'Facturación API | CRM ZIGO')
+@section('title', 'Facturación de integraciones | CRM ZIGO')
 
 @section('content')
-    <div class="title">Facturación API</div>
+    <div class="title">Facturación de integraciones</div>
     <div class="subtitle">
-        Solicitudes recibidas desde ZIGO API Hub y sistemas externos.
+        Solicitudes de CFDI recibidas desde clientes y sistemas conectados mediante API Hub.
     </div>
 
     <div class="summary-grid api-billing-summary">

@@ -7,7 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Models\ApiBillingRequest;
 use App\Services\ApiHub\Billing\ApiBillingDocumentDownloadService;
 use App\Services\ApiHub\Billing\ApiBillingFulfillmentService;
+use App\Services\ApiHub\Webhooks\BillingWebhookPublisher;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -161,15 +163,23 @@ class CrmApiBillingController extends Controller
 
     public function startProcessing(
         Request $request,
-        ApiBillingRequest $apiBillingRequest
+        ApiBillingRequest $apiBillingRequest,
+        BillingWebhookPublisher $webhookPublisher
     ): RedirectResponse {
-        $updated = ApiBillingRequest::query()
-            ->whereKey($apiBillingRequest->getKey())
-            ->where(
-                'status',
-                ApiBillingRequest::STATUS_SOLICITADA
-            )
-            ->update([
+        $updated = DB::transaction(function () use (
+            $request,
+            $apiBillingRequest,
+            $webhookPublisher
+        ): int {
+            $lockedRequest = ApiBillingRequest::query()
+                ->lockForUpdate()
+                ->findOrFail($apiBillingRequest->getKey());
+
+            if (! $lockedRequest->canStartProcessing()) {
+                return 0;
+            }
+
+            $lockedRequest->update([
                 'status' =>
                     ApiBillingRequest::STATUS_EN_PROCESO,
                 'managed_by_user_id' =>
@@ -178,6 +188,14 @@ class CrmApiBillingController extends Controller
                 'error_code' => null,
                 'error_message' => null,
             ]);
+
+            $webhookPublisher->publish(
+                $lockedRequest->refresh(),
+                BillingWebhookPublisher::EVENT_PROCESSING
+            );
+
+            return 1;
+        });
 
         if ($updated !== 1) {
             return $this->redirectToRequest(
@@ -222,7 +240,8 @@ class CrmApiBillingController extends Controller
 
     public function reject(
         Request $request,
-        ApiBillingRequest $apiBillingRequest
+        ApiBillingRequest $apiBillingRequest,
+        BillingWebhookPublisher $webhookPublisher
     ): RedirectResponse {
         $validated = $request->validate([
             'rejection_reason' => [
@@ -233,26 +252,42 @@ class CrmApiBillingController extends Controller
             ],
         ]);
 
-        $updated = ApiBillingRequest::query()
-            ->whereKey($apiBillingRequest->getKey())
-            ->whereIn('status', [
-                ApiBillingRequest::STATUS_SOLICITADA,
-                ApiBillingRequest::STATUS_EN_PROCESO,
-            ])
-            ->update([
+        $updated = DB::transaction(function () use (
+            $request,
+            $apiBillingRequest,
+            $validated,
+            $webhookPublisher
+        ): int {
+            $lockedRequest = ApiBillingRequest::query()
+                ->lockForUpdate()
+                ->findOrFail($apiBillingRequest->getKey());
+
+            if (! $lockedRequest->canManage()) {
+                return 0;
+            }
+
+            $reason = trim($validated['rejection_reason']);
+
+            $lockedRequest->update([
                 'status' =>
                     ApiBillingRequest::STATUS_RECHAZADA,
                 'managed_by_user_id' =>
                     $request->user()->getAuthIdentifier(),
-                'rejection_reason' =>
-                    trim($validated['rejection_reason']),
+                'rejection_reason' => $reason,
                 'cancellation_reason' => null,
                 'error_code' => 'MANUAL_REJECTION',
-                'error_message' =>
-                    trim($validated['rejection_reason']),
+                'error_message' => $reason,
                 'rejected_at' => now(),
                 'cancelled_at' => null,
             ]);
+
+            $webhookPublisher->publish(
+                $lockedRequest->refresh(),
+                BillingWebhookPublisher::EVENT_REJECTED
+            );
+
+            return 1;
+        });
 
         if ($updated !== 1) {
             return $this->redirectToRequest(
@@ -271,7 +306,8 @@ class CrmApiBillingController extends Controller
 
     public function cancel(
         Request $request,
-        ApiBillingRequest $apiBillingRequest
+        ApiBillingRequest $apiBillingRequest,
+        BillingWebhookPublisher $webhookPublisher
     ): RedirectResponse {
         $validated = $request->validate([
             'cancellation_reason' => [
@@ -282,26 +318,42 @@ class CrmApiBillingController extends Controller
             ],
         ]);
 
-        $updated = ApiBillingRequest::query()
-            ->whereKey($apiBillingRequest->getKey())
-            ->whereIn('status', [
-                ApiBillingRequest::STATUS_SOLICITADA,
-                ApiBillingRequest::STATUS_EN_PROCESO,
-            ])
-            ->update([
+        $updated = DB::transaction(function () use (
+            $request,
+            $apiBillingRequest,
+            $validated,
+            $webhookPublisher
+        ): int {
+            $lockedRequest = ApiBillingRequest::query()
+                ->lockForUpdate()
+                ->findOrFail($apiBillingRequest->getKey());
+
+            if (! $lockedRequest->canManage()) {
+                return 0;
+            }
+
+            $reason = trim($validated['cancellation_reason']);
+
+            $lockedRequest->update([
                 'status' =>
                     ApiBillingRequest::STATUS_CANCELADA,
                 'managed_by_user_id' =>
                     $request->user()->getAuthIdentifier(),
-                'cancellation_reason' =>
-                    trim($validated['cancellation_reason']),
+                'cancellation_reason' => $reason,
                 'rejection_reason' => null,
                 'error_code' => 'MANUAL_CANCELLATION',
-                'error_message' =>
-                    trim($validated['cancellation_reason']),
+                'error_message' => $reason,
                 'cancelled_at' => now(),
                 'rejected_at' => null,
             ]);
+
+            $webhookPublisher->publish(
+                $lockedRequest->refresh(),
+                BillingWebhookPublisher::EVENT_CANCELLED
+            );
+
+            return 1;
+        });
 
         if ($updated !== 1) {
             return $this->redirectToRequest(

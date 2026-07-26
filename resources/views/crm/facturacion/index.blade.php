@@ -1,11 +1,11 @@
 @extends('crm.layout')
 
-@section('title', 'Facturación | CRM ZIGO')
+@section('title', 'Facturación B2C | CRM ZIGO')
 
 @section('content')
-    <div class="title">Facturación</div>
+    <div class="title">Facturación B2C</div>
     <div class="subtitle">
-        Solicitudes de CFDI generadas desde el portal B2C.
+        Solicitudes de CFDI generadas desde el portal B2C de ZIGO.
     </div>
 
     <div class="summary-grid summary-grid-invoices">

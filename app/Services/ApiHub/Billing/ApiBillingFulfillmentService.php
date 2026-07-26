@@ -5,6 +5,7 @@ namespace App\Services\ApiHub\Billing;
 use App\Exceptions\Billing\CfdiZipValidationException;
 use App\Models\ApiBillingRequest;
 use App\Models\B2cInvoiceRequest;
+use App\Services\ApiHub\Webhooks\BillingWebhookPublisher;
 use App\Services\Billing\CfdiZipProcessor;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -14,7 +15,8 @@ use Throwable;
 class ApiBillingFulfillmentService
 {
     public function __construct(
-        private readonly CfdiZipProcessor $zipProcessor
+        private readonly CfdiZipProcessor $zipProcessor,
+        private readonly BillingWebhookPublisher $webhookPublisher
     ) {
     }
 
@@ -152,7 +154,14 @@ class ApiBillingFulfillmentService
                 ],
             ]);
 
-            return $lockedRequest->refresh();
+            $lockedRequest->refresh();
+
+            $this->webhookPublisher->publish(
+                $lockedRequest,
+                BillingWebhookPublisher::EVENT_ISSUED
+            );
+
+            return $lockedRequest;
         });
     }
 

@@ -6,12 +6,14 @@ use App\Exceptions\ApiHub\Billing\BillingApiException;
 use App\Models\ApiBillingRequest;
 use App\Models\ApiClient;
 use App\Models\ApiKey;
+use App\Services\ApiHub\Webhooks\BillingWebhookPublisher;
 use Illuminate\Support\Facades\DB;
 
 class ApiBillingRequestService
 {
     public function __construct(
-        private readonly BillingRequestValidator $validator
+        private readonly BillingRequestValidator $validator,
+        private readonly BillingWebhookPublisher $webhookPublisher
     ) {
     }
 
@@ -156,6 +158,13 @@ class ApiBillingRequestService
                     'metadata' => $item['metadata'] ?? null,
                 ]);
             }
+
+            $request->load('items');
+
+            $this->webhookPublisher->publish(
+                $request,
+                BillingWebhookPublisher::EVENT_REQUESTED
+            );
 
             return [
                 'request' => $request->load('items'),

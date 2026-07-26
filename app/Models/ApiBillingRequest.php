@@ -142,6 +142,14 @@ class ApiBillingRequest extends Model
             && trim((string) $this->xml_path) !== '';
     }
 
+    public function webhookDeliveries()
+    {
+        return $this->hasMany(
+            ApiWebhookDelivery::class,
+            'api_billing_request_id'
+        );
+    }
+
     public function items()
     {
         return $this->hasMany(

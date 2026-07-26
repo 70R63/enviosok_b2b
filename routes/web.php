@@ -462,6 +462,24 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
         Route::post('/api-hub/{apiClient}/products', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'updateProducts'])
             ->name('api-hub.products.update');
 
+        Route::get('/api-hub/{apiClient}/webhooks', [\App\Http\Controllers\CRM\CrmApiWebhookController::class, 'index'])
+            ->name('api-hub.webhooks.index');
+
+        Route::post('/api-hub/{apiClient}/webhooks', [\App\Http\Controllers\CRM\CrmApiWebhookController::class, 'store'])
+            ->name('api-hub.webhooks.store');
+
+        Route::post('/api-hub/{apiClient}/webhooks/{webhookEndpoint}/actualizar', [\App\Http\Controllers\CRM\CrmApiWebhookController::class, 'update'])
+            ->whereNumber('webhookEndpoint')
+            ->name('api-hub.webhooks.update');
+
+        Route::post('/api-hub/{apiClient}/webhooks/{webhookEndpoint}/estado', [\App\Http\Controllers\CRM\CrmApiWebhookController::class, 'toggle'])
+            ->whereNumber('webhookEndpoint')
+            ->name('api-hub.webhooks.toggle');
+
+        Route::post('/api-hub/{apiClient}/webhooks/{webhookEndpoint}/rotar-secreto', [\App\Http\Controllers\CRM\CrmApiWebhookController::class, 'rotateSecret'])
+            ->whereNumber('webhookEndpoint')
+            ->name('api-hub.webhooks.rotate-secret');
+
         Route::post('/clientes/{cliente}/seguimiento', [CrmClientController::class, 'actualizarSeguimiento'])
             ->name('clientes.seguimiento');
             
