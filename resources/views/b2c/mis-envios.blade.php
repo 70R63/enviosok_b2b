@@ -236,6 +236,9 @@
                                             $estadoGuia ===
                                             'ERROR_VALIDACION_PESO';
 
+                                        $generandoGuia =
+                                            $estadoGuia === 'GENERANDO';
+
                                         $puedeEliminar =
                                             !$estaPagada
                                             && !$tieneGuia;
@@ -320,6 +323,7 @@
                                                 $estaPagada
                                                 && !$tieneGuia
                                                 && !$errorPeso
+                                                && !$generandoGuia
                                             )
                                                 <form
                                                     method="POST"
@@ -337,6 +341,12 @@
                                                         }}
                                                     </button>
                                                 </form>
+                                            @endif
+
+                                            @if($generandoGuia)
+                                                <span>
+                                                    Generación en curso
+                                                </span>
                                             @endif
 
                                             {{-- Errores que requieren revisión --}}

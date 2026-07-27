@@ -340,13 +340,41 @@
                     </a>
                 @endif
 
-                @if(in_array($cotizacion->estatus, ['PAGADA', 'ERROR_GENERACION_GUIA']) && !$cotizacion->tracking_number)
+                @php
+                    $guiaGenerando = strtoupper(
+                        (string) $cotizacion->guia_estatus
+                    ) === 'GENERANDO';
+                @endphp
+
+                @if(
+                    in_array(
+                        $cotizacion->estatus,
+                        ['PAGADA', 'ERROR_GENERACION_GUIA'],
+                        true
+                    )
+                    && !$cotizacion->tracking_number
+                    && !$guiaGenerando
+                )
                     <form method="POST" action="{{ route('b2c.guia.generar', $cotizacion->id) }}" style="display:inline">
                         @csrf
                         <button type="submit" class="btn warning">
-                            Generar guía
+                            {{ $cotizacion->estatus === 'ERROR_GENERACION_GUIA'
+                                ? 'Reintentar generación'
+                                : 'Generar guía'
+                            }}
                         </button>
                     </form>
+                @elseif($guiaGenerando)
+                    <span class="invoice-disabled">
+                        Generación de guía en curso
+                    </span>
+                @endif
+
+                @if((int) $cotizacion->guia_generation_attempts > 0)
+                    <div class="label">Intentos de generación</div>
+                    <div class="value">
+                        {{ $cotizacion->guia_generation_attempts }}
+                    </div>
                 @endif
             </div>
 

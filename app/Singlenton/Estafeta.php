@@ -71,7 +71,12 @@ class Estafeta {
 
             Log::debug( Config('ltd.estafeta.token_uri') );
             Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__." formParams");
-            Log::debug(print_r($formParams,true));
+            Log::info('ESTAFETA TOKEN REQUEST', [
+                'grant_type' => $formParams['grant_type'],
+                'scope_configured' => !empty($formParams['scope']),
+                'client_id_configured' => !empty($formParams['client_id']),
+                'client_secret_configured' => !empty($formParams['client_secret']),
+            ]);
 
             $response = $client->request('POST', 'oauth2/v2.0/token',
                 ['form_params' => $formParams
@@ -98,7 +103,11 @@ class Estafeta {
                 ];
 
                 Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__." insert token");
-                Log::debug(print_r($insert, true));
+                Log::info('ESTAFETA TOKEN CACHE', [
+                    'empresa_id' => $empresa_id,
+                    'servicio' => $recursoId,
+                    'expira_en' => (string) $insert['expira_en'],
+                ]);
 
                 $id = LtdSesion::create($insert)->id;
 
@@ -129,10 +138,16 @@ class Estafeta {
                     ,'apiKey'   => $apiKey
                 ];
 
-        Log::debug($headers);
+        Log::info('ESTAFETA HTTP HEADERS', [
+            'header_names' => array_keys($headers),
+        ]);
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__." Body ");
         $bodyJson = json_encode($body);
-        Log::debug(print_r($bodyJson,true));
+        Log::info('ESTAFETA HTTP REQUEST', [
+            'method' => $metodo,
+            'service' => $servicio,
+            'body_size' => strlen($bodyJson),
+        ]);
         
         Log::debug(__CLASS__." ".__FUNCTION__." FINALIZANDO-----------------");
         return $client->request($metodo,$servicio , [
@@ -178,29 +193,28 @@ class Estafeta {
         'apiKey' => $subscriptionKey,
     ];
 
-    /* ===== LOGS NUEVOS ===== */
-    Log::info('ESTAFETA SUBSCRIPTION DEBUG', [
-        'subscription_key' => $subscriptionKey,
-        'subscription_key_length' => strlen($subscriptionKey),
+    Log::info('ESTAFETA LABEL REQUEST', [
+        'base_uri_configured' => !empty($this->baseUri),
+        'subscription_key_configured' => !empty($subscriptionKey),
+        'header_names' => array_keys($headers),
+        'service_type' => data_get(
+            $body,
+            'labelDefinition.serviceConfiguration.serviceTypeId'
+        ),
+        'origin_zip' => data_get(
+            $body,
+            'labelDefinition.serviceConfiguration.originZipCodeForRouting'
+        ),
+        'destination_zip' => data_get(
+            $body,
+            'labelDefinition.location.destination.homeAddress.address.zipCode'
+        ),
+        'quantity' => data_get(
+            $body,
+            'labelDefinition.serviceConfiguration.quantityOfLabels'
+        ),
+        'output_type' => $formatoImpresion,
     ]);
-
-    Log::info('ESTAFETA HEADERS DEBUG', [
-        'headers' => array_keys($headers),
-    ]);
-
-    Log::info('ESTAFETA HEADER VALUES', [
-        'apikey' => $headers['apikey'],
-        'subscription' => $headers['Ocp-Apim-Subscription-Key'],
-    ]);
-    /* ===== FIN LOGS NUEVOS ===== */
-
-    Log::info('ESTAFETA BASE URI: ' . $this->baseUri);
-    Log::info('ESTAFETA URI: ' . $uri);
-    Log::info('ESTAFETA KEY ID: ' . $this->keyId);
-    Log::info('ESTAFETA SECRET LENGTH: ' . strlen($this->secret));
-
-    Log::info(__CLASS__ . " " . __FUNCTION__ . " " . __LINE__ . " body");
-    Log::debug(json_encode($body));
 
     $response = $client->request('POST', $uri, [
         'headers' => $headers,
@@ -212,7 +226,11 @@ class Estafeta {
     Log::info(__CLASS__ . " " . __FUNCTION__ . " " . __LINE__);
 
     $this->documento = $this->resultado->data;
-    Log::debug($this->documento);
+    Log::info('ESTAFETA LABEL DOCUMENT', [
+        'base64_size' => is_string($this->documento)
+            ? strlen($this->documento)
+            : 0,
+    ]);
 
     $this->trackingNumber = $this->resultado->labelPetitionResult->result->description;
 
@@ -364,7 +382,10 @@ class Estafeta {
                                 ->whereIn('empresa_id',$empresas);
 
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__." LtdCredencial");
-        Log::debug(print_r($ltdCredencial->get()->toArray(),true));
+        Log::info('ESTAFETA CREDENTIAL SEARCH', [
+            'empresa_count' => count($empresas),
+            'resource_id' => $recursoId,
+        ]);
                      
         if ($recursoId === 1) {
             Log::info(__CLASS__." ".__FUNCTION__." Token para etiquetas");
@@ -386,7 +407,12 @@ class Estafeta {
         }
 
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__." asignar credenciales");
-        Log::debug( print_r($credenciales,true));
+        Log::info('ESTAFETA CREDENTIALS LOADED', [
+            'resource_id' => $recursoId,
+            'credentials_found' => count($credenciales),
+            'key_configured' => !empty($credenciales[0]['key_id'] ?? null),
+            'secret_configured' => !empty($credenciales[0]['secret'] ?? null),
+        ]);
         $this->keyId = $credenciales[0]['key_id'];
         $this->secret = $credenciales[0]['secret'];
         $this->clientID = $credenciales[0]['client_id'];

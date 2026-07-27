@@ -74,6 +74,7 @@ Route::get('/b2c/pago/{cotizacion}/pending', [CotizacionPublicaController::class
     ->name('b2c.pago.pending');
 	
 Route::post('/b2c/guia/{cotizacion}/generar', [CotizacionPublicaController::class, 'generarGuia'])
+    ->middleware(['auth', 'throttle:6,1'])
     ->name('b2c.guia.generar');
 
 //Opciones de Rastreo

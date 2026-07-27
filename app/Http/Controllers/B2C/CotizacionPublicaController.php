@@ -9,8 +9,6 @@ use App\Models\B2cCotizacion;
 use App\Models\User;
 use App\Models\Roles\Roles;
 use App\Models\B2cFiscalProfile;
-use App\Models\Guia;
-use App\Negocio\Guias\EstafetaCreacion;
 use App\Models\B2cDireccion;
 use App\Models\B2cIdentityVerification;
 use App\Models\B2cIncidencia;
@@ -19,6 +17,7 @@ use App\Services\ZigoPricingService;
 use App\Services\ZigoProviderRateService;
 use App\Exceptions\Payments\PaymentVerificationException;
 use App\Services\Payments\PaymentVerificationService;
+use App\Services\Shipping\EstafetaGuideService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
@@ -1469,121 +1468,12 @@ private function verifyMercadoPagoCallback(
 
 public function generarGuia(
     B2cCotizacion $cotizacion,
-    PaymentVerificationService $verificationService
+    EstafetaGuideService $guideService
 ) {
-    /*
-     * Seguridad: solamente el propietario puede generar
-     * o recuperar la guía de la cotización.
-     */
     if ($cotizacion->user_id !== auth()->id()) {
         abort(403);
     }
 
-    /*
-     * Idempotencia:
-     * Si la cotización ya tiene una guía válida, no se vuelve
-     * a consumir Estafeta Label.
-     */
-    if ($cotizacion->guia_id) {
-        $guiaExistente = Guia::withoutGlobalScopes()
-            ->find($cotizacion->guia_id);
-
-        $trackingExistente = trim(
-            (string) (
-                $guiaExistente?->tracking_number
-                ?: $cotizacion->tracking_number
-                ?: ''
-            )
-        );
-
-        $trackingValido =
-            $trackingExistente !== ''
-            && !str_contains(
-                $trackingExistente,
-                'Exception'
-            )
-            && !str_contains(
-                $trackingExistente,
-                'SAXParseException'
-            );
-
-        if ($guiaExistente && $trackingValido) {
-            $cotizacion->update([
-                'tracking_number' =>
-                    $guiaExistente->tracking_number,
-
-                'documento' =>
-                    $guiaExistente->documento,
-
-                'guia_estatus' => 'GENERADA',
-                'estatus' => 'GUIA_GENERADA',
-            ]);
-
-            $pdfUrl = $guiaExistente->documento
-                ? asset(
-                    'storage/'
-                    . basename(
-                        $guiaExistente->documento
-                    )
-                )
-                : null;
-
-            return redirect()
-                ->route(
-                    'b2c.pago.success',
-                    $cotizacion->id
-                )
-                ->with(
-                    'success',
-                    'La guía ya fue generada. Tracking: '
-                    . $trackingExistente
-                )
-                ->with(
-                    'pdf_url',
-                    $pdfUrl
-                );
-        }
-    }
-
-    /*
-     * El estado PAGADA no es suficiente. La guía solamente puede
-     * generarse con un pago confirmado por Mercado Pago o con un
-     * movimiento de saldo aplicado en ZIGO.
-     */
-    if (!$verificationService->isEligibleForGuide($cotizacion)) {
-        abort(
-            403,
-            'El pago todavía no cuenta con verificación suficiente '
-            . 'para generar la guía.'
-        );
-    }
-
-    /*
-     * Solo una cotización pagada o con error previo
-     * puede intentar generar la guía.
-     */
-    $estadosPermitidos = [
-        'PAGADA',
-        'ERROR_GENERACION_GUIA',
-    ];
-
-    if (
-        !in_array(
-            $cotizacion->estatus,
-            $estadosPermitidos,
-            true
-        )
-    ) {
-        abort(
-            403,
-            'La cotización aún no está pagada.'
-        );
-    }
-
-    /*
-     * Por ahora la generación automática está habilitada
-     * únicamente para Estafeta.
-     */
     if (
         strcasecmp(
             trim((string) $cotizacion->logistico),
@@ -1598,193 +1488,38 @@ public function generarGuia(
         );
     }
 
-    $payload = [];
-    $generador = null;
-    $guia = null;
-
     try {
-        $payload = $this->buildEstafetaPayload(
-            $cotizacion
+        $cotizacion = $guideService->generate(
+            $cotizacion,
+            $this->buildEstafetaPayload($cotizacion)
         );
-
-        $pesoFacturable = (float) (
-            $cotizacion->peso_facturable
-            ?: $cotizacion->peso
-        );
-
-        if ($pesoFacturable > 70.999) {
-            $cotizacion->update([
-                'guia_estatus' =>
-                    'ERROR_VALIDACION_PESO',
-            ]);
-
-            return back()->with(
-                'error',
-                'La guía no puede generarse porque el peso '
-                . 'facturable de '
-                . number_format($pesoFacturable, 2)
-                . ' kg supera el máximo permitido por Estafeta '
-                . '(70.99 kg). El pago permanece registrado.'
-            );
-        }
-
-        $cotizacion->update([
-            'guia_estatus' => 'GENERANDO',
-        ]);
-
-        $generador = (
-            new EstafetaCreacion()
-        )->omitirCobroSaldoLegacy();
-
-        $generador->parseoApi($payload);
-
-        /*
-         * Recuperamos exactamente el ID creado por
-         * EstafetaCreacion.
-         */
-        $guiaId = $generador->getGuiaId();
-
-        if (!$guiaId) {
-            throw new \RuntimeException(
-                'El proveedor no devolvió el identificador '
-                . 'de la guía creada.'
-            );
-        }
-
-        $guia = Guia::withoutGlobalScopes()
-            ->find($guiaId);
-
-        if (!$guia) {
-            throw new \RuntimeException(
-                'La guía fue procesada, pero no fue '
-                . 'encontrada en el sistema.'
-            );
-        }
-
-        $tracking = trim(
-            (string) $guia->tracking_number
-        );
-
-        if (
-            $tracking === ''
-            || str_contains(
-                $tracking,
-                'Exception'
-            )
-            || str_contains(
-                $tracking,
-                'SAXParseException'
-            )
-        ) {
-            throw new \RuntimeException(
-                'Estafeta rechazó el payload: '
-                . (
-                    $tracking !== ''
-                        ? $tracking
-                        : 'Sin detalle'
-                )
-            );
-        }
-
-        /*
-         * La cotización se relaciona únicamente con
-         * la guía creada por este proceso.
-         */
-        $cotizacion->update([
-            'guia_id' => $guia->id,
-            'tracking_number' =>
-                $guia->tracking_number,
-
-            'documento' =>
-                $guia->documento,
-
-            'guia_estatus' => 'GENERADA',
-            'estatus' => 'GUIA_GENERADA',
-        ]);
-    } catch (\Throwable $e) {
-        /*
-         * Si Estafeta alcanzó a crear el registro de guía
-         * antes de una falla posterior, conservamos ese ID.
-         * En el siguiente intento se recuperará sin volver
-         * a solicitar otra etiqueta.
-         */
-        $guiaIdParcial = $generador
-            ? $generador->getGuiaId()
-            : null;
-
-        \Log::error(
-            'Error generando guía B2C',
-            [
-                'cotizacion_id' =>
-                    $cotizacion->id,
-
-                'guia_id_parcial' =>
-                    $guiaIdParcial,
-
-                'exception' =>
-                    get_class($e),
-
-                'error' =>
-                    $e->getMessage(),
-
-                'file' =>
-                    $e->getFile(),
-
-                'line' =>
-                    $e->getLine(),
-
-                'trace' =>
-                    $e->getTraceAsString(),
-
-                'payload_keys' =>
-                    array_keys($payload),
-            ]
-        );
-
-        $cotizacion->update([
-            'guia_id' =>
-                $guiaIdParcial
-                ?: $cotizacion->guia_id,
-
-            'guia_estatus' =>
-                'ERROR_PROVEEDOR',
-
-            'estatus' =>
-                'ERROR_GENERACION_GUIA',
-        ]);
-
+    } catch (\RuntimeException $exception) {
         return back()->with(
             'error',
-            'No fue posible generar la guía. '
-            . $e->getMessage()
+            $exception->getMessage()
         );
     }
-
-    $cotizacion->refresh();
 
     $pdfUrl = $cotizacion->documento
         ? asset(
             'storage/'
-            . basename(
-                $cotizacion->documento
-            )
+            . basename($cotizacion->documento)
         )
         : null;
+
+    $message = $cotizacion->documento
+        ? 'Guía disponible correctamente. Tracking: '
+            . $cotizacion->tracking_number
+        : 'La guía fue generada y el tracking quedó registrado. '
+            . 'El documento requiere revisión operativa.';
 
     return redirect()
         ->route(
             'b2c.pago.success',
             $cotizacion->id
         )
-        ->with(
-            'success',
-            'Guía generada correctamente. Tracking: '
-            . $cotizacion->tracking_number
-        )
-        ->with(
-            'pdf_url',
-            $pdfUrl
-        );
+        ->with('success', $message)
+        ->with('pdf_url', $pdfUrl);
 }
 
 private function buildEstafetaPayload(B2cCotizacion $cotizacion): array

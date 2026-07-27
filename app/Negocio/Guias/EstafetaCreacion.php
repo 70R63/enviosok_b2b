@@ -57,7 +57,9 @@ Class EstafetaCreacion {
 
     public function parseoApiDev(array $data){
     	Log::debug(__CLASS__." ".__FUNCTION__." "." parseoApiDev");
-        $data['numero_solicitud'] = Carbon::now()->timestamp;
+        if (empty($data['numero_solicitud'])) {
+            $data['numero_solicitud'] = Carbon::now()->timestamp;
+        }
     	Log::debug($data);
 
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__);
@@ -145,8 +147,16 @@ Class EstafetaCreacion {
 
     public function parseoApi(array $data){
         Log::debug(__CLASS__." ".__FUNCTION__." "." parseoApi");
-        $data['numero_solicitud'] = Carbon::now()->timestamp;
-        Log::debug($data);
+        if (empty($data['numero_solicitud'])) {
+            $data['numero_solicitud'] = Carbon::now()->timestamp;
+        }
+        Log::info('ESTAFETA FLUJO GUIA', [
+            'numero_solicitud' => $data['numero_solicitud'] ?? null,
+            'empresa_id' => $data['empresa_id'] ?? null,
+            'ltd_id' => $data['ltd_id'] ?? null,
+            'servicio_id' => $data['servicio_id'] ?? null,
+            'formato' => $data['formatoImpresion'] ?? null,
+        ]);
 
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__);
         $data = $this->validaUsuario($data);
@@ -175,7 +185,13 @@ Class EstafetaCreacion {
 	   
         $data = $this->cotizacion($data);
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__);
-        Log::debug($data);
+        Log::info('ESTAFETA FLUJO GUIA', [
+            'numero_solicitud' => $data['numero_solicitud'] ?? null,
+            'empresa_id' => $data['empresa_id'] ?? null,
+            'ltd_id' => $data['ltd_id'] ?? null,
+            'servicio_id' => $data['servicio_id'] ?? null,
+            'formato' => $data['formatoImpresion'] ?? null,
+        ]);
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__);
         if (
             !$this->omitirCobroSaldoLegacy
@@ -276,8 +292,16 @@ Class EstafetaCreacion {
 
     public function soloCotizacion(array $data){
         Log::debug(__CLASS__." ".__FUNCTION__." ".__LINE__);
-        $data['numero_solicitud'] = Carbon::now()->timestamp;
-        Log::debug($data);
+        if (empty($data['numero_solicitud'])) {
+            $data['numero_solicitud'] = Carbon::now()->timestamp;
+        }
+        Log::info('ESTAFETA FLUJO GUIA', [
+            'numero_solicitud' => $data['numero_solicitud'] ?? null,
+            'empresa_id' => $data['empresa_id'] ?? null,
+            'ltd_id' => $data['ltd_id'] ?? null,
+            'servicio_id' => $data['servicio_id'] ?? null,
+            'formato' => $data['formatoImpresion'] ?? null,
+        ]);
 
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__);
         $data = $this->ltdTipoServicio($data);

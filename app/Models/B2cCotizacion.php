@@ -66,6 +66,17 @@ class B2cCotizacion extends Model
         'tracking_number',
         'documento',
         'guia_estatus',
+        'guia_provider_reference',
+        'guia_provider_request_number',
+        'guia_generation_attempts',
+        'guia_generation_started_at',
+        'guia_last_attempt_at',
+        'guia_generated_at',
+        'guia_recovered_at',
+        'guia_last_error_code',
+        'guia_last_error_message',
+        'guia_request_snapshot',
+        'guia_response_snapshot',
 
         'payment_id',
         'payment_status',
@@ -129,6 +140,14 @@ class B2cCotizacion extends Model
         'payment_verified_at' => 'datetime',
         'payment_verified_amount' => 'decimal:2',
         'payment_verification_payload' => 'array',
+
+        'guia_generation_attempts' => 'integer',
+        'guia_generation_started_at' => 'datetime',
+        'guia_last_attempt_at' => 'datetime',
+        'guia_generated_at' => 'datetime',
+        'guia_recovered_at' => 'datetime',
+        'guia_request_snapshot' => 'array',
+        'guia_response_snapshot' => 'array',
     ];
 
     public function user()
@@ -278,6 +297,9 @@ class B2cCotizacion extends Model
 
             'GENERANDO' =>
                 'Generando guía',
+
+            'GENERADA_SIN_DOCUMENTO' =>
+                'Guía generada; documento en revisión',
 
             'ERROR_PROVEEDOR',
             'ERROR_GENERACION_GUIA' =>

@@ -31,6 +31,13 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'estafeta' => [
+        'guide_generation_stale_minutes' => env(
+            'ESTAFETA_GUIDE_GENERATION_STALE_MINUTES',
+            5
+        ),
+    ],
+
     'mercadopago' => [
         'access_token' => env('MERCADOPAGO_ACCESS_TOKEN'),
         'webhook_secret' => env('MERCADOPAGO_WEBHOOK_SECRET'),
