@@ -323,6 +323,33 @@
                 <div class="value">
                     {{ $cotizacion->guia_estatus_label }}
                 </div>
+
+                @if(
+                    !$cotizacion->hasAccreditedPayment()
+                    && !$cotizacion->hasGeneratedGuide()
+                )
+                    <a
+                        href="{{ route(
+                            'b2c.envios.retomar',
+                            $cotizacion->id
+                        ) }}"
+                        class="btn primary"
+                    >
+                        Retomar proceso
+                    </a>
+                @endif
+
+                @if($cotizacion->canEditShipment())
+                    <a
+                        href="{{ route(
+                            'b2c.envios.editar',
+                            $cotizacion->id
+                        ) }}"
+                        class="btn secondary"
+                    >
+                        Editar direcciones
+                    </a>
+                @endif
             </div>
 
             <div class="card">

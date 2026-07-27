@@ -59,11 +59,11 @@ Route::post(
 )
     ->middleware('auth')
     ->name('b2c.confirmar.procesar');
-			
+
 /*provisional pago */
 Route::get('/b2c/pago/{cotizacion}', [CotizacionPublicaController::class, 'pago'])
     ->name('b2c.pago');
-	
+
 Route::get('/b2c/pago/{cotizacion}/success', [CotizacionPublicaController::class, 'pagoSuccess'])
     ->name('b2c.pago.success');
 
@@ -72,7 +72,7 @@ Route::get('/b2c/pago/{cotizacion}/failure', [CotizacionPublicaController::class
 
 Route::get('/b2c/pago/{cotizacion}/pending', [CotizacionPublicaController::class, 'pagoPending'])
     ->name('b2c.pago.pending');
-	
+
 Route::post('/b2c/guia/{cotizacion}/generar', [CotizacionPublicaController::class, 'generarGuia'])
     ->middleware(['auth', 'throttle:6,1'])
     ->name('b2c.guia.generar');
@@ -96,7 +96,7 @@ Route::get('/b2c/dashboard', [CotizacionPublicaController::class, 'dashboardB2c'
     ->middleware('auth')
     ->name('b2c.dashboard');
 
-//Mis Envios 
+//Mis Envios
 Route::middleware(['auth'])->group(function () {
 
     //Cotizador b2c logueado en zigo
@@ -120,6 +120,15 @@ Route::middleware(['auth'])->group(function () {
 Route::get('/b2c/envios/{cotizacion}', [CotizacionPublicaController::class, 'detalleEnvioB2c'])
     ->middleware('auth')
     ->name('b2c.envios.detalle');
+
+Route::get('/b2c/envios/{cotizacion}/retomar', [CotizacionPublicaController::class, 'retomarEnvioB2c'])
+    ->name('b2c.envios.retomar');
+
+Route::get('/b2c/envios/{cotizacion}/editar', [CotizacionPublicaController::class, 'editarEnvioB2c'])
+    ->name('b2c.envios.editar');
+
+Route::put('/b2c/envios/{cotizacion}', [CotizacionPublicaController::class, 'actualizarEnvioB2c'])
+    ->name('b2c.envios.actualizar');
 
 Route::post('/b2c/envios/{cotizacion}/duplicar', [CotizacionPublicaController::class, 'duplicarEnvioB2c'])
     ->name('b2c.envios.duplicar');
@@ -441,7 +450,7 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
             ->except(['show'])
             ->names('clientes')
             ->parameters(['clientes' => 'cliente']);
-        
+
         Route::get('/api-hub/{apiClient}', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'show'])
             ->name('api-hub.show');
 
@@ -488,7 +497,7 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
 
         Route::post('/clientes/{cliente}/seguimiento', [CrmClientController::class, 'actualizarSeguimiento'])
             ->name('clientes.seguimiento');
-            
+
 
         Route::get('/facturacion', [CrmInvoiceRequestController::class, 'index'])
             ->name('facturacion.index');
@@ -588,7 +597,7 @@ Route::middleware(['auth', 'roles:sysadmin,admin,adminops,cliente'])
             return view('hub.dashboard');
         })->name('dashboard');
     });
-// ===============================   
+// ===============================
 
 
 // ===============================
@@ -631,7 +640,7 @@ Route::get('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'c
 Route::post('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'procesarCheckout'])
     ->name('b2c.checkout.procesar');
 
-//LANDING PARA PROXIMAMENTE 
+//LANDING PARA PROXIMAMENTE
 Route::get('/', [WaitlistController::class, 'index'])
     ->name('home');
 
@@ -667,11 +676,11 @@ Route::get('/b2c/cotizar', function () {
 
 Route::post('/b2c/cotizar', [CotizacionPublicaController::class, 'cotizar'])
     ->name('b2c.cotizar');
-    
+
 
 
 /*
-|Los roles definidos son 
+|Los roles definidos son
 |- sysadmin
 |- admin
 |- contraloria
@@ -679,7 +688,7 @@ Route::post('/b2c/cotizar', [CotizacionPublicaController::class, 'cotizar'])
 |- comercial
 |- adminops
 |- operaciones
-|- cliente 
+|- cliente
 |- usuario
 */
 //Menu SysAdmin
@@ -720,7 +729,7 @@ Route::resource('rastreos','RastreosController')
 
 Route::group(['as'=>'guias.'  ,'prefix'=>'guias'],function(){
     Route::resource('masivas','Guias\MasivasController')
-        ->middleware(['roles:sysadmin,admin,contraloria,adminops,operaciones,cliente,auditoria,usuario']); 
+        ->middleware(['roles:sysadmin,admin,contraloria,adminops,operaciones,cliente,auditoria,usuario']);
 });
 
 
@@ -737,7 +746,7 @@ Route::resource('reportes/repesajes','Reportes\RepesajeController')
 
 Route::group(['as'=>'reportes.'  ,'prefix'=>'reportes'],function(){
     Route::resource('pagado','Reportes\PagosController')
-        ->middleware(['roles:sysadmin,admin,contraloria,adminops,operaciones,auditoria']); 
+        ->middleware(['roles:sysadmin,admin,contraloria,adminops,operaciones,auditoria']);
 });
 
 //Menu Saldos

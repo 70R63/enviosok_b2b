@@ -1,8 +1,11 @@
+@php
+    $editando = !empty($cotizacionEdicion);
+@endphp
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Nuevo envío - ZIGO</title>
+    <title>{{ $editando ? 'Editar envío' : 'Nuevo envío' }} - ZIGO</title>
     <style>
         body{margin:0;font-family:Arial,sans-serif;background:#f4f7fb;color:#111827}
         .layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
@@ -116,11 +119,42 @@
     </aside>
 
     <main class="content">
-        <div class="title">Información del envío</div>
-        <div class="subtitle">Captura los datos de origen y destino.</div>
+        <div class="title">{{ $editando ? 'Editar envío' : 'Información del envío' }}</div>
+        <div class="subtitle">
+            {{ $editando
+                ? 'Actualiza origen o destino. El servicio y el precio deberán cotizarse nuevamente.'
+                : 'Captura los datos de origen y destino.'
+            }}
+        </div>
 
-        <form method="POST" action="{{ route('b2c.nuevo-envio.guardar') }}">
+        @if(session('error'))
+            <div class="helper-box" style="border-color:#fecaca;background:#fef2f2;color:#991b1b;margin-bottom:18px;">
+                {{ session('error') }}
+            </div>
+        @endif
+
+        @if($errors->any())
+            <div class="helper-box" style="border-color:#fecaca;background:#fef2f2;color:#991b1b;margin-bottom:18px;">
+                <strong>Revisa la información capturada:</strong>
+                <ul style="margin:8px 0 0;padding-left:20px;">
+                    @foreach($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        <form
+            method="POST"
+            action="{{ $editando
+                ? route('b2c.envios.actualizar', $cotizacionEdicion->id)
+                : route('b2c.nuevo-envio.guardar')
+            }}"
+        >
             @csrf
+            @if($editando)
+                @method('PUT')
+            @endif
 
             <div class="grid">
                 <section class="card">
@@ -139,68 +173,70 @@
                     @endif
 
                     <label>Nombre completo del remitente</label>
-                    <input name="remitente_nombre" required>
+                    <input name="remitente_nombre" value="{{ old('remitente_nombre', $cotizacionEdicion->remitente_nombre ?? '') }}" required>
 
                     <div class="row">
                         <div>
                             <label>Empresa opcional</label>
-                            <input name="remitente_empresa">
+                            <input name="remitente_empresa" value="{{ old('remitente_empresa') }}">
                         </div>
                         <div>
                             <label>Teléfono</label>
-                            <input name="remitente_telefono" required>
+                            <input name="remitente_telefono" value="{{ old('remitente_telefono', $cotizacionEdicion->remitente_telefono ?? '') }}" required>
                         </div>
                     </div>
 
                     <label>Correo electrónico</label>
-                    <input type="email" name="remitente_email">
+                    <input type="email" name="remitente_email" value="{{ old('remitente_email', $cotizacionEdicion->remitente_email ?? '') }}">
 
                     <label>Calle / Avenida</label>
-                    <input name="remitente_direccion" required>
+                    <input name="remitente_direccion" value="{{ old('remitente_direccion', $cotizacionEdicion->remitente_direccion ?? '') }}" required>
 
                     <div class="row">
                         <div>
                             <label>No. Exterior</label>
-                            <input name="remitente_num_ext" required>
+                            <input name="remitente_num_ext" value="{{ old('remitente_num_ext', $cotizacionEdicion->remitente_num_ext ?? '') }}" required>
                         </div>
                         <div>
                             <label>No. Interior</label>
-                            <input name="remitente_num_int">
+                            <input name="remitente_num_int" value="{{ old('remitente_num_int', $cotizacionEdicion->remitente_num_int ?? '') }}">
                         </div>
                     </div>
 
                     <label>Referencias</label>
-                    <input name="remitente_referencias">
+                    <input name="remitente_referencias" value="{{ old('remitente_referencias') }}">
 
                     <div class="autocomplete-wrap">
                         <label>Código postal origen</label>
-                        <input type="text" id="cp_origen" name="cp_origen" autocomplete="off" required>
-                        <input type="hidden" id="colonia_origen" name="colonia_origen">
-                        <input type="hidden" id="ciudad_origen" name="ciudad_origen">
-                        <input type="hidden" id="estado_origen" name="estado_origen">
+                        <input type="text" id="cp_origen" name="cp_origen" value="{{ old('cp_origen', $cotizacionEdicion->cp_origen ?? '') }}" autocomplete="off" required>
+                        <input type="hidden" id="colonia_origen" name="colonia_origen" value="{{ old('colonia_origen', $cotizacionEdicion->colonia_origen ?? '') }}">
+                        <input type="hidden" id="ciudad_origen" name="ciudad_origen" value="{{ old('ciudad_origen', $cotizacionEdicion->ciudad_origen ?? '') }}">
+                        <input type="hidden" id="estado_origen" name="estado_origen" value="{{ old('estado_origen', $cotizacionEdicion->estado_origen ?? '') }}">
                         <div id="colonias_origen_list" class="suggestions"></div>
                     </div>
 
                     <label>Colonia origen</label>
-                    <input id="colonia_origen_label" readonly>
+                    <input id="colonia_origen_label" value="{{ old('colonia_origen', $cotizacionEdicion->colonia_origen ?? '') }}" readonly>
 
                     <div class="row">
                         <div>
                             <label>Municipio / Ciudad</label>
-                            <input id="ciudad_origen_label" readonly>
+                            <input id="ciudad_origen_label" value="{{ old('ciudad_origen', $cotizacionEdicion->ciudad_origen ?? '') }}" readonly>
                         </div>
                         <div>
                             <label>Estado</label>
-                            <input id="estado_origen_label" readonly>
+                            <input id="estado_origen_label" value="{{ old('estado_origen', $cotizacionEdicion->estado_origen ?? '') }}" readonly>
                         </div>
                     </div>
 
-                    <label style="margin-top:16px;">
-                        <input type="checkbox" name="guardar_origen" value="1" style="width:auto;height:auto;">
-                        Guardar esta dirección de origen
-                    </label>
+                    @unless($editando)
+                        <label style="margin-top:16px;">
+                            <input type="checkbox" name="guardar_origen" value="1" style="width:auto;height:auto;">
+                            Guardar esta dirección de origen
+                        </label>
 
-                    <input name="alias_origen" placeholder="Alias opcional: Casa, Oficina, Bodega" style="margin-top:8px;">
+                        <input name="alias_origen" placeholder="Alias opcional: Casa, Oficina, Bodega" style="margin-top:8px;">
+                    @endunless
 
                 </section>
 
@@ -220,72 +256,74 @@
                     @endif
 
                     <label>Nombre completo del destinatario</label>
-                    <input name="destinatario_nombre" required>
+                    <input name="destinatario_nombre" value="{{ old('destinatario_nombre', $cotizacionEdicion->destinatario_nombre ?? '') }}" required>
 
                     <div class="row">
                         <div>
                             <label>Empresa opcional</label>
-                            <input name="destinatario_empresa">
+                            <input name="destinatario_empresa" value="{{ old('destinatario_empresa') }}">
                         </div>
                         <div>
                             <label>Teléfono</label>
-                            <input name="destinatario_telefono" required>
+                            <input name="destinatario_telefono" value="{{ old('destinatario_telefono', $cotizacionEdicion->destinatario_telefono ?? '') }}" required>
                         </div>
                     </div>
 
                     <label>Correo electrónico</label>
-                    <input type="email" name="destinatario_email">
+                    <input type="email" name="destinatario_email" value="{{ old('destinatario_email', $cotizacionEdicion->destinatario_email ?? '') }}">
 
                     <label>Calle / Avenida</label>
-                    <input name="destinatario_direccion" required>
+                    <input name="destinatario_direccion" value="{{ old('destinatario_direccion', $cotizacionEdicion->destinatario_direccion ?? '') }}" required>
 
                     <div class="row">
                         <div>
                             <label>No. Exterior</label>
-                            <input name="destinatario_num_ext" required>
+                            <input name="destinatario_num_ext" value="{{ old('destinatario_num_ext', $cotizacionEdicion->destinatario_num_ext ?? '') }}" required>
                         </div>
                         <div>
                             <label>No. Interior</label>
-                            <input name="destinatario_num_int">
+                            <input name="destinatario_num_int" value="{{ old('destinatario_num_int', $cotizacionEdicion->destinatario_num_int ?? '') }}">
                         </div>
                     </div>
 
                     <label>Referencias</label>
-                    <input name="destinatario_referencias">
+                    <input name="destinatario_referencias" value="{{ old('destinatario_referencias') }}">
 
                     <div class="autocomplete-wrap">
                         <label>Código postal destino</label>
-                        <input type="text" id="cp_destino" name="cp_destino" autocomplete="off" required>
-                        <input type="hidden" id="colonia_destino" name="colonia_destino">
-                        <input type="hidden" id="ciudad_destino" name="ciudad_destino">
-                        <input type="hidden" id="estado_destino" name="estado_destino">
+                        <input type="text" id="cp_destino" name="cp_destino" value="{{ old('cp_destino', $cotizacionEdicion->cp_destino ?? '') }}" autocomplete="off" required>
+                        <input type="hidden" id="colonia_destino" name="colonia_destino" value="{{ old('colonia_destino', $cotizacionEdicion->colonia_destino ?? '') }}">
+                        <input type="hidden" id="ciudad_destino" name="ciudad_destino" value="{{ old('ciudad_destino', $cotizacionEdicion->ciudad_destino ?? '') }}">
+                        <input type="hidden" id="estado_destino" name="estado_destino" value="{{ old('estado_destino', $cotizacionEdicion->estado_destino ?? '') }}">
                         <div id="colonias_destino_list" class="suggestions"></div>
                     </div>
 
                     <label>Colonia destino</label>
-                    <input id="colonia_destino_label" readonly>
+                    <input id="colonia_destino_label" value="{{ old('colonia_destino', $cotizacionEdicion->colonia_destino ?? '') }}" readonly>
 
                     <div class="row">
                         <div>
                             <label>Municipio / Ciudad</label>
-                            <input id="ciudad_destino_label" readonly>
+                            <input id="ciudad_destino_label" value="{{ old('ciudad_destino', $cotizacionEdicion->ciudad_destino ?? '') }}" readonly>
                         </div>
                         <div>
                             <label>Estado</label>
-                            <input id="estado_destino_label" readonly>
+                            <input id="estado_destino_label" value="{{ old('estado_destino', $cotizacionEdicion->estado_destino ?? '') }}" readonly>
                         </div>
                     </div>
 
-                    <label style="margin-top:16px;">
-                        <input type="checkbox" name="guardar_destino" value="1" style="width:auto;height:auto;">
-                        Guardar esta dirección de destino
-                    </label>
+                    @unless($editando)
+                        <label style="margin-top:16px;">
+                            <input type="checkbox" name="guardar_destino" value="1" style="width:auto;height:auto;">
+                            Guardar esta dirección de destino
+                        </label>
 
-                    <input name="alias_destino" placeholder="Alias opcional: Cliente, Oficina, Casa" style="margin-top:8px;">
+                        <input name="alias_destino" placeholder="Alias opcional: Cliente, Oficina, Casa" style="margin-top:8px;">
+                    @endunless
                 </section>
             </div>
 
-            <button type="submit" class="btn">Siguiente</button>
+            <button type="submit" class="btn">{{ $editando ? 'Guardar y volver a cotizar' : 'Siguiente' }}</button>
         </form>
     </main>
 </div>

@@ -262,6 +262,31 @@
                                                 Ver detalle
                                             </a>
 
+                                            @if(
+                                                !$estaPagada
+                                                && !$tieneGuia
+                                            )
+                                                <a
+                                                    href="{{ route(
+                                                        'b2c.envios.retomar',
+                                                        $envio->id
+                                                    ) }}"
+                                                >
+                                                    Retomar proceso
+                                                </a>
+                                            @endif
+
+                                            @if($envio->canEditShipment())
+                                                <a
+                                                    href="{{ route(
+                                                        'b2c.envios.editar',
+                                                        $envio->id
+                                                    ) }}"
+                                                >
+                                                    Editar direcciones
+                                                </a>
+                                            @endif
+
                                             {{-- Captura de direcciones terminada --}}
                                             @if(
                                                 $estado ===

@@ -166,6 +166,101 @@ class B2cCotizacion extends Model
         );
     }
 
+    public function hasGeneratedGuide(): bool
+    {
+        $guideStatus = strtoupper(
+            trim((string) $this->guia_estatus)
+        );
+
+        return !empty($this->guia_id)
+            || !empty($this->tracking_number)
+            || !empty($this->documento)
+            || in_array($guideStatus, [
+                'GENERADA',
+                'GENERADA_SIN_DOCUMENTO',
+            ], true);
+    }
+
+    public function hasAccreditedPayment(): bool
+    {
+        $paymentStatus = strtolower(
+            trim((string) $this->payment_status)
+        );
+
+        $verificationStatus = strtoupper(
+            trim((string) $this->payment_verification_status)
+        );
+
+        return in_array($paymentStatus, [
+            'approved',
+            'saldo_prepago',
+        ], true)
+            || $verificationStatus === 'VERIFIED'
+            || $this->payment_verified_at !== null;
+    }
+
+    public function hasCompleteShippingAddresses(): bool
+    {
+        return !empty($this->remitente_nombre)
+            && !empty($this->remitente_telefono)
+            && !empty($this->remitente_direccion)
+            && !empty($this->remitente_num_ext)
+            && !empty($this->cp_origen)
+            && !empty($this->colonia_origen)
+            && !empty($this->destinatario_nombre)
+            && !empty($this->destinatario_telefono)
+            && !empty($this->destinatario_direccion)
+            && !empty($this->destinatario_num_ext)
+            && !empty($this->cp_destino)
+            && !empty($this->colonia_destino);
+    }
+
+    public function hasQuotablePackageData(): bool
+    {
+        $shipmentType = strtolower(
+            trim((string) $this->tipo_envio)
+        );
+
+        if (
+            !in_array($shipmentType, ['caja', 'sobre'], true)
+            || (float) $this->peso <= 0
+        ) {
+            return false;
+        }
+
+        return $shipmentType === 'sobre'
+            || !empty($this->medidas);
+    }
+
+    public function hasCompletePackageData(): bool
+    {
+        return $this->hasQuotablePackageData()
+            && !empty($this->contenido);
+    }
+
+    public function canEditShipment(): bool
+    {
+        if (
+            $this->hasGeneratedGuide()
+            || $this->hasAccreditedPayment()
+        ) {
+            return false;
+        }
+
+        $status = strtoupper(
+            trim((string) $this->estatus)
+        );
+
+        return in_array($status, [
+            'COTIZADA',
+            'DIRECCION_CAPTURADA',
+            'PAQUETE_CAPTURADO',
+            'SELECCIONADA',
+            'CHECKOUT_COMPLETO',
+            'PAGO_RECHAZADO',
+        ], true);
+    }
+
     public function getEstatusLabelAttribute(): string
     {
         $estatus = strtoupper(

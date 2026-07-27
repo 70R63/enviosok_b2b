@@ -2110,7 +2110,415 @@ public function nuevoEnvioB2c()
         ->latest()
         ->get();
 
-    return view('b2c.nuevo-envio', compact('direccionesOrigen', 'direccionesDestino'));
+    $cotizacionEdicion = null;
+
+    return view(
+        'b2c.nuevo-envio',
+        compact(
+            'direccionesOrigen',
+            'direccionesDestino',
+            'cotizacionEdicion'
+        )
+    );
+}
+
+public function retomarEnvioB2c(
+    B2cCotizacion $cotizacion
+) {
+    if ($cotizacion->user_id !== auth()->id()) {
+        abort(403);
+    }
+
+    $status = strtoupper(
+        trim((string) $cotizacion->estatus)
+    );
+
+    $guideStatus = strtoupper(
+        trim((string) $cotizacion->guia_estatus)
+    );
+
+    if ($cotizacion->hasGeneratedGuide()) {
+        return redirect()
+            ->route('b2c.envios.detalle', $cotizacion->id)
+            ->with(
+                'success',
+                'La guía de este envío ya fue generada.'
+            );
+    }
+
+    if (
+        $cotizacion->hasAccreditedPayment()
+        || in_array($status, [
+            'PAGADA',
+            'ERROR_GENERACION_GUIA',
+        ], true)
+    ) {
+        return redirect()
+            ->route('b2c.envios.detalle', $cotizacion->id)
+            ->with(
+                'success',
+                'El pago está acreditado. Continúa con la generación o recuperación de la guía.'
+            );
+    }
+
+    if ($guideStatus === 'GENERANDO') {
+        return redirect()
+            ->route('b2c.envios.detalle', $cotizacion->id)
+            ->with(
+                'success',
+                'La generación de la guía está en curso.'
+            );
+    }
+
+    if ($status === 'DIRECCION_CAPTURADA') {
+        return redirect()->route(
+            'b2c.paquete',
+            $cotizacion->id
+        );
+    }
+
+    if ($status === 'PAQUETE_CAPTURADO') {
+        return redirect()->route(
+            'b2c.opciones',
+            $cotizacion->id
+        );
+    }
+
+    if ($status === 'COTIZADA') {
+        if ($cotizacion->hasQuotablePackageData()) {
+            return redirect()->route(
+                'b2c.opciones',
+                $cotizacion->id
+            );
+        }
+
+        if ($cotizacion->hasCompleteShippingAddresses()) {
+            return redirect()->route(
+                'b2c.paquete',
+                $cotizacion->id
+            );
+        }
+
+        return redirect()->route(
+            'b2c.envios.editar',
+            $cotizacion->id
+        );
+    }
+
+    if ($status === 'SELECCIONADA') {
+        if (
+            $cotizacion->hasCompleteShippingAddresses()
+            && $cotizacion->hasCompletePackageData()
+        ) {
+            return redirect()->route(
+                'b2c.confirmar',
+                $cotizacion->id
+            );
+        }
+
+        return redirect()->route(
+            'b2c.checkout',
+            $cotizacion->id
+        );
+    }
+
+    if (in_array($status, [
+        'CHECKOUT_COMPLETO',
+        'PAGO_RECHAZADO',
+    ], true)) {
+        return redirect()->route(
+            'b2c.confirmar',
+            $cotizacion->id
+        );
+    }
+
+    if (in_array($status, [
+        'PAGO_INICIADO',
+        'PAGO_PENDIENTE',
+        'PAGO_EN_VERIFICACION',
+        'PAGO_VERIFICACION_FALLIDA',
+    ], true)) {
+        return redirect()
+            ->route('b2c.envios.detalle', $cotizacion->id)
+            ->with(
+                'error',
+                'El pago todavía requiere confirmación. Revisa su estado antes de iniciar otro cobro.'
+            );
+    }
+
+    if (!$cotizacion->hasCompleteShippingAddresses()) {
+        return redirect()->route(
+            'b2c.envios.editar',
+            $cotizacion->id
+        );
+    }
+
+    if (!$cotizacion->hasCompletePackageData()) {
+        return redirect()->route(
+            'b2c.paquete',
+            $cotizacion->id
+        );
+    }
+
+    if (
+        !$cotizacion->logistico
+        || !$cotizacion->servicio
+        || (float) $cotizacion->precio <= 0
+    ) {
+        return redirect()->route(
+            'b2c.opciones',
+            $cotizacion->id
+        );
+    }
+
+    return redirect()->route(
+        'b2c.confirmar',
+        $cotizacion->id
+    );
+}
+
+public function editarEnvioB2c(
+    B2cCotizacion $cotizacion
+) {
+    if ($cotizacion->user_id !== auth()->id()) {
+        abort(403);
+    }
+
+    if (!$cotizacion->canEditShipment()) {
+        return redirect()
+            ->route('b2c.envios.detalle', $cotizacion->id)
+            ->with(
+                'error',
+                'Este envío ya no permite editar direcciones porque tiene un pago o una guía en proceso.'
+            );
+    }
+
+    $direccionesOrigen = B2cDireccion::where(
+        'user_id',
+        auth()->id()
+    )
+        ->where('activo', true)
+        ->where('tipo', 'ORIGEN')
+        ->orderByDesc('favorita')
+        ->latest()
+        ->get();
+
+    $direccionesDestino = B2cDireccion::where(
+        'user_id',
+        auth()->id()
+    )
+        ->where('activo', true)
+        ->where('tipo', 'DESTINO')
+        ->orderByDesc('favorita')
+        ->latest()
+        ->get();
+
+    $cotizacionEdicion = $cotizacion;
+
+    return view(
+        'b2c.nuevo-envio',
+        compact(
+            'direccionesOrigen',
+            'direccionesDestino',
+            'cotizacionEdicion'
+        )
+    );
+}
+
+public function actualizarEnvioB2c(
+    Request $request,
+    B2cCotizacion $cotizacion
+) {
+    if ($cotizacion->user_id !== auth()->id()) {
+        abort(403);
+    }
+
+    if (!$cotizacion->canEditShipment()) {
+        return redirect()
+            ->route('b2c.envios.detalle', $cotizacion->id)
+            ->with(
+                'error',
+                'Este envío ya no permite modificaciones.'
+            );
+    }
+
+    $data = $request->validate([
+        'remitente_nombre' => ['required', 'string', 'max:255'],
+        'remitente_email' => ['nullable', 'email', 'max:255'],
+        'remitente_telefono' => ['required', 'string', 'max:30'],
+        'remitente_direccion' => ['required', 'string', 'max:255'],
+        'remitente_num_ext' => ['required', 'string', 'max:50'],
+        'remitente_num_int' => ['nullable', 'string', 'max:50'],
+        'cp_origen' => ['required', 'string', 'max:120'],
+        'colonia_origen' => ['required', 'string', 'max:255'],
+        'ciudad_origen' => ['required', 'string', 'max:100'],
+        'estado_origen' => ['required', 'string', 'max:100'],
+
+        'destinatario_nombre' => ['required', 'string', 'max:255'],
+        'destinatario_email' => ['nullable', 'email', 'max:255'],
+        'destinatario_telefono' => ['required', 'string', 'max:30'],
+        'destinatario_direccion' => ['required', 'string', 'max:255'],
+        'destinatario_num_ext' => ['required', 'string', 'max:50'],
+        'destinatario_num_int' => ['nullable', 'string', 'max:50'],
+        'cp_destino' => ['required', 'string', 'max:120'],
+        'colonia_destino' => ['required', 'string', 'max:255'],
+        'ciudad_destino' => ['required', 'string', 'max:100'],
+        'estado_destino' => ['required', 'string', 'max:100'],
+    ]);
+
+    $cpOrigen = substr(
+        preg_replace('/\D/', '', $data['cp_origen']),
+        0,
+        5
+    );
+
+    $cpDestino = substr(
+        preg_replace('/\D/', '', $data['cp_destino']),
+        0,
+        5
+    );
+
+    if (strlen($cpOrigen) !== 5) {
+        return back()
+            ->withErrors([
+                'cp_origen' =>
+                    'Selecciona un código postal de origen válido.',
+            ])
+            ->withInput();
+    }
+
+    if (strlen($cpDestino) !== 5) {
+        return back()
+            ->withErrors([
+                'cp_destino' =>
+                    'Selecciona un código postal de destino válido.',
+            ])
+            ->withInput();
+    }
+
+    $ubicacionOrigen = $this->resolverUbicacionPostal(
+        $cpOrigen,
+        $data['colonia_origen']
+    );
+
+    $ubicacionDestino = $this->resolverUbicacionPostal(
+        $cpDestino,
+        $data['colonia_destino']
+    );
+
+    try {
+        DB::transaction(function () use (
+            $cotizacion,
+            $data,
+            $cpOrigen,
+            $cpDestino,
+            $ubicacionOrigen,
+            $ubicacionDestino
+        ) {
+            $locked = B2cCotizacion::query()
+                ->whereKey($cotizacion->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (!$locked->canEditShipment()) {
+                throw new \DomainException(
+                    'El envío cambió de estado y ya no permite edición.'
+                );
+            }
+
+            $locked->forceFill([
+                'cp_origen' => $cpOrigen,
+                'colonia_origen' => $data['colonia_origen'],
+                'ciudad_origen' => $data['ciudad_origen']
+                    ?: $ubicacionOrigen['ciudad'],
+                'estado_origen' => $data['estado_origen']
+                    ?: $ubicacionOrigen['estado'],
+                'cp_destino' => $cpDestino,
+                'colonia_destino' => $data['colonia_destino'],
+                'ciudad_destino' => $data['ciudad_destino']
+                    ?: $ubicacionDestino['ciudad'],
+                'estado_destino' => $data['estado_destino']
+                    ?: $ubicacionDestino['estado'],
+
+                'remitente_nombre' => $data['remitente_nombre'],
+                'remitente_email' => $data['remitente_email'] ?? null,
+                'remitente_telefono' => $data['remitente_telefono'],
+                'remitente_direccion' => $data['remitente_direccion'],
+                'remitente_num_ext' => $data['remitente_num_ext'],
+                'remitente_num_int' => $data['remitente_num_int'] ?? null,
+                'destinatario_nombre' => $data['destinatario_nombre'],
+                'destinatario_email' => $data['destinatario_email'] ?? null,
+                'destinatario_telefono' => $data['destinatario_telefono'],
+                'destinatario_direccion' => $data['destinatario_direccion'],
+                'destinatario_num_ext' => $data['destinatario_num_ext'],
+                'destinatario_num_int' => $data['destinatario_num_int'] ?? null,
+
+                'logistico' => null,
+                'servicio' => null,
+                'precio' => null,
+                'precio_sin_seguro' => null,
+                'provider_base_price' => null,
+                'zigo_margin_percentage' => null,
+                'zigo_fixed_fee' => null,
+                'zigo_margin_amount' => null,
+                'zigo_adjustment_type' => null,
+                'zigo_adjustment_value' => null,
+                'zigo_adjustment_amount' => null,
+                'zigo_discount_type' => null,
+                'zigo_discount_value' => null,
+                'zigo_discount_amount' => null,
+                'zigo_final_price' => null,
+                'zigo_profit_amount' => null,
+                'zigo_customer_segment' => null,
+                'zigo_pricing_rule_id' => null,
+                'zigo_pricing_adjustment_id' => null,
+                'zigo_client_pricing_rule_id' => null,
+
+                'payment_id' => null,
+                'payment_status' => null,
+                'payment_external_reference' => null,
+                'payment_collection_id' => null,
+                'payment_verification_status' => null,
+                'payment_verification_source' => null,
+                'payment_verification_error' => null,
+                'payment_verification_attempted_at' => null,
+                'payment_verified_at' => null,
+                'payment_verified_amount' => null,
+                'payment_verified_currency' => null,
+                'payment_verified_external_reference' => null,
+                'payment_verification_payload' => null,
+
+                'guia_id' => null,
+                'tracking_number' => null,
+                'documento' => null,
+                'guia_estatus' => 'SIN_GUIA',
+                'guia_provider_reference' => null,
+                'guia_provider_request_number' => null,
+                'guia_generation_attempts' => 0,
+                'guia_generation_started_at' => null,
+                'guia_last_attempt_at' => null,
+                'guia_generated_at' => null,
+                'guia_recovered_at' => null,
+                'guia_last_error_code' => null,
+                'guia_last_error_message' => null,
+                'guia_request_snapshot' => null,
+                'guia_response_snapshot' => null,
+
+                'estatus' => 'DIRECCION_CAPTURADA',
+            ])->save();
+        });
+    } catch (\DomainException $exception) {
+        return redirect()
+            ->route('b2c.envios.detalle', $cotizacion->id)
+            ->with('error', $exception->getMessage());
+    }
+
+    return redirect()
+        ->route('b2c.paquete', $cotizacion->id)
+        ->with(
+            'success',
+            'Direcciones actualizadas. Revisa el paquete y vuelve a cotizar el servicio.'
+        );
 }
 
 public function guardarNuevoEnvioB2c(Request $request)
