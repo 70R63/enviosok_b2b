@@ -21,6 +21,7 @@ use App\Http\Controllers\API\Ltd\EstafetaController;
 
 use App\Http\Controllers\API\Hub\PostalCodeController;
 use App\Http\Controllers\API\Hub\BillingInvoiceController;
+use App\Http\Controllers\API\Payments\MercadoPagoWebhookController;
 use App\Http\Middleware\ValidateZigoApiKey;
 
 use App\Http\Controllers\API\DEV\GuiaController as DevGuiaController ;
@@ -39,6 +40,13 @@ use App\Http\Controllers\API\DEV\GuiaController as DevGuiaController ;
 
 Route::post('/register',[AuthController::class,'register']);
 Route::post('/login', [AuthController::class, 'login']);
+
+Route::post(
+    '/webhooks/mercadopago',
+    MercadoPagoWebhookController::class
+)
+    ->middleware('throttle:120,1')
+    ->name('api.webhooks.mercadopago');
 
 Route::post('domicilio', [ApiController::class,'domicilio'])->name('api.domicilio');
 Route::post('getColonias', [ApiController::class,'getColonias'])->name('api.getColonias');

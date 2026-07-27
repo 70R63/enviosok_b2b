@@ -31,6 +31,21 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'mercadopago' => [
+        'access_token' => env('MERCADOPAGO_ACCESS_TOKEN'),
+        'webhook_secret' => env('MERCADOPAGO_WEBHOOK_SECRET'),
+        'api_base_url' => env(
+            'MERCADOPAGO_API_BASE_URL',
+            'https://api.mercadopago.com'
+        ),
+        'connect_timeout' => env(
+            'MERCADOPAGO_CONNECT_TIMEOUT',
+            5
+        ),
+        'timeout' => env('MERCADOPAGO_TIMEOUT', 15),
+        'currency' => env('MERCADOPAGO_CURRENCY', 'MXN'),
+    ],
+
     'zigo_internal_billing' => [
         'enabled' => env(
             'ZIGO_INTERNAL_BILLING_ENABLED',

@@ -71,6 +71,15 @@ class B2cCotizacion extends Model
         'payment_status',
         'payment_external_reference',
         'payment_collection_id',
+        'payment_verification_status',
+        'payment_verification_source',
+        'payment_verification_error',
+        'payment_verification_attempted_at',
+        'payment_verified_at',
+        'payment_verified_amount',
+        'payment_verified_currency',
+        'payment_verified_external_reference',
+        'payment_verification_payload',
 
         'provider_base_price',
         'zigo_margin_percentage',
@@ -115,6 +124,11 @@ class B2cCotizacion extends Model
         'zigo_discount_amount' => 'decimal:2',
         'zigo_final_price' => 'decimal:2',
         'zigo_profit_amount' => 'decimal:2',
+
+        'payment_verification_attempted_at' => 'datetime',
+        'payment_verified_at' => 'datetime',
+        'payment_verified_amount' => 'decimal:2',
+        'payment_verification_payload' => 'array',
     ];
 
     public function user()
@@ -160,6 +174,12 @@ class B2cCotizacion extends Model
 
             'PAGO_PENDIENTE' =>
                 'Pago pendiente',
+
+            'PAGO_EN_VERIFICACION' =>
+                'Pago en verificación',
+
+            'PAGO_VERIFICACION_FALLIDA' =>
+                'Pago con validación pendiente',
 
             'PAGO_RECHAZADO' =>
                 'Pago rechazado',

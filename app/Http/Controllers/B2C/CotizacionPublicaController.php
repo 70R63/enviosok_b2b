@@ -17,6 +17,8 @@ use App\Models\B2cIncidencia;
 use App\Models\B2cInvoiceRequest;
 use App\Services\ZigoPricingService;
 use App\Services\ZigoProviderRateService;
+use App\Exceptions\Payments\PaymentVerificationException;
+use App\Services\Payments\PaymentVerificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
@@ -1253,7 +1255,7 @@ public function procesarCheckout(
 
 public function pago(B2cCotizacion $cotizacion)
 {
-    $accessToken = env('MERCADOPAGO_ACCESS_TOKEN');
+    $accessToken = config('services.mercadopago.access_token');
 
     if (empty($accessToken)) {
         abort(500, 'Falta configurar MERCADOPAGO_ACCESS_TOKEN en .env');
@@ -1286,6 +1288,8 @@ public function pago(B2cCotizacion $cotizacion)
     ];
 
     $preference->auto_return = 'approved';
+    $preference->notification_url =
+        $baseUrl . '/api/webhooks/mercadopago';
 
     $preference->save();
 
@@ -1306,56 +1310,166 @@ public function pago(B2cCotizacion $cotizacion)
     return redirect($preference->init_point);
 }
 
-public function pagoSuccess(Request $request, B2cCotizacion $cotizacion)
-{
-    if ($cotizacion->estatus !== 'GUIA_GENERADA') {
-        $cotizacion->update([
-            'estatus' => 'PAGADA',
-            'payment_id' => $request->get('payment_id') ?? $cotizacion->payment_id,
-            'payment_status' => $request->get('status') ?? $request->get('collection_status') ?? $cotizacion->payment_status,
-            'payment_external_reference' => $request->get('external_reference') ?? $cotizacion->payment_external_reference,
-            'payment_collection_id' => $request->get('collection_id') ?? $cotizacion->payment_collection_id,
-        ]);
-    }
+public function pagoSuccess(
+    Request $request,
+    B2cCotizacion $cotizacion,
+    PaymentVerificationService $verificationService
+) {
+    $cotizacion = $this->verifyMercadoPagoCallback(
+        $request,
+        $cotizacion,
+        $verificationService,
+        'RETURN_SUCCESS'
+    );
 
     session()->forget([
         'cotizacion_publica_id',
         'login_required',
     ]);
 
-    $cotizacion->refresh();
+    if (
+        in_array(
+            $cotizacion->estatus,
+            ['PAGADA', 'GUIA_GENERADA'],
+            true
+        )
+    ) {
+        return view('b2c.pago-success', compact('cotizacion'));
+    }
 
-    return view('b2c.pago-success', compact('cotizacion'));
-}
-
-public function pagoFailure(Request $request, B2cCotizacion $cotizacion)
-{
-    $cotizacion->update([
-        'estatus' => 'PAGO_RECHAZADO',
-        'payment_id' => $request->get('payment_id'),
-        'payment_status' => $request->get('status'),
-        'payment_external_reference' => $request->get('external_reference'),
-        'payment_collection_id' => $request->get('collection_id'),
-    ]);
-
-    return view('b2c.pago-failure', compact('cotizacion'));
-}
-
-public function pagoPending(Request $request, B2cCotizacion $cotizacion)
-{
-    $cotizacion->update([
-        'estatus' => 'PAGO_PENDIENTE',
-        'payment_id' => $request->get('payment_id'),
-        'payment_status' => $request->get('status'),
-        'payment_external_reference' => $request->get('external_reference'),
-        'payment_collection_id' => $request->get('collection_id'),
-    ]);
+    if ($cotizacion->estatus === 'PAGO_RECHAZADO') {
+        return view('b2c.pago-failure', compact('cotizacion'));
+    }
 
     return view('b2c.pago-pending', compact('cotizacion'));
 }
 
+public function pagoFailure(
+    Request $request,
+    B2cCotizacion $cotizacion,
+    PaymentVerificationService $verificationService
+) {
+    $cotizacion = $this->verifyMercadoPagoCallback(
+        $request,
+        $cotizacion,
+        $verificationService,
+        'RETURN_FAILURE'
+    );
+
+    if (
+        in_array(
+            $cotizacion->estatus,
+            ['PAGADA', 'GUIA_GENERADA'],
+            true
+        )
+    ) {
+        return view('b2c.pago-success', compact('cotizacion'));
+    }
+
+    if ($cotizacion->estatus === 'PAGO_PENDIENTE') {
+        return view('b2c.pago-pending', compact('cotizacion'));
+    }
+
+    return view('b2c.pago-failure', compact('cotizacion'));
+}
+
+public function pagoPending(
+    Request $request,
+    B2cCotizacion $cotizacion,
+    PaymentVerificationService $verificationService
+) {
+    $cotizacion = $this->verifyMercadoPagoCallback(
+        $request,
+        $cotizacion,
+        $verificationService,
+        'RETURN_PENDING'
+    );
+
+    if (
+        in_array(
+            $cotizacion->estatus,
+            ['PAGADA', 'GUIA_GENERADA'],
+            true
+        )
+    ) {
+        return view('b2c.pago-success', compact('cotizacion'));
+    }
+
+    if ($cotizacion->estatus === 'PAGO_RECHAZADO') {
+        return view('b2c.pago-failure', compact('cotizacion'));
+    }
+
+    return view('b2c.pago-pending', compact('cotizacion'));
+}
+
+private function verifyMercadoPagoCallback(
+    Request $request,
+    B2cCotizacion $cotizacion,
+    PaymentVerificationService $verificationService,
+    string $source
+): B2cCotizacion {
+    if ($cotizacion->payment_status === 'saldo_prepago') {
+        return $cotizacion;
+    }
+
+    $paymentId = trim((string) (
+        $request->get('payment_id')
+        ?: $request->get('collection_id')
+        ?: $cotizacion->payment_id
+        ?: $cotizacion->payment_collection_id
+        ?: ''
+    ));
+
+    if ($paymentId === '') {
+        if ($cotizacion->estatus !== 'GUIA_GENERADA') {
+            $cotizacion->update([
+                'estatus' => 'PAGO_EN_VERIFICACION',
+                'payment_verification_status' => 'PENDING',
+                'payment_verification_source' => $source,
+                'payment_verification_error' =>
+                    'Falta el identificador del pago.',
+                'payment_verification_attempted_at' => now(),
+            ]);
+        }
+
+        return $cotizacion->refresh();
+    }
+
+    try {
+        return $verificationService->verifyByPaymentId(
+            $cotizacion,
+            $paymentId,
+            $source
+        );
+    } catch (PaymentVerificationException $exception) {
+        \Log::warning('Pago Mercado Pago pendiente de verificación', [
+            'cotizacion_id' => $cotizacion->id,
+            'payment_id' => $paymentId,
+            'verification_code' =>
+                $exception->verificationCode(),
+            'error' => $exception->getMessage(),
+        ]);
+
+        if ($cotizacion->estatus !== 'GUIA_GENERADA') {
+            $cotizacion->update([
+                'estatus' => 'PAGO_EN_VERIFICACION',
+                'payment_verification_status' => 'PENDING',
+                'payment_verification_source' => $source,
+                'payment_verification_error' =>
+                    $exception->verificationCode()
+                    . ': '
+                    . $exception->getMessage(),
+                'payment_verification_attempted_at' => now(),
+            ]);
+        }
+
+        return $cotizacion->refresh();
+    }
+}
+
 public function generarGuia(
-    B2cCotizacion $cotizacion
+    B2cCotizacion $cotizacion,
+    PaymentVerificationService $verificationService
 ) {
     /*
      * Seguridad: solamente el propietario puede generar
@@ -1429,6 +1543,19 @@ public function generarGuia(
                     $pdfUrl
                 );
         }
+    }
+
+    /*
+     * El estado PAGADA no es suficiente. La guía solamente puede
+     * generarse con un pago confirmado por Mercado Pago o con un
+     * movimiento de saldo aplicado en ZIGO.
+     */
+    if (!$verificationService->isEligibleForGuide($cotizacion)) {
+        abort(
+            403,
+            'El pago todavía no cuenta con verificación suficiente '
+            . 'para generar la guía.'
+        );
     }
 
     /*
@@ -2435,16 +2562,15 @@ public function eliminarDireccionB2c(B2cDireccion $direccion)
         ->with('success', 'Dirección eliminada correctamente.');
 }
 
-public function pagarConSaldo(B2cCotizacion $cotizacion)
-{
+public function pagarConSaldo(
+    B2cCotizacion $cotizacion,
+    PaymentVerificationService $verificationService
+) {
     if ($cotizacion->user_id !== auth()->id()) {
         abort(403);
     }
 
-    if (
-        $cotizacion->estatus !==
-        'CHECKOUT_COMPLETO'
-    ) {
+    if ($cotizacion->estatus !== 'CHECKOUT_COMPLETO') {
         return redirect()
             ->route(
                 'b2c.checkout',
@@ -2456,41 +2582,91 @@ public function pagarConSaldo(B2cCotizacion $cotizacion)
             );
     }
 
-    $total = (float) $cotizacion->precio;
+    try {
+        DB::transaction(function () use (
+            $cotizacion,
+            $verificationService
+        ) {
+            $lockedCotizacion = B2cCotizacion::query()
+                ->whereKey($cotizacion->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-    $saldo = B2cSaldo::firstOrCreate(
-        ['user_id' => auth()->id()],
-        ['saldo' => 0]
-    );
+            $reference = 'COTIZACION-' . $lockedCotizacion->id;
+            $existingMovement = B2cMovimientoSaldo::query()
+                ->where('user_id', auth()->id())
+                ->where('tipo', 'COMPRA_GUIA')
+                ->where('referencia', $reference)
+                ->where('estatus', 'APLICADO')
+                ->lockForUpdate()
+                ->first();
 
-    if ($saldo->saldo < $total) {
-        return back()->with('error', 'Saldo insuficiente. Recarga saldo o paga con Mercado Pago.');
+            if ($existingMovement) {
+                $lockedCotizacion->forceFill([
+                    'estatus' => 'PAGADA',
+                    'payment_status' => 'saldo_prepago',
+                    'payment_external_reference' =>
+                        'SALDO-' . $lockedCotizacion->id,
+                ])->save();
+
+                $verificationService->markBalancePaymentVerified(
+                    $lockedCotizacion
+                );
+
+                return;
+            }
+
+            $saldo = B2cSaldo::query()
+                ->where('user_id', auth()->id())
+                ->lockForUpdate()
+                ->first();
+
+            if (!$saldo) {
+                $saldo = B2cSaldo::create([
+                    'user_id' => auth()->id(),
+                    'saldo' => 0,
+                ]);
+            }
+
+            $total = (float) $lockedCotizacion->precio;
+            $saldoAnterior = (float) $saldo->saldo;
+
+            if ($saldoAnterior < $total) {
+                throw new \DomainException(
+                    'Saldo insuficiente. Recarga saldo o paga con Mercado Pago.'
+                );
+            }
+
+            $saldoNuevo = $saldoAnterior - $total;
+
+            $saldo->update([
+                'saldo' => $saldoNuevo,
+            ]);
+
+            B2cMovimientoSaldo::create([
+                'user_id' => auth()->id(),
+                'tipo' => 'COMPRA_GUIA',
+                'monto' => $total,
+                'saldo_anterior' => $saldoAnterior,
+                'saldo_nuevo' => $saldoNuevo,
+                'referencia' => $reference,
+                'estatus' => 'APLICADO',
+            ]);
+
+            $lockedCotizacion->forceFill([
+                'estatus' => 'PAGADA',
+                'payment_status' => 'saldo_prepago',
+                'payment_external_reference' =>
+                    'SALDO-' . $lockedCotizacion->id,
+            ])->save();
+
+            $verificationService->markBalancePaymentVerified(
+                $lockedCotizacion
+            );
+        });
+    } catch (\DomainException $exception) {
+        return back()->with('error', $exception->getMessage());
     }
-
-    DB::transaction(function () use ($saldo, $cotizacion, $total) {
-        $saldoAnterior = $saldo->saldo;
-        $saldoNuevo = $saldoAnterior - $total;
-
-        $saldo->update([
-            'saldo' => $saldoNuevo,
-        ]);
-
-        B2cMovimientoSaldo::create([
-            'user_id' => auth()->id(),
-            'tipo' => 'COMPRA_GUIA',
-            'monto' => $total,
-            'saldo_anterior' => $saldoAnterior,
-            'saldo_nuevo' => $saldoNuevo,
-            'referencia' => 'COTIZACION-' . $cotizacion->id,
-            'estatus' => 'APLICADO',
-        ]);
-
-        $cotizacion->update([
-            'estatus' => 'PAGADA',
-            'payment_status' => 'saldo_prepago',
-            'payment_external_reference' => 'SALDO-' . $cotizacion->id,
-        ]);
-    });
 
     session()->forget(
         'b2c_metodo_pago_' . $cotizacion->id
