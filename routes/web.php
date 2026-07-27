@@ -251,6 +251,13 @@ Route::middleware(['auth', 'roles:sysadmin,admin,adminops,operaciones'])
 
         Route::post('/incidencias/{incidencia}/responder', [B2cIncidenciaAdminController::class, 'responder'])
             ->name('admin.incidencias.responder');
+
+        Route::get('/conciliacion-saldo/{cotizacion}', [B2cIncidenciaAdminController::class, 'showBalanceReconciliation'])
+            ->name('admin.conciliacion.show');
+
+        Route::post('/conciliacion-saldo/{cotizacion}/reversar', [B2cIncidenciaAdminController::class, 'reverseBalance'])
+            ->middleware('throttle:6,1')
+            ->name('admin.conciliacion.reverse');
     });
 
 //LOGIN SOPORTE

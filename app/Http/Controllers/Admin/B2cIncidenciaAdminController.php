@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\B2cCotizacion;
 use App\Models\B2cIncidencia;
+use App\Services\Billing\B2cBalanceReversalService;
+use DomainException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
@@ -82,6 +85,77 @@ class B2cIncidenciaAdminController extends Controller
         return redirect()
             ->route('admin.incidencias.show', $incidencia->id)
             ->with('success', 'Incidencia actualizada correctamente.');
+    }
+
+    public function showBalanceReconciliation(
+        B2cCotizacion $cotizacion,
+        B2cBalanceReversalService $reversalService
+    ) {
+        $cotizacion->load([
+            'user',
+            'saldoReversals.adminUser',
+            'saldoReversals.purchaseMovement',
+            'saldoReversals.reversalMovement',
+        ]);
+
+        $preview = $reversalService->preview(
+            $cotizacion
+        );
+
+        return view(
+            'admin.conciliacion.show',
+            compact(
+                'cotizacion',
+                'preview'
+            )
+        );
+    }
+
+    public function reverseBalance(
+        Request $request,
+        B2cCotizacion $cotizacion,
+        B2cBalanceReversalService $reversalService
+    ) {
+        $data = $request->validate([
+            'reason' => [
+                'required',
+                'string',
+                'min:20',
+                'max:1000',
+            ],
+            'provider_confirmed' => [
+                'accepted',
+            ],
+        ]);
+
+        try {
+            $reversal = $reversalService->reverse(
+                $cotizacion,
+                (int) auth()->id(),
+                $data['reason'],
+                $request->boolean(
+                    'provider_confirmed'
+                )
+            );
+        } catch (DomainException $exception) {
+            return back()
+                ->withInput()
+                ->with(
+                    'error',
+                    $exception->getMessage()
+                );
+        }
+
+        return redirect()
+            ->route(
+                'admin.conciliacion.show',
+                $cotizacion->id
+            )
+            ->with(
+                'success',
+                'Saldo devuelto correctamente. '
+                . 'Reverso #' . $reversal->id . '.'
+            );
     }
 
     public function dashboard()

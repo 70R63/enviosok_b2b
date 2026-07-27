@@ -213,6 +213,7 @@ th,td{
                             <th>Estado guía</th>
                             <th>Paquetería</th>
                             <th>Total</th>
+                            <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -229,6 +230,14 @@ th,td{
                                 <td>{{ $cotizacion->guia_estatus ?? 'SIN_GUIA' }}</td>
                                 <td>{{ $cotizacion->logistico ?? '-' }}</td>
                                 <td>${{ number_format($cotizacion->precio ?? 0, 2) }}</td>
+                                <td>
+                                    <a
+                                        href="{{ route('admin.conciliacion.show', $cotizacion->id) }}"
+                                        class="btn"
+                                    >
+                                        Conciliar saldo
+                                    </a>
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>

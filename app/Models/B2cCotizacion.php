@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class B2cCotizacion extends Model
@@ -166,6 +167,14 @@ class B2cCotizacion extends Model
         );
     }
 
+    public function saldoReversals(): HasMany
+    {
+        return $this->hasMany(
+            B2cSaldoReversal::class,
+            'cotizacion_id'
+        );
+    }
+
     public function hasGeneratedGuide(): bool
     {
         $guideStatus = strtoupper(
@@ -190,6 +199,13 @@ class B2cCotizacion extends Model
         $verificationStatus = strtoupper(
             trim((string) $this->payment_verification_status)
         );
+
+        if (
+            $paymentStatus === 'saldo_revertido'
+            || $verificationStatus === 'REVERSED'
+        ) {
+            return false;
+        }
 
         return in_array($paymentStatus, [
             'approved',
@@ -258,6 +274,7 @@ class B2cCotizacion extends Model
             'SELECCIONADA',
             'CHECKOUT_COMPLETO',
             'PAGO_RECHAZADO',
+            'SALDO_REVERTIDO',
         ], true);
     }
 
@@ -297,6 +314,9 @@ class B2cCotizacion extends Model
 
             'PAGO_RECHAZADO' =>
                 'Pago rechazado',
+
+            'SALDO_REVERTIDO' =>
+                'Saldo devuelto',
 
             'PAGADA' =>
                 'Pagada',
@@ -354,6 +374,9 @@ class B2cCotizacion extends Model
         return match ($paymentStatus) {
             'saldo_prepago' =>
                 'Pagado con saldo',
+
+            'saldo_revertido' =>
+                'Saldo devuelto',
 
             'approved' =>
                 'Pago aprobado',

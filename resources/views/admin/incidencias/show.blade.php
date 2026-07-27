@@ -146,6 +146,30 @@ textarea{min-height:140px}
         @endif
     </div>
 
+    @if($incidencia->cotizacion)
+        <div class="card">
+            <div class="label">Cotización relacionada</div>
+            <div class="value">
+                #{{ $incidencia->cotizacion->id }}
+                · {{ $incidencia->cotizacion->estatus_label }}
+            </div>
+
+            <p>
+                Pago:
+                {{ $incidencia->cotizacion->payment_status_label }}
+                · Guía:
+                {{ $incidencia->cotizacion->guia_estatus ?? 'SIN_GUIA' }}
+            </p>
+
+            <a
+                href="{{ route('admin.conciliacion.show', $incidencia->cotizacion->id) }}"
+                class="btn"
+            >
+                Revisar conciliación de saldo
+            </a>
+        </div>
+    @endif
+
     <div class="card">
         <form method="POST" action="{{ route('admin.incidencias.responder', $incidencia->id) }}">
             @csrf
