@@ -6,7 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\ApiClient;
 use App\Models\ApiUsageLog;
 use App\Models\ApiKey;
+use App\Models\ApiClientProduct;
+use App\Models\ApiProduct;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class CrmApiHubController extends Controller
@@ -132,6 +135,112 @@ class CrmApiHubController extends Controller
         'latestLogs'
     ));
 }
+
+    public function products(ApiClient $apiClient)
+    {
+        $products = ApiProduct::query()
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        $assignments = ApiClientProduct::query()
+            ->where('api_client_id', $apiClient->id)
+            ->get()
+            ->keyBy('api_product_id');
+
+        $usageByProduct = ApiUsageLog::query()
+            ->where('api_client_id', $apiClient->id)
+            ->whereNotNull('api_product_id')
+            ->whereBetween('created_at', [
+                now()->startOfMonth(),
+                now()->endOfMonth(),
+            ])
+            ->selectRaw(
+                'api_product_id, COUNT(*) AS total'
+            )
+            ->groupBy('api_product_id')
+            ->pluck('total', 'api_product_id');
+
+        $enabledProductsCount = $assignments
+            ->where('active', true)
+            ->count();
+
+        $productUsageTotal = $usageByProduct
+            ->sum();
+
+        return view(
+            'crm.api_hub.products',
+            compact(
+                'apiClient',
+                'products',
+                'assignments',
+                'usageByProduct',
+                'enabledProductsCount',
+                'productUsageTotal'
+            )
+        );
+    }
+
+    public function updateProducts(
+        Request $request,
+        ApiClient $apiClient
+    ) {
+        $data = $request->validate([
+            'products' => [
+                'required',
+                'array',
+            ],
+            'products.*.product_id' => [
+                'required',
+                'integer',
+                'distinct',
+                'exists:api_products,id',
+            ],
+            'products.*.enabled' => [
+                'required',
+                'boolean',
+            ],
+            'products.*.monthly_limit' => [
+                'nullable',
+                'integer',
+                'min:1',
+                'max:10000000',
+            ],
+        ]);
+
+        DB::transaction(function () use (
+            $apiClient,
+            $data
+        ) {
+            foreach ($data['products'] as $product) {
+                ApiClientProduct::updateOrCreate(
+                    [
+                        'api_client_id' =>
+                            $apiClient->id,
+                        'api_product_id' =>
+                            $product['product_id'],
+                    ],
+                    [
+                        'active' =>
+                            (bool) $product['enabled'],
+                        'monthly_limit' =>
+                            $product['monthly_limit']
+                            ?? null,
+                    ]
+                );
+            }
+        });
+
+        return redirect()
+            ->route(
+                'crm.api-hub.products',
+                $apiClient
+            )
+            ->with(
+                'success',
+                'Productos API actualizados correctamente.'
+            );
+    }
 
     public function updatePlan(Request $request, ApiClient $apiClient)
     {

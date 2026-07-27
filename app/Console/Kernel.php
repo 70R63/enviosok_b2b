@@ -27,6 +27,11 @@ class Kernel extends ConsoleKernel
     {
         //$schedule->command('inspire')->hourly();
         $schedule->command('rastreo:automatico')->hourly();
+
+        $schedule
+            ->command('api-hub:webhooks:deliver --limit=100')
+            ->everyMinute()
+            ->withoutOverlapping(10);
         
     }
 

@@ -67,6 +67,7 @@ class Kernel extends HttpKernel
         'validaToken'   => \App\Http\Middleware\ValidaToken::class,
         'AccesosApi'   => \App\Http\Middleware\AccesosApi::class,
         'zigo.api' => \App\Http\Middleware\ValidateZigoApiKey::class,
+        'zigo.product' => \App\Http\Middleware\EnsureApiProductAccess::class,
     ];
 }
  

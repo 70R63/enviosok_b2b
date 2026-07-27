@@ -20,6 +20,7 @@ use App\Http\Controllers\API\Ltd\FedexController;
 use App\Http\Controllers\API\Ltd\EstafetaController;
 
 use App\Http\Controllers\API\Hub\PostalCodeController;
+use App\Http\Controllers\API\Hub\BillingInvoiceController;
 use App\Http\Middleware\ValidateZigoApiKey;
 
 use App\Http\Controllers\API\DEV\GuiaController as DevGuiaController ;
@@ -379,6 +380,48 @@ Route::middleware('zigo.api')->prefix('hub')->group(function () {
         ]);
     });
 
-    Route::get('/cp/{codigoPostal}', [PostalCodeController::class, 'show']);
+    Route::get('/cp/{codigoPostal}', [PostalCodeController::class, 'show'])
+        ->middleware('zigo.product:POSTAL_CODES');
+
+    Route::middleware('zigo.product:BILLING')
+        ->prefix('v1/billing')
+        ->name('api.hub.billing.')
+        ->group(function () {
+            Route::post(
+                '/invoices',
+                [BillingInvoiceController::class, 'store']
+            )->name('invoices.store');
+
+            Route::get(
+                '/invoices/{externalId}',
+                [BillingInvoiceController::class, 'show']
+            )->where(
+                'externalId',
+                '[A-Za-z0-9][A-Za-z0-9._:-]*'
+            )->name('invoices.show');
+
+            Route::get(
+                '/invoices/{externalId}/documents/{format}',
+                [BillingInvoiceController::class, 'document']
+            )
+                ->where(
+                    'externalId',
+                    '[A-Za-z0-9][A-Za-z0-9._:-]*'
+                )
+                ->whereIn('format', ['pdf', 'xml', 'zip'])
+                ->name('invoices.documents');
+        });
 });
 
+if (app()->environment('local') || app()->environment('testing')) {
+    Route::post('/hub/testing/webhook-receiver', function (Request $request) {
+        return response()->json([
+            'received' => true,
+            'event' => $request->header('X-ZIGO-Event'),
+            'delivery_id' =>
+                $request->header('X-ZIGO-Delivery-ID'),
+            'signature_present' =>
+                $request->hasHeader('X-ZIGO-Signature'),
+        ]);
+    })->name('api.hub.testing.webhook-receiver');
+}

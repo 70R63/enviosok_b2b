@@ -65,6 +65,7 @@ class ValidateZigoApiKey
             ApiUsageLog::create([
                 'api_client_id' => $apiClient->id,
                 'api_key_id' => $apiKey->id,
+                'api_product_id' => null,
                 'endpoint' => $request->path(),
                 'method' => $request->method(),
                 'status_code' => 429,
@@ -85,9 +86,14 @@ class ValidateZigoApiKey
 
         $response = $next($request);
 
+        $apiProduct = $request->attributes->get(
+            'api_product'
+        );
+
         ApiUsageLog::create([
             'api_client_id' => $apiClient->id,
             'api_key_id' => $apiKey->id,
+            'api_product_id' => $apiProduct?->id,
             'endpoint' => $request->path(),
             'method' => $request->method(),
             'status_code' => $response->getStatusCode(),

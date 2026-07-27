@@ -44,7 +44,7 @@
 
         <a href="{{ route('crm.facturacion.index') }}"
            class="{{ request()->routeIs('crm.facturacion.*') ? 'active' : '' }}">
-            Facturación
+            Facturación B2C
 
             @php
                 $pendingInvoiceCount = \Illuminate\Support\Facades\Schema::hasTable('b2c_invoice_requests')
@@ -61,8 +61,25 @@
         <a href="#">Paqueterías</a>
 
         <a href="{{ route('crm.api-hub.index') }}"
-           class="{{ request()->routeIs('crm.api-hub.*') ? 'active' : '' }}">
-            API Hub
+           class="{{ request()->routeIs('crm.api-hub.*') && !request()->routeIs('crm.api-hub.billing.*') ? 'active' : '' }}">
+            Clientes API
+        </a>
+
+        <a href="{{ route('crm.api-hub.billing.index') }}"
+           class="{{ request()->routeIs('crm.api-hub.billing.*') ? 'active' : '' }}">
+            Facturación de integraciones
+
+            @php
+                $pendingApiBillingCount = \Illuminate\Support\Facades\Schema::hasTable('api_billing_requests')
+                    ? \App\Models\ApiBillingRequest::whereIn('status', ['SOLICITADA', 'EN_PROCESO'])->count()
+                    : 0;
+            @endphp
+
+            @if($pendingApiBillingCount > 0)
+                <span style="float:right;background:#f59e0b;color:#111827;border-radius:999px;padding:2px 8px;font-size:12px;">
+                    {{ $pendingApiBillingCount }}
+                </span>
+            @endif
         </a>
 
         <a href="{{ route('crm.pricing.index') }}"

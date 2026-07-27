@@ -3,6 +3,7 @@
 namespace App\Services\Billing;
 
 use App\Exceptions\Billing\CfdiZipValidationException;
+use App\Models\ApiBillingRequest;
 use App\Models\B2cInvoiceRequest;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -100,7 +101,11 @@ class InvoiceFulfillmentService
                 ->where('id', '<>', $lockedRequest->getKey())
                 ->exists();
 
-            if ($uuidAlreadyUsed) {
+            $uuidUsedByApiHub = ApiBillingRequest::query()
+                ->where('cfdi_uuid', $processedCfdi['cfdi_uuid'])
+                ->exists();
+
+            if ($uuidAlreadyUsed || $uuidUsedByApiHub) {
                 throw ValidationException::withMessages([
                     'cfdi_zip' => 'El UUID fiscal ya está registrado en otra solicitud.',
                 ]);

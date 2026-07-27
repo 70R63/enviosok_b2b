@@ -40,4 +40,46 @@ class ApiClient extends Model
     {
         return $this->hasMany(ApiUsageLog::class);
     }
+
+    public function clientProducts()
+    {
+        return $this->hasMany(ApiClientProduct::class);
+    }
+
+    public function billingRequests()
+    {
+        return $this->hasMany(
+            ApiBillingRequest::class,
+            'api_client_id'
+        );
+    }
+
+    public function webhookEndpoints()
+    {
+        return $this->hasMany(
+            ApiWebhookEndpoint::class,
+            'api_client_id'
+        );
+    }
+
+    public function webhookDeliveries()
+    {
+        return $this->hasMany(
+            ApiWebhookDelivery::class,
+            'api_client_id'
+        );
+    }
+
+    public function products()
+    {
+        return $this->belongsToMany(
+            ApiProduct::class,
+            'api_client_products'
+        )
+            ->withPivot([
+                'active',
+                'monthly_limit',
+            ])
+            ->withTimestamps();
+    }
 }

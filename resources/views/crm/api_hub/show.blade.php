@@ -63,6 +63,14 @@
 
         <p>
             <a class="btn btn-gray" href="{{ route('crm.api-hub.index') }}">← Volver a API Hub</a>
+            <a
+                class="btn"
+                href="{{ route('crm.api-hub.products', $apiClient) }}"
+            >Administrar productos</a>
+            <a
+                class="btn"
+                href="{{ route('crm.api-hub.webhooks.index', $apiClient) }}"
+            >Administrar webhooks</a>
         </p>
 
         <div class="grid">

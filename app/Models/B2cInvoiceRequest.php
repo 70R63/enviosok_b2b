@@ -21,6 +21,9 @@ class B2cInvoiceRequest extends Model
         'cotizacion_id',
         'fiscal_profile_id',
         'managed_by_user_id',
+        'api_billing_request_id',
+        'api_hub_synced_at',
+        'api_hub_sync_error',
         'payment_reference',
         'payment_status',
         'payment_method',
@@ -57,6 +60,7 @@ class B2cInvoiceRequest extends Model
 
     protected $casts = [
         'monto' => 'decimal:2',
+        'api_hub_synced_at' => 'datetime',
         'solicitada_at' => 'datetime',
         'facturada_at' => 'datetime',
         'attended_at' => 'datetime',
@@ -95,6 +99,14 @@ class B2cInvoiceRequest extends Model
         return $this->belongsTo(
             User::class,
             'managed_by_user_id'
+        );
+    }
+
+    public function apiBillingRequest(): BelongsTo
+    {
+        return $this->belongsTo(
+            ApiBillingRequest::class,
+            'api_billing_request_id'
         );
     }
 

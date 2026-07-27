@@ -381,6 +381,61 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
         Route::get('/api-hub', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'index'])
             ->name('api-hub.index');
 
+        Route::get(
+            '/api-hub/billing',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'index']
+        )->name('api-hub.billing.index');
+
+        Route::get(
+            '/api-hub/billing/{apiBillingRequest}',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'show']
+        )
+            ->whereNumber('apiBillingRequest')
+            ->name('api-hub.billing.show');
+
+        Route::post(
+            '/api-hub/billing/{apiBillingRequest}/iniciar-atencion',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'startProcessing']
+        )
+            ->whereNumber('apiBillingRequest')
+            ->name('api-hub.billing.start-processing');
+
+        Route::post(
+            '/api-hub/billing/{apiBillingRequest}/gestion',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'updateManagement']
+        )
+            ->whereNumber('apiBillingRequest')
+            ->name('api-hub.billing.management.update');
+
+        Route::post(
+            '/api-hub/billing/{apiBillingRequest}/rechazar',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'reject']
+        )
+            ->whereNumber('apiBillingRequest')
+            ->name('api-hub.billing.reject');
+
+        Route::post(
+            '/api-hub/billing/{apiBillingRequest}/cancelar',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'cancel']
+        )
+            ->whereNumber('apiBillingRequest')
+            ->name('api-hub.billing.cancel');
+
+        Route::post(
+            '/api-hub/billing/{apiBillingRequest}/documentos',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'storeDocuments']
+        )
+            ->whereNumber('apiBillingRequest')
+            ->name('api-hub.billing.documents.store');
+
+        Route::get(
+            '/api-hub/billing/{apiBillingRequest}/documentos/{format}',
+            [\App\Http\Controllers\CRM\CrmApiBillingController::class, 'downloadDocument']
+        )
+            ->whereNumber('apiBillingRequest')
+            ->whereIn('format', ['pdf', 'xml', 'zip'])
+            ->name('api-hub.billing.documents.download');
+
         Route::resource('clientes', \App\Http\Controllers\CRM\CrmClientController::class)
             ->except(['show'])
             ->names('clientes')
@@ -400,6 +455,35 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
 
         Route::post('/api-hub/{apiClient}/keys/{apiKey}/toggle', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'toggleApiKey'])
             ->name('api-hub.keys.toggle');
+
+        Route::get('/api-hub/{apiClient}/products', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'products'])
+            ->name('api-hub.products');
+
+        Route::post('/api-hub/{apiClient}/products', [\App\Http\Controllers\CRM\CrmApiHubController::class, 'updateProducts'])
+            ->name('api-hub.products.update');
+
+        Route::get('/api-hub/{apiClient}/webhooks', [\App\Http\Controllers\CRM\CrmApiWebhookController::class, 'index'])
+            ->name('api-hub.webhooks.index');
+
+        Route::post('/api-hub/{apiClient}/webhooks', [\App\Http\Controllers\CRM\CrmApiWebhookController::class, 'store'])
+            ->name('api-hub.webhooks.store');
+
+        Route::post('/api-hub/{apiClient}/webhooks/{webhookEndpoint}/actualizar', [\App\Http\Controllers\CRM\CrmApiWebhookController::class, 'update'])
+            ->whereNumber('webhookEndpoint')
+            ->name('api-hub.webhooks.update');
+
+        Route::post('/api-hub/{apiClient}/webhooks/{webhookEndpoint}/estado', [\App\Http\Controllers\CRM\CrmApiWebhookController::class, 'toggle'])
+            ->whereNumber('webhookEndpoint')
+            ->name('api-hub.webhooks.toggle');
+
+        Route::post('/api-hub/{apiClient}/webhooks/{webhookEndpoint}/rotar-secreto', [\App\Http\Controllers\CRM\CrmApiWebhookController::class, 'rotateSecret'])
+            ->whereNumber('webhookEndpoint')
+            ->name('api-hub.webhooks.rotate-secret');
+
+        Route::post('/api-hub/{apiClient}/webhooks/{webhookEndpoint}/entregas/{delivery}/reenviar', [\App\Http\Controllers\CRM\CrmApiWebhookController::class, 'retryDelivery'])
+            ->whereNumber('webhookEndpoint')
+            ->whereNumber('delivery')
+            ->name('api-hub.webhooks.deliveries.retry');
 
         Route::post('/clientes/{cliente}/seguimiento', [CrmClientController::class, 'actualizarSeguimiento'])
             ->name('clientes.seguimiento');
