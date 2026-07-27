@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\LtdController;
 use App\Http\Controllers\B2C\CotizacionPublicaController;
 use App\Http\Controllers\B2C\B2cInvoiceDocumentController;
+use App\Http\Controllers\B2C\B2cAdeudoController;
 use App\Http\Controllers\API\CPController;
 use App\Http\Controllers\B2cMisEnviosController;
 use App\Http\Controllers\Admin\B2cIncidenciaAdminController;
@@ -15,6 +16,8 @@ use App\Http\Controllers\Web\WaitlistController;
 use App\Http\Controllers\CRM\CrmPricingController;
 use App\Http\Controllers\CRM\CrmInvoiceRequestController;
 use App\Http\Controllers\CRM\CrmInvoiceDocumentController;
+use App\Http\Controllers\CRM\CrmGuideController;
+use App\Http\Controllers\CRM\CrmDebtController;
 use App\Models\B2cCotizacion;
 
 /*
@@ -202,6 +205,14 @@ Route::get('/b2c/prepago/{recarga}/pending', [B2cMisEnviosController::class, 're
 Route::post('/b2c/pago/{cotizacion}/saldo', [CotizacionPublicaController::class, 'pagarConSaldo'])
     ->name('b2c.pago.saldo');
 
+// Adeudos B2C
+Route::get('/b2c/adeudos', [B2cAdeudoController::class, 'index'])
+    ->name('b2c.adeudos.index');
+
+Route::post('/b2c/adeudos/{adeudo}/saldo', [B2cAdeudoController::class, 'payWithBalance'])
+    ->middleware('throttle:6,1')
+    ->name('b2c.adeudos.saldo');
+
 //Configuracion
 Route::get('/b2c/configuracion', [CotizacionPublicaController::class, 'configuracionB2c'])
     ->name('b2c.configuracion');
@@ -331,6 +342,35 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
         Route::get('/dashboard', function () {
             return view('crm.dashboard');
         })->name('dashboard');
+
+        Route::get('/guias', [CrmGuideController::class, 'index'])
+            ->name('guias.index');
+
+        Route::get('/guias/{cotizacion}', [CrmGuideController::class, 'show'])
+            ->whereNumber('cotizacion')
+            ->name('guias.show');
+
+        Route::post('/guias/{cotizacion}/adeudos', [CrmGuideController::class, 'storeDebt'])
+            ->whereNumber('cotizacion')
+            ->middleware('throttle:12,1')
+            ->name('guias.adeudos.store');
+
+        Route::get('/adeudos', [CrmDebtController::class, 'index'])
+            ->name('adeudos.index');
+
+        Route::get('/adeudos/{adeudo}', [CrmDebtController::class, 'show'])
+            ->whereNumber('adeudo')
+            ->name('adeudos.show');
+
+        Route::post('/adeudos/{adeudo}/cancelar', [CrmDebtController::class, 'cancel'])
+            ->whereNumber('adeudo')
+            ->middleware('throttle:12,1')
+            ->name('adeudos.cancel');
+
+        Route::post('/adeudos/{adeudo}/condonar', [CrmDebtController::class, 'waive'])
+            ->whereNumber('adeudo')
+            ->middleware('throttle:12,1')
+            ->name('adeudos.waive');
 
         Route::get('/seguridad', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'index'])
             ->name('seguridad.index');

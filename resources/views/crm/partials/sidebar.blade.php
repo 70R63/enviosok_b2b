@@ -37,9 +37,30 @@
             @endif
         </a>
 
-        <a href="#">Guías</a>
+        <a href="{{ route('crm.guias.index') }}"
+           class="{{ request()->routeIs('crm.guias.*') ? 'active' : '' }}">
+            Guías
+        </a>
+
         <a href="#">Incidencias</a>
-        <a href="#">Adeudos</a>
+
+        <a href="{{ route('crm.adeudos.index') }}"
+           class="{{ request()->routeIs('crm.adeudos.*') ? 'active' : '' }}">
+            Adeudos
+
+            @php
+                $pendingDebtCount = \Illuminate\Support\Facades\Schema::hasTable('b2c_adeudos')
+                    ? \App\Models\B2cAdeudo::whereIn('estatus', ['PENDIENTE', 'PAGO_INICIADO'])->count()
+                    : 0;
+            @endphp
+
+            @if($pendingDebtCount > 0)
+                <span style="float:right;background:#ef4444;color:white;border-radius:999px;padding:2px 8px;font-size:12px;">
+                    {{ $pendingDebtCount }}
+                </span>
+            @endif
+        </a>
+
         <a href="#">Pagos</a>
 
         <a href="{{ route('crm.facturacion.index') }}"

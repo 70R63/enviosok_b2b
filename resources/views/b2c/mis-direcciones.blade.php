@@ -168,7 +168,7 @@
             <a href="{{ route('b2c.mis-pagos') }}">Mis pagos</a>
             <a href="{{ route('b2c.mis-direcciones') }}">Mis direcciones</a>
             <a href="{{ route('b2c.prepago') }}">Prepago</a>
-            <a href="#">Adeudos</a>
+            <a href="{{ route('b2c.adeudos.index') }}">Adeudos</a>
             <a href="{{ route('b2c.configuracion') }}">Configuración</a>
 
             <form method="POST" action="{{ route('logout') }}">

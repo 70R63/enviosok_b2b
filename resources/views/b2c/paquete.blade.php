@@ -548,7 +548,7 @@
                 Prepago
             </a>
 
-            <a href="#">
+            <a href="{{ route('b2c.adeudos.index') }}">
                 Adeudos
             </a>
 

@@ -175,6 +175,14 @@ class B2cCotizacion extends Model
         );
     }
 
+    public function adeudos(): HasMany
+    {
+        return $this->hasMany(
+            B2cAdeudo::class,
+            'cotizacion_id'
+        );
+    }
+
     public function hasGeneratedGuide(): bool
     {
         $guideStatus = strtoupper(
