@@ -31,6 +31,9 @@ class XpertaApiClient
                 )
             )
             ->withHeaders($headers)
+            ->withOptions([
+                'allow_redirects' => false,
+            ])
             ->send(
                 strtoupper($method),
                 $this->resolveUrl($path),
@@ -90,6 +93,19 @@ class XpertaApiClient
     private function decode(Response $response): array
     {
         $json = $response->json();
+
+        if (in_array($response->status(), [301, 302, 303, 307, 308], true)) {
+            $location = trim((string) $response->header('Location'));
+
+            throw new RuntimeException(
+                'Xperta respondió con una redirección HTTP '
+                . $response->status()
+                . '. Configura XPERTA_BASE_URL con la URL final HTTPS'
+                . ($location !== ''
+                    ? '. Destino reportado: ' . mb_substr($location, 0, 300)
+                    : '.')
+            );
+        }
 
         if (!$response->successful()) {
             throw new RuntimeException(
