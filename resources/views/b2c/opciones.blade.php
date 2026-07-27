@@ -144,6 +144,24 @@
         font-size:16px;
     }
 
+    .provider-note{
+        margin-top:6px;
+        font-size:12px;
+        color:#64748b;
+        font-weight:700;
+    }
+
+    .extended-area{
+        display:inline-block;
+        margin-top:7px;
+        border-radius:999px;
+        padding:4px 9px;
+        background:#fff7ed;
+        color:#9a3412;
+        font-size:12px;
+        font-weight:900;
+    }
+
     .price{
         font-size:28px;
         font-weight:900;
@@ -356,6 +374,18 @@
                             <div class="service">
                                 {{ $opcion['servicio'] }}
                             </div>
+
+                            @if(($opcion['provider_source'] ?? null) === 'xperta')
+                                <div class="provider-note">
+                                    Cobertura y tarifa consultadas en línea
+                                </div>
+                            @endif
+
+                            @if($opcion['extended_area'] ?? false)
+                                <div class="extended-area">
+                                    Zona extendida · cargo incluido
+                                </div>
+                            @endif
                         </div>
 
                         <div>

@@ -31,6 +31,81 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'shipping' => [
+        'provider' => env(
+            'ZIGO_SHIPPING_PROVIDER',
+            'legacy_estafeta'
+        ),
+    ],
+
+    'xperta' => [
+        'enabled' => env('XPERTA_ENABLED', false),
+        'environment' => env('XPERTA_ENVIRONMENT', 'sandbox'),
+        'base_url' => env('XPERTA_BASE_URL'),
+        'empresa' => env('XPERTA_EMPRESA'),
+        'ltd' => env('XPERTA_LTD', 'estafeta'),
+        'corporativo' => env('XPERTA_CORPORATIVO'),
+        'email' => env('XPERTA_EMAIL'),
+        'password' => env('XPERTA_PASSWORD'),
+        'api_key' => env('XPERTA_API_KEY'),
+        'token_minutes' => env('XPERTA_TOKEN_MINUTES', 1440),
+        'connect_timeout' => env('XPERTA_CONNECT_TIMEOUT', 5),
+        'timeout' => env('XPERTA_TIMEOUT', 20),
+
+        'token_path' => env(
+            'XPERTA_TOKEN_PATH',
+            '/api/v1/{empresa}/login'
+        ),
+        'frequency_path' => env(
+            'XPERTA_FREQUENCY_PATH',
+            '/api/v1/empresas/{empresa}/ltds/{ltd}/frecuencia/{origin}/{destination}'
+        ),
+        'quote_path' => env(
+            'XPERTA_QUOTE_PATH',
+            '/api/v1/empresas/{empresa}/ltds/{ltd}/servicios/{service}/cotizaciones'
+        ),
+        'guide_path' => env(
+            'XPERTA_GUIDE_PATH',
+            '/api/v1/empresas/{empresa}/ltds/{ltd}/servicios/{service}/guia'
+        ),
+
+        'frequency_method' => env(
+            'XPERTA_FREQUENCY_METHOD',
+            'GET'
+        ),
+        'quote_method' => env('XPERTA_QUOTE_METHOD', 'GET'),
+        'frequency_empresa_id' => env(
+            'XPERTA_FREQUENCY_EMPRESA_ID',
+            env('XPERTA_EMPRESA')
+        ),
+        'frequency_enabled' => env(
+            'XPERTA_FREQUENCY_ENABLED',
+            true
+        ),
+        'include_declared_value_in_quote' => env(
+            'XPERTA_INCLUDE_DECLARED_VALUE_IN_QUOTE',
+            false
+        ),
+        'fallback_to_legacy' => env(
+            'XPERTA_FALLBACK_TO_LEGACY',
+            false
+        ),
+        'services' => array_values(
+            array_filter(
+                array_map(
+                    'trim',
+                    explode(
+                        ',',
+                        env(
+                            'XPERTA_SERVICES',
+                            'terrestre,diasig'
+                        )
+                    )
+                )
+            )
+        ),
+    ],
+
     'estafeta' => [
         'guide_generation_stale_minutes' => env(
             'ESTAFETA_GUIDE_GENERATION_STALE_MINUTES',

@@ -79,7 +79,10 @@
                 </span>
             @endif
         </a>
-        <a href="#">Paqueterías</a>
+        <a href="{{ route('crm.shipping.index') }}"
+           class="{{ request()->routeIs('crm.shipping.*') ? 'active' : '' }}">
+            Paqueterías
+        </a>
 
         <a href="{{ route('crm.api-hub.index') }}"
            class="{{ request()->routeIs('crm.api-hub.*') && !request()->routeIs('crm.api-hub.billing.*') ? 'active' : '' }}">

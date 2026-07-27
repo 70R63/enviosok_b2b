@@ -18,6 +18,7 @@ use App\Http\Controllers\CRM\CrmInvoiceRequestController;
 use App\Http\Controllers\CRM\CrmInvoiceDocumentController;
 use App\Http\Controllers\CRM\CrmGuideController;
 use App\Http\Controllers\CRM\CrmDebtController;
+use App\Http\Controllers\CRM\CrmShippingProviderController;
 use App\Models\B2cCotizacion;
 
 /*
@@ -342,6 +343,25 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
         Route::get('/dashboard', function () {
             return view('crm.dashboard');
         })->name('dashboard');
+
+        Route::get(
+            '/paqueterias',
+            [CrmShippingProviderController::class, 'index']
+        )->name('shipping.index');
+
+        Route::post(
+            '/paqueterias/xperta/probar-token',
+            [CrmShippingProviderController::class, 'testToken']
+        )
+            ->middleware('throttle:6,1')
+            ->name('shipping.xperta.test-token');
+
+        Route::post(
+            '/paqueterias/xperta/probar-cotizacion',
+            [CrmShippingProviderController::class, 'testQuote']
+        )
+            ->middleware('throttle:12,1')
+            ->name('shipping.xperta.test-quote');
 
         Route::get('/guias', [CrmGuideController::class, 'index'])
             ->name('guias.index');
