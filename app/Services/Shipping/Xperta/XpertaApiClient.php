@@ -12,12 +12,12 @@ class XpertaApiClient
         string $method,
         string $path,
         array $payload = [],
-        array $headers = []
+        array $headers = [],
+        bool $preserveZeroFraction = false
     ): array {
         $this->assertBaseConfiguration();
 
-        $response = Http::acceptJson()
-            ->asJson()
+        $request = Http::acceptJson()
             ->connectTimeout(
                 max(
                     1,
@@ -33,12 +33,31 @@ class XpertaApiClient
             ->withHeaders($headers)
             ->withOptions([
                 'allow_redirects' => false,
-            ])
-            ->send(
-                strtoupper($method),
-                $this->resolveUrl($path),
-                ['json' => $payload]
+            ]);
+
+        if ($preserveZeroFraction) {
+            $json = json_encode(
+                $payload,
+                JSON_UNESCAPED_SLASHES
+                | JSON_PRESERVE_ZERO_FRACTION
+                | JSON_THROW_ON_ERROR
             );
+
+            $response = $request
+                ->withBody($json, 'application/json')
+                ->send(
+                    strtoupper($method),
+                    $this->resolveUrl($path)
+                );
+        } else {
+            $response = $request
+                ->asJson()
+                ->send(
+                    strtoupper($method),
+                    $this->resolveUrl($path),
+                    ['json' => $payload]
+                );
+        }
 
         return $this->decode($response);
     }

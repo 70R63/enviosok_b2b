@@ -80,7 +80,7 @@ return [
         ),
         'frequency_enabled' => env(
             'XPERTA_FREQUENCY_ENABLED',
-            true
+            false
         ),
         'include_declared_value_in_quote' => env(
             'XPERTA_INCLUDE_DECLARED_VALUE_IN_QUOTE',

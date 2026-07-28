@@ -11,17 +11,12 @@ class XpertaQuoteService
 {
     public function __construct(
         private XpertaApiClient $client,
-        private XpertaTokenService $tokenService,
-        private XpertaFrequencyService $frequencyService
+        private XpertaTokenService $tokenService
     ) {
     }
 
     public function options(B2cCotizacion $cotizacion): array
     {
-        $this->frequencyService->check(
-            (string) $cotizacion->cp_origen,
-            (string) $cotizacion->cp_destino
-        );
 
         $services = config('services.xperta.services', []);
 
@@ -109,7 +104,8 @@ class XpertaQuoteService
                 'cp_d' => substr((string) $cotizacion->cp_destino, 0, 5),
                 'valor_declarado' => round($declaredValue, 2),
             ],
-            $this->providerHeaders()
+            $this->providerHeaders(),
+            true
         );
 
         $data = data_get($response, 'data.0');
@@ -240,7 +236,6 @@ class XpertaQuoteService
     private function providerHeaders(): array
     {
         return [
-            'x-api-key' => (string) config('services.xperta.api_key'),
             'Corporativo' => (string) config(
                 'services.xperta.corporativo'
             ),
