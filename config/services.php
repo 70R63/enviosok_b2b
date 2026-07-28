@@ -69,6 +69,23 @@ return [
             '/api/v1/empresas/{empresa}/ltds/{ltd}/servicios/{service}/guia'
         ),
 
+        'guide_enabled' => env(
+            'XPERTA_GUIDE_ENABLED',
+            false
+        ),
+        'guide_probe_enabled' => env(
+            'XPERTA_GUIDE_PROBE_ENABLED',
+            false
+        ),
+        'send_api_key_on_operations' => env(
+            'XPERTA_SEND_API_KEY_ON_OPERATIONS',
+            true
+        ),
+        'currency' => env(
+            'XPERTA_CURRENCY',
+            'NMP'
+        ),
+
         'frequency_method' => env(
             'XPERTA_FREQUENCY_METHOD',
             'GET'
