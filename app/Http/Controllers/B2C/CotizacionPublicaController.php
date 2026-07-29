@@ -14,6 +14,7 @@ use App\Models\B2cIdentityVerification;
 use App\Models\B2cIncidencia;
 use App\Models\B2cInvoiceRequest;
 use App\Services\ZigoPricingService;
+use App\Services\ZigoCommercialQuoteService;
 use App\Services\ZigoProviderRateService;
 use App\Exceptions\Identity\IdentityVerificationRequiredException;
 use App\Exceptions\Payments\PaymentVerificationException;
@@ -4069,24 +4070,62 @@ public function opcionesB2c(B2cCotizacion $cotizacion)
         return 'sobre';
     }
 
-    private function buildPricedOption(B2cCotizacion $cotizacion, array $option): array
-    {
-        $pricing = app(ZigoPricingService::class)->calculate([
-            'carrier' => strtoupper($option['logistico']),
-            'customer_segment' => $this->customerSegmentForCotizacion($cotizacion),
-            'package_type' => $this->packageTypeForCotizacion($cotizacion),
-            'base_price' => $option['base_price'],
-            'user_id' => auth()->check() ? auth()->id() : null,
-        ]);
+    private function buildPricedOption(
+        B2cCotizacion $cotizacion,
+        array $option
+    ): array {
+        $commercialQuote =
+            app(
+                ZigoCommercialQuoteService::class
+            )->calculate(
+                $cotizacion,
+                $option,
+                [
+                    'customer_segment' =>
+                        $this
+                            ->customerSegmentForCotizacion(
+                                $cotizacion
+                            ),
 
-        return array_merge($option, [
-            'precio_base' => $pricing['base_price'],
-            'precio' => $pricing['final_price'],
-            'pricing' => $pricing,
-        ]);
+                    'package_type' =>
+                        $this
+                            ->packageTypeForCotizacion(
+                                $cotizacion
+                            ),
+
+                    'user_id' =>
+                        auth()->check()
+                            ? auth()->id()
+                            : null,
+                ]
+            );
+
+        $pricing =
+            $commercialQuote['pricing'];
+
+        return array_merge(
+            $option,
+            [
+                'precio_base' =>
+                    $pricing['base_price'],
+
+                'precio' =>
+                    $pricing['final_price'],
+
+                'pricing' =>
+                    $pricing,
+
+                /*
+                 * Se conserva para auditoría,
+                 * simulación y comparador.
+                 */
+                'commercial_quote' =>
+                    $commercialQuote,
+            ]
+        );
     }
 
-    private function getAvailableOptions(B2cCotizacion $cotizacion): array
+private function getAvailableOptions(B2cCotizacion $cotizacion): array
     {
         $baseOptions = app(ZigoProviderRateService::class)
             ->getOptionsForCotizacion($cotizacion);
