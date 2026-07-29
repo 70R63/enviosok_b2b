@@ -692,6 +692,37 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
         Route::post('/pricing/client-rules', [CrmPricingController::class, 'storeClientRule'])
             ->name('pricing.client-rules.store');
 
+
+        Route::post('/pricing/sources', [CrmPricingController::class, 'storeSource'])
+            ->name('pricing.sources.store');
+
+        Route::post('/pricing/sources/{source}/toggle', [CrmPricingController::class, 'toggleSource'])
+            ->name('pricing.sources.toggle');
+
+        Route::post('/pricing/agreements', [CrmPricingController::class, 'storeAgreement'])
+            ->name('pricing.agreements.store');
+
+        Route::post('/pricing/agreements/{agreement}/toggle', [CrmPricingController::class, 'toggleAgreement'])
+            ->name('pricing.agreements.toggle');
+
+        Route::post('/pricing/agreement-services', [CrmPricingController::class, 'storeAgreementService'])
+            ->name('pricing.agreement-services.store');
+
+        Route::post('/pricing/agreement-services/{agreementService}/toggle', [CrmPricingController::class, 'toggleAgreementService'])
+            ->name('pricing.agreement-services.toggle');
+
+        Route::post('/pricing/rate-cards', [CrmPricingController::class, 'storeRateCard'])
+            ->name('pricing.rate-cards.store');
+
+        Route::post('/pricing/rate-cards/{rateCard}/toggle', [CrmPricingController::class, 'toggleRateCard'])
+            ->name('pricing.rate-cards.toggle');
+
+        Route::post('/pricing/rate-cards/{rateCard}/lines', [CrmPricingController::class, 'storeRateLine'])
+            ->name('pricing.rate-lines.store');
+
+        Route::post('/pricing/rate-lines/{rateLine}/toggle', [CrmPricingController::class, 'toggleRateLine'])
+            ->name('pricing.rate-lines.toggle');
+
     });
 
 
