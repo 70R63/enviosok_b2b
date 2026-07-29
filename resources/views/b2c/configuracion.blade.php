@@ -442,7 +442,93 @@
             width: 100%;
         }
     }
-    </style>
+
+        .identity-summary-grid {
+            display: grid;
+            grid-template-columns:
+                repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin: 18px 0;
+        }
+
+        .identity-summary-item {
+            padding: 14px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            background: #f8fafc;
+        }
+
+        .identity-summary-item span {
+            display: block;
+            margin-bottom: 7px;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .identity-document-grid {
+            display: grid;
+            grid-template-columns:
+                repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            margin-top: 18px;
+        }
+
+        .identity-document-card {
+            margin: 0;
+            padding: 16px;
+            border: 1px solid #cbd5e1;
+            border-radius: 13px;
+            background: #f8fafc;
+        }
+
+        .identity-document-card span,
+        .identity-document-card small {
+            display: block;
+        }
+
+        .identity-document-card small {
+            margin: 5px 0 12px;
+            color: #64748b;
+            font-weight: 700;
+        }
+
+        .identity-document-card input {
+            padding: 9px;
+            background: white;
+        }
+
+        .identity-retained-documents,
+        .identity-privacy-note {
+            margin-top: 14px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .identity-retained-documents {
+            background: #ecfeff;
+            color: #155e75;
+        }
+
+        .identity-privacy-note {
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+        .identity-review-comment {
+            margin-top: 10px;
+        }
+
+        @media(max-width:900px) {
+            .identity-summary-grid,
+            .identity-document-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+</style>
 </head>
 <body>
 
@@ -923,7 +1009,11 @@
 
                 <br>
 
-                <section id="identidad" class="card config-section" style="display:none;">
+                <section
+                    id="identidad"
+                    class="card config-section"
+                    style="display:none;"
+                >
                     @php
                         $identityStatus =
                             $identity->status
@@ -942,9 +1032,7 @@
                                 'Rechazada',
                         ];
 
-                        $identityClass = match(
-                            $identityStatus
-                        ) {
+                        $identityClasses = [
                             'PENDIENTE' =>
                                 'status-pending',
                             'CORRECCION_REQUERIDA' =>
@@ -953,9 +1041,51 @@
                                 'status-approved',
                             'RECHAZADA' =>
                                 'status-rejected',
-                            default =>
+                            'SIN_VERIFICAR' =>
                                 'status-unverified',
-                        };
+                        ];
+
+                        $documentLabels = [
+                            'ine_front' =>
+                                'INE frontal',
+                            'ine_back' =>
+                                'INE reverso',
+                            'selfie_with_ine' =>
+                                'Selfie sosteniendo INE',
+                        ];
+
+                        $allIdentityDocuments =
+                            array_keys(
+                                $documentLabels
+                            );
+
+                        $requestedDocuments =
+                            $identityStatus ===
+                                'CORRECCION_REQUERIDA'
+                                ? array_values(
+                                    array_intersect(
+                                        (array) (
+                                            $identity
+                                                ->correction_documents
+                                            ?? []
+                                        ),
+                                        $allIdentityDocuments
+                                    )
+                                )
+                                : $allIdentityDocuments;
+
+                        if (
+                            $identityStatus ===
+                                'CORRECCION_REQUERIDA'
+                            && $requestedDocuments === []
+                        ) {
+                            $requestedDocuments =
+                                $allIdentityDocuments;
+                        }
+
+                        $identityAccess =
+                            $identityAccess
+                            ?? null;
                     @endphp
 
                     <div class="section-title">
@@ -963,25 +1093,30 @@
                     </div>
 
                     <div class="muted">
-                        Sube tu INE y una selfie sosteniendo tu
-                        identificación para la validación de
-                        seguridad logística.
+                        Protegemos la creación de guías mediante
+                        la validación privada de tu identificación.
                     </div>
 
                     @if(session('identity_success'))
-                        <div class="identity-message identity-success">
+                        <div
+                            class="identity-message identity-success"
+                        >
                             {{ session('identity_success') }}
                         </div>
                     @endif
 
                     @if(session('identity_error'))
-                        <div class="identity-message identity-error">
+                        <div
+                            class="identity-message identity-error"
+                        >
                             {{ session('identity_error') }}
                         </div>
                     @endif
 
                     @if($errors->identity->any())
-                        <div class="identity-message identity-error">
+                        <div
+                            class="identity-message identity-error"
+                        >
                             <strong>
                                 Revisa los documentos seleccionados:
                             </strong>
@@ -997,17 +1132,89 @@
                         </div>
                     @endif
 
-                    <p>
-                        Estado:
-                        <span class="status {{ $identityClass }}">
-                            {{
-                                $identityLabels[
-                                    $identityStatus
-                                ]
-                                ?? $identityStatus
-                            }}
-                        </span>
-                    </p>
+                    <div class="identity-summary-grid">
+                        <div class="identity-summary-item">
+                            <span>Estado</span>
+
+                            <strong
+                                class="status {{
+                                    $identityClasses[
+                                        $identityStatus
+                                    ]
+                                    ?? 'status-unverified'
+                                }}"
+                            >
+                                {{
+                                    $identityLabels[
+                                        $identityStatus
+                                    ]
+                                    ?? $identityStatus
+                                }}
+                            </strong>
+                        </div>
+
+                        @if($identityAccess)
+                            <div class="identity-summary-item">
+                                <span>Guías generadas</span>
+
+                                <strong>
+                                    {{
+                                        $identityAccess[
+                                            'generated_guides'
+                                        ]
+                                    }}
+
+                                    @if(
+                                        !$identityAccess[
+                                            'approved'
+                                        ]
+                                    )
+                                        de
+                                        {{
+                                            $identityAccess[
+                                                'limit'
+                                            ]
+                                        }}
+                                    @else
+                                        · Sin límite
+                                    @endif
+                                </strong>
+                            </div>
+
+                            <div class="identity-summary-item">
+                                <span>Pagos o guías en proceso</span>
+
+                                <strong>
+                                    {{
+                                        $identityAccess[
+                                            'reserved_payments'
+                                        ]
+                                    }}
+                                </strong>
+                            </div>
+                        @endif
+                    </div>
+
+                    @if(
+                        $identityAccess
+                        && $identityAccess['blocked']
+                    )
+                        <div
+                            class="identity-message identity-warning"
+                        >
+                            <strong>
+                                No puedes iniciar un pago nuevo.
+                            </strong>
+
+                            <div>
+                                {{
+                                    $identityAccess[
+                                        'message'
+                                    ]
+                                }}
+                            </div>
+                        </div>
+                    @endif
 
                     @if(
                         $identityStatus === 'SIN_VERIFICAR'
@@ -1016,16 +1223,33 @@
                     )
                         @if(
                             $identityStatus ===
-                            'CORRECCION_REQUERIDA'
+                                'CORRECCION_REQUERIDA'
                         )
-                            <div class="identity-message identity-warning">
+                            <div
+                                class="identity-message identity-warning"
+                            >
                                 <strong>
-                                    Necesitamos que actualices tus
-                                    documentos.
+                                    CRM solicitó corregir:
                                 </strong>
 
+                                <ul>
+                                    @foreach(
+                                        $requestedDocuments
+                                        as $document
+                                    )
+                                        <li>
+                                            {{
+                                                $documentLabels[
+                                                    $document
+                                                ]
+                                            }}
+                                        </li>
+                                    @endforeach
+                                </ul>
+
                                 @if($identity->comments)
-                                    <div>
+                                    <div class="identity-review-comment">
+                                        <strong>Motivo:</strong>
                                         {{ $identity->comments }}
                                     </div>
                                 @endif
@@ -1044,43 +1268,67 @@
                         >
                             @csrf
 
-                            <label>INE frontal</label>
-                            <input
-                                type="file"
-                                name="ine_front"
-                                accept="image/*"
-                                required
-                            >
+                            <div class="identity-document-grid">
+                                @foreach(
+                                    $requestedDocuments
+                                    as $document
+                                )
+                                    <label
+                                        class="identity-document-card"
+                                        for="{{ $document }}"
+                                    >
+                                        <span>
+                                            {{
+                                                $documentLabels[
+                                                    $document
+                                                ]
+                                            }}
+                                        </span>
 
-                            <label>INE reverso</label>
-                            <input
-                                type="file"
-                                name="ine_back"
-                                accept="image/*"
-                                required
-                            >
+                                        <small>
+                                            JPG, PNG o WEBP · máximo 5 MB
+                                        </small>
 
-                            <label>
-                                Selfie sosteniendo INE
-                            </label>
-                            <input
-                                type="file"
-                                name="selfie_with_ine"
-                                accept="image/*"
-                                required
-                            >
+                                        <input
+                                            id="{{ $document }}"
+                                            type="file"
+                                            name="{{ $document }}"
+                                            accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                                            required
+                                        >
+                                    </label>
+                                @endforeach
+                            </div>
+
+                            @if(
+                                $identityStatus ===
+                                    'CORRECCION_REQUERIDA'
+                            )
+                                <div class="identity-retained-documents">
+                                    Los documentos no solicitados se
+                                    conservarán sin cambios.
+                                </div>
+                            @endif
+
+                            <div class="identity-privacy-note">
+                                Los archivos se almacenan de forma
+                                privada y solamente pueden consultarlos
+                                usuarios autorizados del CRM.
+                            </div>
 
                             <button class="btn" type="submit">
                                 {{
                                     $identityStatus ===
                                         'CORRECCION_REQUERIDA'
-                                        ? 'Enviar corrección'
+                                        ? 'Enviar documentos corregidos'
                                         : 'Enviar a revisión'
                                 }}
                             </button>
                         </form>
                     @elseif($identityStatus === 'PENDIENTE')
-                        <div class="identity-message identity-pending">
+                        <div
+                            class="identity-message identity-pending"
+                        >
                             <strong>
                                 Tus documentos están en revisión.
                             </strong>
@@ -1091,29 +1339,35 @@
                             </div>
                         </div>
                     @elseif($identityStatus === 'APROBADA')
-                        <div class="identity-message identity-success">
+                        <div
+                            class="identity-message identity-success"
+                        >
                             <strong>
                                 Tu identidad está verificada.
                             </strong>
 
                             <div>
-                                No necesitas realizar ninguna acción
-                                adicional.
+                                Ya puedes crear guías sin la restricción
+                                de identidad.
                             </div>
                         </div>
                     @elseif($identityStatus === 'RECHAZADA')
-                        <div class="identity-message identity-error">
+                        <div
+                            class="identity-message identity-error"
+                        >
                             <strong>
                                 La identidad no pudo ser validada.
                             </strong>
 
                             @if($identity->comments)
-                                <div>{{ $identity->comments }}</div>
+                                <div>
+                                    {{ $identity->comments }}
+                                </div>
                             @endif
 
                             <div>
-                                Contacta a soporte para revisar tu
-                                expediente.
+                                Contacta a soporte para revisar
+                                tu expediente.
                             </div>
                         </div>
                     @endif

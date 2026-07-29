@@ -3131,6 +3131,12 @@ public function configuracionB2c()
             ]
         );
 
+
+    $identityAccess =
+        app(IdentityGuideAccessService::class)
+            ->evaluateForPayment(
+                $userId
+            );
     $fiscalProfile =
         B2cFiscalProfile::where(
             'user_id',
@@ -3156,6 +3162,7 @@ public function configuracionB2c()
         'b2c.configuracion',
         compact(
             'identity',
+            'identityAccess',
             'fiscalProfile',
             'regimenesFiscales',
             'usosCfdi',
@@ -3366,27 +3373,6 @@ public function guardarDatosFiscalesB2c(
 
 public function guardarIdentidadB2c(Request $request)
 {
-    $request->validate([
-        'ine_front' => [
-            'required',
-            'image',
-            'mimes:jpg,jpeg,png,webp',
-            'max:5120',
-        ],
-        'ine_back' => [
-            'required',
-            'image',
-            'mimes:jpg,jpeg,png,webp',
-            'max:5120',
-        ],
-        'selfie_with_ine' => [
-            'required',
-            'image',
-            'mimes:jpg,jpeg,png,webp',
-            'max:5120',
-        ],
-    ]);
-
     $userId = (int) auth()->id();
 
     $identity =
@@ -3400,70 +3386,253 @@ public function guardarIdentidadB2c(Request $request)
             ]
         );
 
+    $allFields = [
+        'ine_front',
+        'ine_back',
+        'selfie_with_ine',
+    ];
+
+    $statusMessages = [
+        B2cIdentityVerification::STATUS_PENDING =>
+            'Tus documentos ya están en revisión.',
+        B2cIdentityVerification::STATUS_APPROVED =>
+            'Tu identidad ya está aprobada.',
+        B2cIdentityVerification::STATUS_REJECTED =>
+            'Tu expediente fue rechazado. '
+            . 'Contacta a soporte para revisarlo.',
+    ];
+
     if (
-        $identity->status
-        === B2cIdentityVerification::STATUS_APPROVED
+        array_key_exists(
+            $identity->status,
+            $statusMessages
+        )
     ) {
         return redirect()
-            ->route('b2c.configuracion')
+            ->to(
+                route('b2c.configuracion')
+                . '#identidad'
+            )
             ->with(
-                'error',
-                'Tu identidad ya está aprobada. '
-                . 'No es necesario reemplazar los documentos.'
+                'identity_error',
+                $statusMessages[$identity->status]
             );
     }
+
+    $isCorrection =
+        $identity->status
+        === B2cIdentityVerification::STATUS_CORRECTION;
+
+    $requestedFields = $isCorrection
+        ? array_values(
+            array_intersect(
+                (array) $identity->correction_documents,
+                $allFields
+            )
+        )
+        : $allFields;
+
+    /*
+     * Una corrección antigua sin detalle documental
+     * se trata como corrección completa.
+     */
+    if (
+        $isCorrection
+        && $requestedFields === []
+    ) {
+        $requestedFields = $allFields;
+    }
+
+    $rules = [];
+
+    foreach ($allFields as $field) {
+        $rules[$field] = in_array(
+            $field,
+            $requestedFields,
+            true
+        )
+            ? [
+                'required',
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'max:5120',
+            ]
+            : [
+                'prohibited',
+            ];
+    }
+
+    $request->validateWithBag(
+        'identity',
+        $rules
+    );
 
     $directory =
         'b2c/identity/'
         . $userId
         . '/'
-        . now()->format('Ymd_His');
+        . now()->format('Ymd_His_u');
 
-    $newPaths = [];
+    $oldDisk =
+        in_array(
+            $identity->document_disk,
+            ['local', 'public'],
+            true
+        )
+            ? $identity->document_disk
+            : 'public';
+
+    $updatedPaths = [
+        'ine_front' =>
+            $identity->ine_front,
+        'ine_back' =>
+            $identity->ine_back,
+        'selfie_with_ine' =>
+            $identity->selfie_with_ine,
+    ];
+
+    $createdLocalPaths = [];
+    $oldFilesToDelete = [];
 
     try {
-        foreach (
-            [
-                'ine_front',
-                'ine_back',
-                'selfie_with_ine',
-            ] as $field
-        ) {
-            $newPaths[$field] =
+        foreach ($requestedFields as $field) {
+            $newPath =
                 $request->file($field)
                     ->store($directory, 'local');
+
+            $createdLocalPaths[] =
+                $newPath;
+
+            if (filled($updatedPaths[$field])) {
+                $oldFilesToDelete[] = [
+                    'disk' => $oldDisk,
+                    'path' =>
+                        $updatedPaths[$field],
+                ];
+            }
+
+            $updatedPaths[$field] =
+                $newPath;
         }
 
-        $oldPaths = [
-            $identity->ine_front,
-            $identity->ine_back,
-            $identity->selfie_with_ine,
-        ];
+        /*
+         * El expediente utiliza un solo disco. Si los
+         * documentos anteriores todavía estaban en
+         * public, conservarlos implica moverlos a local.
+         */
+        if ($oldDisk !== 'local') {
+            foreach ($allFields as $field) {
+                if (
+                    in_array(
+                        $field,
+                        $requestedFields,
+                        true
+                    )
+                    || blank($updatedPaths[$field])
+                ) {
+                    continue;
+                }
 
-        $oldDisk =
-            in_array(
-                $identity->document_disk,
-                ['local', 'public'],
-                true
-            )
-                ? $identity->document_disk
-                : 'public';
+                if (
+                    !\Illuminate\Support\Facades\Storage::disk(
+                        $oldDisk
+                    )->exists(
+                        $updatedPaths[$field]
+                    )
+                ) {
+                    throw \Illuminate\Validation\ValidationException
+                        ::withMessages([
+                            $field =>
+                                'El documento anterior no está disponible. '
+                                . 'Vuelve a cargarlo para continuar.',
+                        ]);
+                }
+
+                $extension = pathinfo(
+                    $updatedPaths[$field],
+                    PATHINFO_EXTENSION
+                );
+
+                $preservedPath =
+                    $directory
+                    . '/conservado_'
+                    . $field
+                    . (
+                        $extension !== ''
+                            ? '.' . $extension
+                            : ''
+                    );
+
+                \Illuminate\Support\Facades\Storage::disk(
+                    'local'
+                )->put(
+                    $preservedPath,
+                    \Illuminate\Support\Facades\Storage::disk(
+                        $oldDisk
+                    )->get(
+                        $updatedPaths[$field]
+                    )
+                );
+
+                $createdLocalPaths[] =
+                    $preservedPath;
+
+                $oldFilesToDelete[] = [
+                    'disk' => $oldDisk,
+                    'path' =>
+                        $updatedPaths[$field],
+                ];
+
+                $updatedPaths[$field] =
+                    $preservedPath;
+            }
+        }
 
         DB::transaction(
             function () use (
                 $identity,
                 $userId,
-                $newPaths
+                $updatedPaths,
+                $requestedFields,
+                $allFields,
+                $isCorrection
             ) {
-                $fromStatus = $identity->status;
+                $lockedIdentity =
+                    B2cIdentityVerification::query()
+                        ->whereKey($identity->id)
+                        ->lockForUpdate()
+                        ->firstOrFail();
 
-                $identity->update([
+                $allowedStatuses = [
+                    B2cIdentityVerification::STATUS_UNVERIFIED,
+                    B2cIdentityVerification::STATUS_CORRECTION,
+                ];
+
+                if (
+                    !in_array(
+                        $lockedIdentity->status,
+                        $allowedStatuses,
+                        true
+                    )
+                ) {
+                    throw \Illuminate\Validation\ValidationException
+                        ::withMessages([
+                            'identity' =>
+                                'El estado del expediente cambió. '
+                                . 'Actualiza la página antes de continuar.',
+                        ]);
+                }
+
+                $fromStatus =
+                    $lockedIdentity->status;
+
+                $lockedIdentity->update([
                     'ine_front' =>
-                        $newPaths['ine_front'],
+                        $updatedPaths['ine_front'],
                     'ine_back' =>
-                        $newPaths['ine_back'],
+                        $updatedPaths['ine_back'],
                     'selfie_with_ine' =>
-                        $newPaths['selfie_with_ine'],
+                        $updatedPaths['selfie_with_ine'],
                     'document_disk' => 'local',
                     'status' =>
                         B2cIdentityVerification::STATUS_PENDING,
@@ -3476,39 +3645,53 @@ public function guardarIdentidadB2c(Request $request)
 
                 \App\Models\B2cIdentityVerificationEvent::create([
                     'identity_verification_id' =>
-                        $identity->id,
+                        $lockedIdentity->id,
                     'user_id' => $userId,
-                    'event_type' => 'SUBMITTED',
+                    'event_type' =>
+                        $isCorrection
+                            ? 'RESUBMITTED'
+                            : 'SUBMITTED',
                     'from_status' => $fromStatus,
                     'to_status' =>
                         B2cIdentityVerification::STATUS_PENDING,
                     'comments' => null,
                     'metadata' => [
-                        'documents' => [
-                            'ine_front',
-                            'ine_back',
-                            'selfie_with_ine',
-                        ],
+                        'documents' =>
+                            $requestedFields,
+                        'retained_documents' =>
+                            array_values(
+                                array_diff(
+                                    $allFields,
+                                    $requestedFields
+                                )
+                            ),
                     ],
                     'performed_by' => $userId,
                 ]);
             }
         );
 
-        foreach ($oldPaths as $oldPath) {
+        foreach (
+            $oldFilesToDelete
+            as $oldFile
+        ) {
             if (
-                filled($oldPath)
-                && $oldPath !== $newPaths['ine_front']
-                && $oldPath !== $newPaths['ine_back']
-                && $oldPath !== $newPaths['selfie_with_ine']
+                filled($oldFile['path'])
+                && !in_array(
+                    $oldFile['path'],
+                    $updatedPaths,
+                    true
+                )
             ) {
                 \Illuminate\Support\Facades\Storage::disk(
-                    $oldDisk
-                )->delete($oldPath);
+                    $oldFile['disk']
+                )->delete(
+                    $oldFile['path']
+                );
             }
         }
     } catch (\Throwable $exception) {
-        foreach ($newPaths as $newPath) {
+        foreach ($createdLocalPaths as $newPath) {
             \Illuminate\Support\Facades\Storage::disk(
                 'local'
             )->delete($newPath);
@@ -3524,8 +3707,11 @@ public function guardarIdentidadB2c(Request $request)
         )
         ->with(
             'identity_success',
-            'Documentos enviados correctamente. '
-            . 'Tu identidad quedó pendiente de revisión.'
+            $isCorrection
+                ? 'Corrección enviada correctamente. '
+                    . 'Tu expediente volvió a revisión.'
+                : 'Documentos enviados correctamente. '
+                    . 'Tu identidad quedó pendiente de revisión.'
         );
 }
 
