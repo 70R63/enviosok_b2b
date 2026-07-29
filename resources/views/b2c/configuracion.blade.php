@@ -974,6 +974,12 @@
                         </div>
                     @endif
 
+                    @if(session('identity_error'))
+                        <div class="identity-message identity-error">
+                            {{ session('identity_error') }}
+                        </div>
+                    @endif
+
                     @if($errors->identity->any())
                         <div class="identity-message identity-error">
                             <strong>

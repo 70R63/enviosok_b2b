@@ -98,6 +98,55 @@
             font-weight: 800;
         }
 
+
+        .identity-access-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            margin-bottom: 18px;
+            padding: 17px 18px;
+            border: 1px solid transparent;
+            border-radius: 14px;
+        }
+
+        .identity-access-card strong {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 16px;
+        }
+
+        .identity-access-card p {
+            margin: 0 0 5px;
+            line-height: 1.5;
+        }
+
+        .identity-access-card small {
+            font-weight: 800;
+        }
+
+        .identity-access-notice {
+            border-color: #fde68a;
+            background: #fffbeb;
+            color: #92400e;
+        }
+
+        .identity-access-blocked {
+            border-color: #fecaca;
+            background: #fef2f2;
+            color: #991b1b;
+        }
+
+        .identity-access-link {
+            flex: 0 0 auto;
+            padding: 11px 14px;
+            border-radius: 10px;
+            background: #4169ec;
+            color: white;
+            text-decoration: none;
+            font-weight: 900;
+        }
+
         .main-grid {
             display: grid;
             grid-template-columns:
@@ -510,6 +559,14 @@
             </div>
         @endif
 
+        @include(
+            'b2c.partials.identity-guide-access',
+            [
+                'identityAccess' =>
+                    $identityAccess,
+            ]
+        )
+
         <div class="main-grid">
             <section class="information-grid">
                 <article class="card">
@@ -704,13 +761,26 @@
                         Editar paquete
                     </a>
 
-                    <button
-                        type="button"
-                        class="btn btn-primary"
-                        id="continuar_pago"
-                    >
-                        Continuar a pago
-                    </button>
+
+                    @if($identityAccess['allowed'])
+                        <button
+                            type="button"
+                            class="btn btn-primary"
+                            id="continuar_pago"
+                        >
+                            Continuar a pago
+                        </button>
+                    @else
+                        <a
+                            class="btn btn-secondary"
+                            href="{{
+                                route('b2c.configuracion')
+                            }}#identidad"
+                        >
+                            Completar mi identidad
+                        </a>
+                    @endif
+
                 </div>
             </aside>
         </div>
@@ -795,6 +865,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const abrir = document.getElementById('continuar_pago');
     const cerrar = document.getElementById('cerrar_modal');
 
+
+
+    if (!abrir || !cerrar || !modal) {
+        return;
+    }
     abrir.addEventListener('click', function () {
         modal.classList.add('show');
     });
