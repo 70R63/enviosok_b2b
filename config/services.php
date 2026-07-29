@@ -90,7 +90,7 @@ return [
             'XPERTA_FREQUENCY_METHOD',
             'GET'
         ),
-        'quote_method' => env('XPERTA_QUOTE_METHOD', 'GET'),
+        'quote_method' => env('XPERTA_QUOTE_METHOD', 'POST'),
         'frequency_empresa_id' => env(
             'XPERTA_FREQUENCY_EMPRESA_ID',
             env('XPERTA_EMPRESA')
