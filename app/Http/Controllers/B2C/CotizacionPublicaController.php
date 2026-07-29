@@ -3069,28 +3069,167 @@ public function guardarDatosFiscalesB2c(
 
 public function guardarIdentidadB2c(Request $request)
 {
-    $data = $request->validate([
-        'ine_front' => ['required', 'image', 'max:5120'],
-        'ine_back' => ['required', 'image', 'max:5120'],
-        'selfie_with_ine' => ['required', 'image', 'max:5120'],
+    $request->validate([
+        'ine_front' => [
+            'required',
+            'image',
+            'mimes:jpg,jpeg,png,webp',
+            'max:5120',
+        ],
+        'ine_back' => [
+            'required',
+            'image',
+            'mimes:jpg,jpeg,png,webp',
+            'max:5120',
+        ],
+        'selfie_with_ine' => [
+            'required',
+            'image',
+            'mimes:jpg,jpeg,png,webp',
+            'max:5120',
+        ],
     ]);
 
-    $identity = B2cIdentityVerification::firstOrCreate(
-        ['user_id' => auth()->id()],
-        ['status' => 'SIN_VERIFICAR']
-    );
+    $userId = (int) auth()->id();
 
-    $identity->update([
-        'ine_front' => $request->file('ine_front')->store('b2c/identity', 'public'),
-        'ine_back' => $request->file('ine_back')->store('b2c/identity', 'public'),
-        'selfie_with_ine' => $request->file('selfie_with_ine')->store('b2c/identity', 'public'),
-        'status' => 'EN_REVISION',
-        'comments' => null,
-    ]);
+    $identity =
+        B2cIdentityVerification::firstOrCreate(
+            [
+                'user_id' => $userId,
+            ],
+            [
+                'status' =>
+                    B2cIdentityVerification::STATUS_UNVERIFIED,
+            ]
+        );
+
+    if (
+        $identity->status
+        === B2cIdentityVerification::STATUS_APPROVED
+    ) {
+        return redirect()
+            ->route('b2c.configuracion')
+            ->with(
+                'error',
+                'Tu identidad ya está aprobada. '
+                . 'No es necesario reemplazar los documentos.'
+            );
+    }
+
+    $directory =
+        'b2c/identity/'
+        . $userId
+        . '/'
+        . now()->format('Ymd_His');
+
+    $newPaths = [];
+
+    try {
+        foreach (
+            [
+                'ine_front',
+                'ine_back',
+                'selfie_with_ine',
+            ] as $field
+        ) {
+            $newPaths[$field] =
+                $request->file($field)
+                    ->store($directory, 'local');
+        }
+
+        $oldPaths = [
+            $identity->ine_front,
+            $identity->ine_back,
+            $identity->selfie_with_ine,
+        ];
+
+        $oldDisk =
+            in_array(
+                $identity->document_disk,
+                ['local', 'public'],
+                true
+            )
+                ? $identity->document_disk
+                : 'public';
+
+        DB::transaction(
+            function () use (
+                $identity,
+                $userId,
+                $newPaths
+            ) {
+                $fromStatus = $identity->status;
+
+                $identity->update([
+                    'ine_front' =>
+                        $newPaths['ine_front'],
+                    'ine_back' =>
+                        $newPaths['ine_back'],
+                    'selfie_with_ine' =>
+                        $newPaths['selfie_with_ine'],
+                    'document_disk' => 'local',
+                    'status' =>
+                        B2cIdentityVerification::STATUS_PENDING,
+                    'submitted_at' => now(),
+                    'comments' => null,
+                    'correction_documents' => null,
+                    'reviewed_at' => null,
+                    'reviewed_by' => null,
+                ]);
+
+                \App\Models\B2cIdentityVerificationEvent::create([
+                    'identity_verification_id' =>
+                        $identity->id,
+                    'user_id' => $userId,
+                    'event_type' => 'SUBMITTED',
+                    'from_status' => $fromStatus,
+                    'to_status' =>
+                        B2cIdentityVerification::STATUS_PENDING,
+                    'comments' => null,
+                    'metadata' => [
+                        'documents' => [
+                            'ine_front',
+                            'ine_back',
+                            'selfie_with_ine',
+                        ],
+                    ],
+                    'performed_by' => $userId,
+                ]);
+            }
+        );
+
+        foreach ($oldPaths as $oldPath) {
+            if (
+                filled($oldPath)
+                && $oldPath !== $newPaths['ine_front']
+                && $oldPath !== $newPaths['ine_back']
+                && $oldPath !== $newPaths['selfie_with_ine']
+            ) {
+                \Illuminate\Support\Facades\Storage::disk(
+                    $oldDisk
+                )->delete($oldPath);
+            }
+        }
+    } catch (\Throwable $exception) {
+        foreach ($newPaths as $newPath) {
+            \Illuminate\Support\Facades\Storage::disk(
+                'local'
+            )->delete($newPath);
+        }
+
+        throw $exception;
+    }
 
     return redirect()
-        ->route('b2c.configuracion')
-        ->with('success', 'Documentos enviados correctamente. Tu identidad quedó en revisión.');
+        ->to(
+            route('b2c.configuracion')
+            . '#identidad'
+        )
+        ->with(
+            'identity_success',
+            'Documentos enviados correctamente. '
+            . 'Tu identidad quedó pendiente de revisión.'
+        );
 }
 
 public function incidenciasB2c()

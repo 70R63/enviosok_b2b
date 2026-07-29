@@ -19,6 +19,7 @@ use App\Http\Controllers\CRM\CrmInvoiceDocumentController;
 use App\Http\Controllers\CRM\CrmGuideController;
 use App\Http\Controllers\CRM\CrmDebtController;
 use App\Http\Controllers\CRM\CrmShippingProviderController;
+use App\Http\Controllers\CRM\CrmIdentityVerificationController;
 use App\Models\B2cCotizacion;
 
 /*
@@ -362,6 +363,56 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
         )
             ->middleware('throttle:12,1')
             ->name('shipping.xperta.test-quote');
+
+        Route::get(
+            '/verificaciones',
+            [CrmIdentityVerificationController::class, 'index']
+        )->name('identity.index');
+
+        Route::get(
+            '/verificaciones/{verification}',
+            [CrmIdentityVerificationController::class, 'show']
+        )
+            ->whereNumber('verification')
+            ->name('identity.show');
+
+        Route::get(
+            '/verificaciones/{verification}/documentos/{document}',
+            [CrmIdentityVerificationController::class, 'document']
+        )
+            ->whereNumber('verification')
+            ->where(
+                'document',
+                'ine-front|ine-back|selfie'
+            )
+            ->name('identity.document');
+
+        Route::post(
+            '/verificaciones/{verification}/aprobar',
+            [CrmIdentityVerificationController::class, 'approve']
+        )
+            ->whereNumber('verification')
+            ->middleware('throttle:12,1')
+            ->name('identity.approve');
+
+        Route::post(
+            '/verificaciones/{verification}/correccion',
+            [
+                CrmIdentityVerificationController::class,
+                'requestCorrection',
+            ]
+        )
+            ->whereNumber('verification')
+            ->middleware('throttle:12,1')
+            ->name('identity.correction');
+
+        Route::post(
+            '/verificaciones/{verification}/rechazar',
+            [CrmIdentityVerificationController::class, 'reject']
+        )
+            ->whereNumber('verification')
+            ->middleware('throttle:12,1')
+            ->name('identity.reject');
 
         Route::get('/guias', [CrmGuideController::class, 'index'])
             ->name('guias.index');

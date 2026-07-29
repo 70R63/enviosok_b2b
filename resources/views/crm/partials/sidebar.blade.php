@@ -8,6 +8,19 @@
                     ->orWhereIn('lead_status', ['nuevo', 'sin_revisar']);
             })
             ->count();
+
+        $pendingIdentityCount =
+            \Illuminate\Support\Facades\Schema::hasTable(
+                'b2c_identity_verifications'
+            )
+                ? \App\Models\B2cIdentityVerification::whereIn(
+                    'status',
+                    [
+                        'PENDIENTE',
+                        'EN_REVISION',
+                    ]
+                )->count()
+                : 0;
     @endphp
 
     <div class="menu">
@@ -22,6 +35,18 @@
         </a>
 
         <a href="#">Usuarios B2C</a>
+
+        <a href="{{ route('crm.identity.index') }}"
+           class="{{ request()->routeIs('crm.identity.*') ? 'active' : '' }}">
+            Verificaciones
+
+            @if($pendingIdentityCount > 0)
+                <span style="float:right;background:#f59e0b;color:#111827;border-radius:999px;padding:2px 8px;font-size:12px;">
+                    {{ $pendingIdentityCount }}
+                </span>
+            @endif
+        </a>
+
         <a href="#">Usuarios Negocios</a>
         <a href="#">Usuarios Soporte</a>
         <a href="#">Empresas</a>

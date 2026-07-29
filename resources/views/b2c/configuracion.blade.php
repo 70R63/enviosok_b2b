@@ -45,6 +45,69 @@
         .btn{margin-top:20px;background:#f97316;color:white;border:none;border-radius:12px;padding:14px 22px;font-weight:900;cursor:pointer}
         .status{display:inline-block;padding:8px 12px;border-radius:999px;font-weight:900;font-size:13px;background:#fef3c7;color:#92400e}
         .success{background:#dcfce7;color:#166534;padding:14px;border-radius:12px;font-weight:800;margin-bottom:20px}
+        .status-unverified{
+            background:#e2e8f0;
+            color:#334155;
+        }
+
+        .status-pending{
+            background:#fef3c7;
+            color:#92400e;
+        }
+
+        .status-correction{
+            background:#ffedd5;
+            color:#9a3412;
+        }
+
+        .status-approved{
+            background:#dcfce7;
+            color:#166534;
+        }
+
+        .status-rejected{
+            background:#fee2e2;
+            color:#991b1b;
+        }
+
+        .identity-message{
+            margin:16px 0;
+            padding:14px 16px;
+            border-radius:12px;
+            font-size:14px;
+            line-height:1.5;
+        }
+
+        .identity-message strong{
+            display:block;
+            margin-bottom:4px;
+        }
+
+        .identity-message ul{
+            margin:8px 0 0;
+            padding-left:20px;
+        }
+
+        .identity-success{
+            background:#dcfce7;
+            color:#166534;
+        }
+
+        .identity-pending{
+            background:#fef3c7;
+            color:#92400e;
+        }
+
+        .identity-warning{
+            background:#ffedd5;
+            color:#9a3412;
+        }
+
+        .identity-error{
+            background:#fee2e2;
+            color:#991b1b;
+        }
+
 
         .fiscal-header{
         display:flex;
@@ -861,30 +924,193 @@
                 <br>
 
                 <section id="identidad" class="card config-section" style="display:none;">
-                    <div class="section-title">Mi identidad</div>
-                    <div class="muted">
-                        Sube tu INE y una selfie sosteniendo tu INE para validación de seguridad logística.
+                    @php
+                        $identityStatus =
+                            $identity->status
+                            ?? 'SIN_VERIFICAR';
+
+                        $identityLabels = [
+                            'SIN_VERIFICAR' =>
+                                'Sin verificar',
+                            'PENDIENTE' =>
+                                'Pendiente de revisión',
+                            'CORRECCION_REQUERIDA' =>
+                                'Corrección requerida',
+                            'APROBADA' =>
+                                'Aprobada',
+                            'RECHAZADA' =>
+                                'Rechazada',
+                        ];
+
+                        $identityClass = match(
+                            $identityStatus
+                        ) {
+                            'PENDIENTE' =>
+                                'status-pending',
+                            'CORRECCION_REQUERIDA' =>
+                                'status-correction',
+                            'APROBADA' =>
+                                'status-approved',
+                            'RECHAZADA' =>
+                                'status-rejected',
+                            default =>
+                                'status-unverified',
+                        };
+                    @endphp
+
+                    <div class="section-title">
+                        Mi identidad
                     </div>
+
+                    <div class="muted">
+                        Sube tu INE y una selfie sosteniendo tu
+                        identificación para la validación de
+                        seguridad logística.
+                    </div>
+
+                    @if(session('identity_success'))
+                        <div class="identity-message identity-success">
+                            {{ session('identity_success') }}
+                        </div>
+                    @endif
+
+                    @if($errors->identity->any())
+                        <div class="identity-message identity-error">
+                            <strong>
+                                Revisa los documentos seleccionados:
+                            </strong>
+
+                            <ul>
+                                @foreach(
+                                    $errors->identity->all()
+                                    as $error
+                                )
+                                    <li>{{ $error }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
 
                     <p>
                         Estado:
-                        <span class="status">{{ $identity->status ?? 'SIN_VERIFICAR' }}</span>
+                        <span class="status {{ $identityClass }}">
+                            {{
+                                $identityLabels[
+                                    $identityStatus
+                                ]
+                                ?? $identityStatus
+                            }}
+                        </span>
                     </p>
 
-                    <form method="POST" action="{{ route('b2c.configuracion.identidad.guardar') }}" enctype="multipart/form-data">
-                        @csrf
+                    @if(
+                        $identityStatus === 'SIN_VERIFICAR'
+                        || $identityStatus ===
+                            'CORRECCION_REQUERIDA'
+                    )
+                        @if(
+                            $identityStatus ===
+                            'CORRECCION_REQUERIDA'
+                        )
+                            <div class="identity-message identity-warning">
+                                <strong>
+                                    Necesitamos que actualices tus
+                                    documentos.
+                                </strong>
 
-                        <label>INE frontal</label>
-                        <input type="file" name="ine_front" accept="image/*" required>
+                                @if($identity->comments)
+                                    <div>
+                                        {{ $identity->comments }}
+                                    </div>
+                                @endif
+                            </div>
+                        @endif
 
-                        <label>INE reverso</label>
-                        <input type="file" name="ine_back" accept="image/*" required>
+                        <form
+                            method="POST"
+                            action="{{
+                                route(
+                                    'b2c.configuracion'
+                                    . '.identidad.guardar'
+                                )
+                            }}"
+                            enctype="multipart/form-data"
+                        >
+                            @csrf
 
-                        <label>Selfie sosteniendo INE</label>
-                        <input type="file" name="selfie_with_ine" accept="image/*" required>
+                            <label>INE frontal</label>
+                            <input
+                                type="file"
+                                name="ine_front"
+                                accept="image/*"
+                                required
+                            >
 
-                        <button class="btn" type="submit">Enviar a revisión</button>
-                    </form>
+                            <label>INE reverso</label>
+                            <input
+                                type="file"
+                                name="ine_back"
+                                accept="image/*"
+                                required
+                            >
+
+                            <label>
+                                Selfie sosteniendo INE
+                            </label>
+                            <input
+                                type="file"
+                                name="selfie_with_ine"
+                                accept="image/*"
+                                required
+                            >
+
+                            <button class="btn" type="submit">
+                                {{
+                                    $identityStatus ===
+                                        'CORRECCION_REQUERIDA'
+                                        ? 'Enviar corrección'
+                                        : 'Enviar a revisión'
+                                }}
+                            </button>
+                        </form>
+                    @elseif($identityStatus === 'PENDIENTE')
+                        <div class="identity-message identity-pending">
+                            <strong>
+                                Tus documentos están en revisión.
+                            </strong>
+
+                            <div>
+                                No necesitas enviarlos nuevamente.
+                                El resultado aparecerá en esta sección.
+                            </div>
+                        </div>
+                    @elseif($identityStatus === 'APROBADA')
+                        <div class="identity-message identity-success">
+                            <strong>
+                                Tu identidad está verificada.
+                            </strong>
+
+                            <div>
+                                No necesitas realizar ninguna acción
+                                adicional.
+                            </div>
+                        </div>
+                    @elseif($identityStatus === 'RECHAZADA')
+                        <div class="identity-message identity-error">
+                            <strong>
+                                La identidad no pudo ser validada.
+                            </strong>
+
+                            @if($identity->comments)
+                                <div>{{ $identity->comments }}</div>
+                            @endif
+
+                            <div>
+                                Contacta a soporte para revisar tu
+                                expediente.
+                            </div>
+                        </div>
+                    @endif
                 </section>
             </div>
         </div>
@@ -892,18 +1118,61 @@
 </div>
 
 <script>
-    document.querySelectorAll('.tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            const target = tab.dataset.tab;
+    function activateConfigTab(target) {
+        const validTargets = [
+            'facturacion',
+            'seguridad',
+            'identidad',
+        ];
 
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
+        const resolvedTarget =
+            validTargets.includes(target)
+                ? target
+                : 'facturacion';
 
-            document.querySelectorAll('.config-section').forEach(section => {
-                section.style.display = section.id === target ? 'block' : 'none';
+        document
+            .querySelectorAll('.tab')
+            .forEach(function (tab) {
+                tab.classList.toggle(
+                    'active',
+                    tab.dataset.tab === resolvedTarget
+                );
             });
+
+        document
+            .querySelectorAll('.config-section')
+            .forEach(function (section) {
+                section.style.display =
+                    section.id === resolvedTarget
+                        ? 'block'
+                        : 'none';
+            });
+    }
+
+    document
+        .querySelectorAll('.tab')
+        .forEach(function (tab) {
+            tab.addEventListener(
+                'click',
+                function () {
+                    const target =
+                        tab.dataset.tab;
+
+                    activateConfigTab(target);
+
+                    window.history.replaceState(
+                        null,
+                        '',
+                        '#' + target
+                    );
+                }
+            );
         });
-    });
+
+    activateConfigTab(
+        window.location.hash.replace('#', '')
+    );
+
 
     const usosCfdiCatalogo =
         @json($usosCfdi);
