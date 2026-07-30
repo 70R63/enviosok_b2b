@@ -11,12 +11,14 @@ use App\Models\ZigoPricingAdjustment;
 use App\Models\ZigoPricingRule;
 use App\Models\ZigoProviderRateCard;
 use App\Models\ZigoProviderRateLine;
+use App\Models\ZigoProviderRateReference;
 use App\Models\ZigoProviderSource;
 use App\Models\ZigoShippingAgreement;
 use App\Services\ZigoPricingService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -72,6 +74,10 @@ class CrmPricingController extends Controller
                 'agreementService.agreement.source:id,code,name',
                 'agreementService.agreement.ltd:id,nombre',
                 'agreementService.service:id,nombre',
+                'agreementService.rateReferences' =>
+                    fn ($query) =>
+                        $query->orderByDesc('version'),
+                'agreementService.latestQuoteObservation',
                 'lines',
             ])
             ->orderByDesc('id')
@@ -767,6 +773,286 @@ class CrmPricingController extends Controller
         return $this->redirectToTab(
             'provider-rates',
             'Renglón tarifario actualizado.'
+        );
+    }
+
+    public function storeRateReference(
+        Request $request,
+        ZigoAgreementService $agreementService
+    ): RedirectResponse {
+        $agreementService->load('agreement');
+
+        if (
+            !in_array(
+                $agreementService->agreement?->rate_mode,
+                [
+                    ZigoShippingAgreement::MODE_DYNAMIC_API,
+                    ZigoShippingAgreement::MODE_HYBRID,
+                ],
+                true
+            )
+        ) {
+            return $this->redirectToTab(
+                'provider-rates',
+                'Las tarifas comerciales de referencia '
+                . 'solo aplican a convenios dinámicos '
+                . 'o híbridos.',
+                'error'
+            );
+        }
+
+        $data = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:160',
+            ],
+            'status' => [
+                'required',
+                Rule::in([
+                    ZigoProviderRateReference::STATUS_DRAFT,
+                    ZigoProviderRateReference::STATUS_ACTIVE,
+                ]),
+            ],
+            'currency' => [
+                'required',
+                'string',
+                'size:3',
+            ],
+            'tax_percentage' => [
+                'required',
+                'numeric',
+                'min:0',
+                'max:100',
+            ],
+            'included_weight_kg' => [
+                'nullable',
+                'numeric',
+                'min:0',
+            ],
+            'base_price' => [
+                'required',
+                'numeric',
+                'min:0',
+            ],
+            'additional_weight_unit_kg' => [
+                'nullable',
+                'numeric',
+                'min:0.001',
+            ],
+            'additional_weight_price' => [
+                'nullable',
+                'numeric',
+                'min:0',
+            ],
+            'valid_from' => [
+                'nullable',
+                'date',
+            ],
+            'valid_to' => [
+                'nullable',
+                'date',
+                'after_or_equal:valid_from',
+            ],
+            'source_reference' => [
+                'nullable',
+                'string',
+                'max:160',
+            ],
+            'source_document' => [
+                'nullable',
+                'file',
+                'mimes:pdf,xls,xlsx,csv,doc,docx',
+                'max:10240',
+            ],
+            'notes' => [
+                'nullable',
+                'string',
+                'max:2000',
+            ],
+        ]);
+
+        $version = (
+            (int) ZigoProviderRateReference::query()
+                ->where(
+                    'agreement_service_id',
+                    $agreementService->id
+                )
+                ->max('version')
+        ) + 1;
+
+        $documentPath = null;
+        $documentOriginalName = null;
+        $documentMimeType = null;
+
+        if ($request->hasFile('source_document')) {
+            $document = $request->file('source_document');
+            $extension = strtolower(
+                (string) $document->getClientOriginalExtension()
+            );
+
+            $storedName = Str::uuid()->toString()
+                . ($extension !== '' ? ".{$extension}" : '');
+
+            $documentPath = $document->storeAs(
+                "pricing/provider-rate-references/"
+                . $agreementService->id
+                . "/v{$version}",
+                $storedName,
+                'local'
+            );
+
+            $documentOriginalName =
+                $document->getClientOriginalName();
+
+            $documentMimeType =
+                $document->getMimeType();
+        }
+
+        DB::transaction(
+            function () use (
+                $agreementService,
+                $data,
+                $version,
+                $documentPath,
+                $documentOriginalName,
+                $documentMimeType
+            ): void {
+                if (
+                    $data['status']
+                    === ZigoProviderRateReference::STATUS_ACTIVE
+                ) {
+                    ZigoProviderRateReference::query()
+                        ->where(
+                            'agreement_service_id',
+                            $agreementService->id
+                        )
+                        ->where(
+                            'status',
+                            ZigoProviderRateReference::STATUS_ACTIVE
+                        )
+                        ->update([
+                            'status' =>
+                                ZigoProviderRateReference::STATUS_INACTIVE,
+                            'updated_by' => auth()->id(),
+                            'updated_at' => now(),
+                        ]);
+                }
+
+                ZigoProviderRateReference::query()->create([
+                    'agreement_service_id' =>
+                        $agreementService->id,
+                    'name' => $data['name'],
+                    'version' => $version,
+                    'status' => $data['status'],
+                    'currency' => Str::upper(
+                        $data['currency']
+                    ),
+                    'tax_percentage' =>
+                        $data['tax_percentage'],
+                    'included_weight_kg' =>
+                        $data['included_weight_kg'] ?? null,
+                    'base_price' =>
+                        $data['base_price'],
+                    'additional_weight_unit_kg' =>
+                        $data['additional_weight_unit_kg']
+                        ?? null,
+                    'additional_weight_price' =>
+                        $data['additional_weight_price'] ?? 0,
+                    'valid_from' =>
+                        $data['valid_from'] ?? null,
+                    'valid_to' =>
+                        $data['valid_to'] ?? null,
+                    'source_reference' =>
+                        $data['source_reference'] ?? null,
+                    'document_path' => $documentPath,
+                    'document_original_name' =>
+                        $documentOriginalName,
+                    'document_mime_type' =>
+                        $documentMimeType,
+                    'notes' => $data['notes'] ?? null,
+                    'created_by' => auth()->id(),
+                    'updated_by' => auth()->id(),
+                ]);
+            }
+        );
+
+        return $this->redirectToTab(
+            'provider-rates',
+            'Tarifa comercial de referencia creada.'
+        );
+    }
+
+    public function toggleRateReference(
+        ZigoProviderRateReference $rateReference
+    ): RedirectResponse {
+        DB::transaction(
+            function () use ($rateReference): void {
+                if (
+                    $rateReference->status
+                    === ZigoProviderRateReference::STATUS_ACTIVE
+                ) {
+                    $rateReference->update([
+                        'status' =>
+                            ZigoProviderRateReference::STATUS_INACTIVE,
+                        'updated_by' => auth()->id(),
+                    ]);
+
+                    return;
+                }
+
+                ZigoProviderRateReference::query()
+                    ->where(
+                        'agreement_service_id',
+                        $rateReference->agreement_service_id
+                    )
+                    ->where(
+                        'status',
+                        ZigoProviderRateReference::STATUS_ACTIVE
+                    )
+                    ->where('id', '<>', $rateReference->id)
+                    ->update([
+                        'status' =>
+                            ZigoProviderRateReference::STATUS_INACTIVE,
+                        'updated_by' => auth()->id(),
+                        'updated_at' => now(),
+                    ]);
+
+                $rateReference->update([
+                    'status' =>
+                        ZigoProviderRateReference::STATUS_ACTIVE,
+                    'updated_by' => auth()->id(),
+                ]);
+            }
+        );
+
+        return $this->redirectToTab(
+            'provider-rates',
+            'Tarifa comercial de referencia actualizada.'
+        );
+    }
+
+    public function downloadRateReferenceDocument(
+        ZigoProviderRateReference $rateReference
+    ) {
+        if (
+            !$rateReference->document_path
+            || !Storage::disk('local')->exists(
+                $rateReference->document_path
+            )
+        ) {
+            abort(404);
+        }
+
+        return Storage::disk('local')->download(
+            $rateReference->document_path,
+            $rateReference->document_original_name
+                ?: basename($rateReference->document_path),
+            [
+                'Content-Type' =>
+                    $rateReference->document_mime_type
+                    ?: 'application/octet-stream',
+            ]
         );
     }
 

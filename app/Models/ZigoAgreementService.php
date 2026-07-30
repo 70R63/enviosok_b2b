@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ZigoAgreementService extends Model
 {
@@ -44,5 +45,43 @@ class ZigoAgreementService extends Model
             ZigoProviderRateCard::class,
             'agreement_service_id'
         );
+    }
+
+
+    public function rateReferences(): HasMany
+    {
+        return $this->hasMany(
+            ZigoProviderRateReference::class,
+            'agreement_service_id'
+        );
+    }
+
+    public function activeRateReference(): HasOne
+    {
+        return $this->hasOne(
+            ZigoProviderRateReference::class,
+            'agreement_service_id'
+        )
+            ->where(
+                'status',
+                ZigoProviderRateReference::STATUS_ACTIVE
+            )
+            ->latestOfMany('version');
+    }
+
+    public function quoteObservations(): HasMany
+    {
+        return $this->hasMany(
+            ZigoProviderQuoteObservation::class,
+            'agreement_service_id'
+        );
+    }
+
+    public function latestQuoteObservation(): HasOne
+    {
+        return $this->hasOne(
+            ZigoProviderQuoteObservation::class,
+            'agreement_service_id'
+        )->latestOfMany();
     }
 }

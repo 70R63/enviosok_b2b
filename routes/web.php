@@ -723,6 +723,36 @@ Route::middleware(['auth', 'roles:sysadmin,admin'])
         Route::post('/pricing/rate-lines/{rateLine}/toggle', [CrmPricingController::class, 'toggleRateLine'])
             ->name('pricing.rate-lines.toggle');
 
+        Route::post(
+            '/pricing/agreement-services/'
+            . '{agreementService}/rate-references',
+            [
+                CrmPricingController::class,
+                'storeRateReference',
+            ]
+        )
+            ->name('pricing.rate-references.store');
+
+        Route::post(
+            '/pricing/rate-references/'
+            . '{rateReference}/toggle',
+            [
+                CrmPricingController::class,
+                'toggleRateReference',
+            ]
+        )
+            ->name('pricing.rate-references.toggle');
+
+        Route::get(
+            '/pricing/rate-references/'
+            . '{rateReference}/document',
+            [
+                CrmPricingController::class,
+                'downloadRateReferenceDocument',
+            ]
+        )
+            ->name('pricing.rate-references.document');
+
     });
 
 

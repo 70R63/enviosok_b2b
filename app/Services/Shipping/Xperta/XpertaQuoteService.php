@@ -3,6 +3,7 @@
 namespace App\Services\Shipping\Xperta;
 
 use App\Models\B2cCotizacion;
+use App\Services\ZigoProviderQuoteObservationService;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
@@ -11,7 +12,9 @@ class XpertaQuoteService
 {
     public function __construct(
         private XpertaApiClient $client,
-        private XpertaTokenService $tokenService
+        private XpertaTokenService $tokenService,
+        private ZigoProviderQuoteObservationService
+            $observationService
     ) {
     }
 
@@ -65,119 +68,209 @@ class XpertaQuoteService
             );
         }
 
-        [$length, $width, $height] = $this->parseDimensions(
-            $cotizacion
-        );
-
-        $path = $this->client->resolvePath(
-            (string) config(
-                'services.xperta.quote_path',
-                '/api/v1/empresas/{empresa}/ltds/{ltd}/servicios/{service}/cotizaciones'
-            ),
-            [
-                'empresa' => config('services.xperta.empresa'),
-                'ltd' => config('services.xperta.ltd', 'estafeta'),
-                'service' => $service,
-            ]
-        );
-
-        $declaredValue = config(
-            'services.xperta.include_declared_value_in_quote',
-            false
-        )
-            ? (float) ($cotizacion->valor_declarado ?? 0)
-            : 0.0;
-
-        $response = $this->client->send(
-            (string) config('services.xperta.quote_method', 'GET'),
-            $path,
-            [
-                'token' => $this->tokenService->encodedToken(),
-                'peso' => (float) (
-                    $cotizacion->peso_real
-                    ?: $cotizacion->peso
-                ),
-                'largo' => $length,
-                'ancho' => $width,
-                'alto' => $height,
-                'cp' => substr((string) $cotizacion->cp_origen, 0, 5),
-                'cp_d' => substr((string) $cotizacion->cp_destino, 0, 5),
-                'valor_declarado' => round($declaredValue, 2),
-            ],
-            $this->providerHeaders(),
-            true
-        );
-
-        $data = data_get($response, 'data.0');
-
-        if (!is_array($data)) {
-            throw new RuntimeException(
-                'Xperta no devolvió data[0] para la cotización.'
-            );
-        }
-
-        $total = round((float) ($data['total'] ?? 0), 2);
-
-        if ($total <= 0) {
-            throw new RuntimeException(
-                'Xperta no devolvió un total válido para '
-                . $service
-                . '.'
-            );
-        }
-
-        $extendedAreaAmount = round(
-            (float) ($data['costo_ae'] ?? 0),
-            2
-        );
-
-        Log::info('ZIGO Provider Rate - Xperta quote', [
-            'cotizacion_id' => $cotizacion->id,
-            'service' => $service,
-            'origin_zip' => substr(
-                (string) $cotizacion->cp_origen,
-                0,
-                5
-            ),
-            'destination_zip' => substr(
-                (string) $cotizacion->cp_destino,
-                0,
-                5
-            ),
-            'base_price' => $total,
-            'extended_area' => $extendedAreaAmount > 0,
-            'extended_area_amount' => $extendedAreaAmount,
-        ]);
-
-        return [
-            'logistico' => 'Estafeta',
-            'logo' => 'img/estafeta.png',
-            'servicio' => $this->serviceLabel($service),
-            'service_code' => $service,
-            'entrega' => $this->deliveryLabel($service),
-            'base_price' => $total,
-            'provider_source' => 'xperta',
-            'extended_area' => $extendedAreaAmount > 0,
-            'extended_area_amount' => $extendedAreaAmount,
-            'provider_breakdown' => [
-                'costo' => round((float) ($data['costo'] ?? 0), 2),
-                'kgs_extras' => (float) ($data['kgs_extras'] ?? 0),
-                'costo_kgs_extras' => round(
-                    (float) ($data['costo_kgs_extras'] ?? 0),
-                    2
-                ),
-                'costo_seguro' => round(
-                    (float) ($data['costo_seguro'] ?? 0),
-                    2
-                ),
-                'costo_ae' => $extendedAreaAmount,
-                'sub_total' => round(
-                    (float) ($data['sub_total'] ?? 0),
-                    2
-                ),
-                'total' => $total,
-            ],
+        $dimensions = [
+            0.0,
+            0.0,
+            0.0,
         ];
+
+        try {
+            [$length, $width, $height] =
+                $this->parseDimensions(
+                    $cotizacion
+                );
+
+            $dimensions = [
+                $length,
+                $width,
+                $height,
+            ];
+
+            $path = $this->client->resolvePath(
+                (string) config(
+                    'services.xperta.quote_path',
+                    '/api/v1/empresas/{empresa}/ltds/'
+                    . '{ltd}/servicios/{service}/cotizaciones'
+                ),
+                [
+                    'empresa' =>
+                        config('services.xperta.empresa'),
+                    'ltd' =>
+                        config(
+                            'services.xperta.ltd',
+                            'estafeta'
+                        ),
+                    'service' => $service,
+                ]
+            );
+
+            $declaredValue = config(
+                'services.xperta'
+                . '.include_declared_value_in_quote',
+                false
+            )
+                ? (float) (
+                    $cotizacion->valor_declarado
+                    ?? 0
+                )
+                : 0.0;
+
+            $response = $this->client->send(
+                (string) config(
+                    'services.xperta.quote_method',
+                    'GET'
+                ),
+                $path,
+                [
+                    'token' =>
+                        $this->tokenService->encodedToken(),
+                    'peso' => (float) (
+                        $cotizacion->peso_real
+                        ?: $cotizacion->peso
+                    ),
+                    'largo' => $length,
+                    'ancho' => $width,
+                    'alto' => $height,
+                    'cp' => substr(
+                        (string) $cotizacion->cp_origen,
+                        0,
+                        5
+                    ),
+                    'cp_d' => substr(
+                        (string) $cotizacion->cp_destino,
+                        0,
+                        5
+                    ),
+                    'valor_declarado' => round(
+                        $declaredValue,
+                        2
+                    ),
+                ],
+                $this->providerHeaders(),
+                true
+            );
+
+            $data = data_get(
+                $response,
+                'data.0'
+            );
+
+            if (!is_array($data)) {
+                throw new RuntimeException(
+                    'Xperta no devolvió data[0] '
+                    . 'para la cotización.'
+                );
+            }
+
+            $total = round(
+                (float) ($data['total'] ?? 0),
+                2
+            );
+
+            if ($total <= 0) {
+                throw new RuntimeException(
+                    'Xperta no devolvió un total válido '
+                    . "para {$service}."
+                );
+            }
+
+            $extendedAreaAmount = round(
+                (float) ($data['costo_ae'] ?? 0),
+                2
+            );
+
+            $this->observationService->recordSuccess(
+                $cotizacion,
+                $service,
+                $data,
+                $total,
+                $dimensions
+            );
+
+            Log::info(
+                'ZIGO Provider Rate - Xperta quote',
+                [
+                    'cotizacion_id' =>
+                        $cotizacion->id,
+                    'service' => $service,
+                    'origin_zip' => substr(
+                        (string) $cotizacion->cp_origen,
+                        0,
+                        5
+                    ),
+                    'destination_zip' => substr(
+                        (string) $cotizacion->cp_destino,
+                        0,
+                        5
+                    ),
+                    'base_price' => $total,
+                    'extended_area' =>
+                        $extendedAreaAmount > 0,
+                    'extended_area_amount' =>
+                        $extendedAreaAmount,
+                ]
+            );
+
+            return [
+                'logistico' => 'Estafeta',
+                'logo' => 'img/estafeta.png',
+                'servicio' =>
+                    $this->serviceLabel($service),
+                'service_code' => $service,
+                'entrega' =>
+                    $this->deliveryLabel($service),
+                'base_price' => $total,
+                'provider_source' => 'xperta',
+                'extended_area' =>
+                    $extendedAreaAmount > 0,
+                'extended_area_amount' =>
+                    $extendedAreaAmount,
+                'provider_breakdown' => [
+                    'costo' => round(
+                        (float) ($data['costo'] ?? 0),
+                        2
+                    ),
+                    'kgs_extras' =>
+                        (float) (
+                            $data['kgs_extras']
+                            ?? 0
+                        ),
+                    'costo_kgs_extras' => round(
+                        (float) (
+                            $data['costo_kgs_extras']
+                            ?? 0
+                        ),
+                        2
+                    ),
+                    'costo_seguro' => round(
+                        (float) (
+                            $data['costo_seguro']
+                            ?? 0
+                        ),
+                        2
+                    ),
+                    'costo_ae' =>
+                        $extendedAreaAmount,
+                    'sub_total' => round(
+                        (float) (
+                            $data['sub_total']
+                            ?? 0
+                        ),
+                        2
+                    ),
+                    'total' => $total,
+                ],
+            ];
+        } catch (Throwable $exception) {
+            $this->observationService->recordFailure(
+                $cotizacion,
+                $service,
+                $exception,
+                $dimensions
+            );
+
+            throw $exception;
+        }
     }
 
     private function parseDimensions(

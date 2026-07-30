@@ -264,6 +264,90 @@
         $ltd = $agreement?->ltd;
         $service = $agreementService?->display_name
             ?: $agreementService?->service?->nombre;
+
+        $rateReferences = $agreementService?->rateReferences
+            ?? collect();
+
+        $activeReference = $rateReferences->firstWhere(
+            'status',
+            'ACTIVE'
+        );
+
+        $latestObservation =
+            $agreementService?->latestQuoteObservation;
+
+        $referenceTotal = null;
+        $referenceDifference = null;
+        $referenceDifferencePercentage = null;
+
+        if ($activeReference && $latestObservation?->success) {
+            $referenceWeight = (float) (
+                $latestObservation->weight_kg
+                ?? 0
+            );
+
+            $includedWeight = (float) (
+                $activeReference->included_weight_kg
+                ?? 0
+            );
+
+            $additionalWeight = max(
+                0,
+                $referenceWeight - $includedWeight
+            );
+
+            $additionalUnit = (float) (
+                $activeReference->additional_weight_unit_kg
+                ?: 1
+            );
+
+            $additionalUnits =
+                $additionalWeight > 0
+                    ? (int) ceil(
+                        $additionalWeight
+                        / max($additionalUnit, 0.001)
+                    )
+                    : 0;
+
+            $referenceSubtotal =
+                (float) $activeReference->base_price
+                + (
+                    $additionalUnits
+                    * (float) $activeReference
+                        ->additional_weight_price
+                );
+
+            $referenceTotal = round(
+                $referenceSubtotal
+                * (
+                    1
+                    + (
+                        (float) $activeReference
+                            ->tax_percentage
+                        / 100
+                    )
+                ),
+                2
+            );
+
+            $referenceDifference = round(
+                (float) $latestObservation->total
+                - $referenceTotal,
+                2
+            );
+
+            $referenceDifferencePercentage =
+                $referenceTotal > 0
+                    ? round(
+                        (
+                            $referenceDifference
+                            / $referenceTotal
+                        )
+                        * 100,
+                        2
+                    )
+                    : null;
+        }
     @endphp
 
     <details class="card compact-panel rate-card-panel">
@@ -276,7 +360,15 @@
                     → {{ $service }}
                 </div>
                 <div class="summary-meta">
-                    <span>{{ $rateCard->currency }} / {{ number_format((float) $rateCard->tax_percentage, 2) }}% IVA</span>
+                    @if($rateCard->pricing_scheme === 'DYNAMIC_API')
+                        <span>Costo operativo consultado por API</span>
+                    @else
+                        <span>
+                            {{ $rateCard->currency }}
+                            /
+                            {{ number_format((float) $rateCard->tax_percentage, 2) }}% IVA
+                        </span>
+                    @endif
                     <span>Prioridad {{ $rateCard->priority }}</span>
                     <span>
                         Vigencia:
@@ -284,7 +376,17 @@
                         /
                         {{ $rateCard->valid_to?->format('d/m/Y') ?? '-' }}
                     </span>
-                    <span>{{ $rateCard->lines->count() }} renglón(es)</span>
+                    @if($rateCard->pricing_scheme === 'DYNAMIC_API')
+                        <span>
+                            {{ $rateReferences->count() }}
+                            referencia(s) comercial(es)
+                        </span>
+                    @else
+                        <span>
+                            {{ $rateCard->lines->count() }}
+                            renglón(es)
+                        </span>
+                    @endif
                 </div>
             </div>
 
@@ -331,9 +433,383 @@
 
         @if($rateCard->pricing_scheme === 'DYNAMIC_API')
             <div class="note" style="margin-top:16px;">
-                Este tarifario obtiene el costo desde la API.
-                No requiere renglones manuales.
+                <strong>Configuración operativa dinámica.</strong>
+                El precio utilizado para cotizar se consulta en tiempo
+                real mediante la API. El costo operativo no se edita
+                manualmente.
             </div>
+
+            <div class="grid" style="margin-top:14px;">
+                <section class="rate-line">
+                    <h3>Último costo API</h3>
+
+                    @if($latestObservation)
+                        <div class="grid-3">
+                            <div>
+                                <strong>Resultado</strong>
+                                <div style="margin-top:6px;">
+                                    <span class="badge {{ $latestObservation->success ? 'on' : 'off' }}">
+                                        {{ $latestObservation->success
+                                            ? 'Exitoso'
+                                            : 'Error' }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <strong>Costo</strong>
+                                <div class="muted">
+                                    @if($latestObservation->success)
+                                        ${{ number_format((float) $latestObservation->total, 2) }}
+                                        {{ $latestObservation->currency }}
+                                    @else
+                                        Sin costo disponible
+                                    @endif
+                                </div>
+                            </div>
+
+                            <div>
+                                <strong>Fecha de consulta</strong>
+                                <div class="muted">
+                                    {{ $latestObservation->observed_at?->format('d/m/Y H:i:s') ?? '-' }}
+                                </div>
+                            </div>
+
+                            <div>
+                                <strong>Ruta</strong>
+                                <div class="muted">
+                                    {{ $latestObservation->origin_zip }}
+                                    →
+                                    {{ $latestObservation->destination_zip }}
+                                </div>
+                            </div>
+
+                            <div>
+                                <strong>Peso y medidas</strong>
+                                <div class="muted">
+                                    {{ number_format((float) $latestObservation->weight_kg, 3) }} kg
+                                    /
+                                    {{ number_format((float) $latestObservation->length_cm, 2) }}
+                                    ×
+                                    {{ number_format((float) $latestObservation->width_cm, 2) }}
+                                    ×
+                                    {{ number_format((float) $latestObservation->height_cm, 2) }} cm
+                                </div>
+                            </div>
+
+                            <div>
+                                <strong>Área extendida</strong>
+                                <div class="muted">
+                                    ${{ number_format((float) $latestObservation->extended_area_amount, 2) }}
+                                </div>
+                            </div>
+                        </div>
+
+                        @if(!$latestObservation->success && $latestObservation->error_message)
+                            <div class="warning" style="margin-top:12px;">
+                                {{ $latestObservation->error_message }}
+                            </div>
+                        @endif
+                    @else
+                        <div class="warning">
+                            Todavía no existe una consulta API registrada
+                            para este servicio.
+                        </div>
+                    @endif
+                </section>
+
+                <section class="rate-line">
+                    <h3>Referencia comercial activa</h3>
+
+                    @if($activeReference)
+                        <div class="grid-3">
+                            <div>
+                                <strong>Versión</strong>
+                                <div class="muted">
+                                    V{{ $activeReference->version }}
+                                    /
+                                    {{ $activeReference->status }}
+                                </div>
+                            </div>
+
+                            <div>
+                                <strong>Precio base pactado</strong>
+                                <div class="muted">
+                                    ${{ number_format((float) $activeReference->base_price, 2) }}
+                                    {{ $activeReference->currency }}
+                                </div>
+                            </div>
+
+                            <div>
+                                <strong>Peso incluido</strong>
+                                <div class="muted">
+                                    {{ number_format((float) ($activeReference->included_weight_kg ?? 0), 3) }} kg
+                                </div>
+                            </div>
+
+                            <div>
+                                <strong>Kilogramo adicional</strong>
+                                <div class="muted">
+                                    ${{ number_format((float) $activeReference->additional_weight_price, 2) }}
+                                    cada
+                                    {{ number_format((float) ($activeReference->additional_weight_unit_kg ?: 1), 3) }} kg
+                                </div>
+                            </div>
+
+                            <div>
+                                <strong>IVA de referencia</strong>
+                                <div class="muted">
+                                    {{ number_format((float) $activeReference->tax_percentage, 2) }}%
+                                </div>
+                            </div>
+
+                            <div>
+                                <strong>Vigencia</strong>
+                                <div class="muted">
+                                    {{ $activeReference->valid_from?->format('d/m/Y') ?? '-' }}
+                                    /
+                                    {{ $activeReference->valid_to?->format('d/m/Y') ?? '-' }}
+                                </div>
+                            </div>
+                        </div>
+
+                        @if($latestObservation?->success && $referenceTotal !== null)
+                            <div class="note" style="margin-top:12px;">
+                                <strong>Comparación para la última consulta:</strong>
+                                referencia estimada
+                                ${{ number_format($referenceTotal, 2) }}
+                                /
+                                API
+                                ${{ number_format((float) $latestObservation->total, 2) }}
+                                /
+                                diferencia
+                                <strong>
+                                    {{ $referenceDifference >= 0 ? '+' : '' }}
+                                    ${{ number_format($referenceDifference, 2) }}
+                                    @if($referenceDifferencePercentage !== null)
+                                        (
+                                        {{ $referenceDifferencePercentage >= 0 ? '+' : '' }}
+                                        {{ number_format($referenceDifferencePercentage, 2) }}%
+                                        )
+                                    @endif
+                                </strong>
+                            </div>
+                        @endif
+
+                        @if($activeReference->source_reference)
+                            <div class="small muted" style="margin-top:10px;">
+                                Referencia:
+                                {{ $activeReference->source_reference }}
+                            </div>
+                        @endif
+
+                        @if($activeReference->document_path)
+                            <div style="margin-top:10px;">
+                                <a class="btn btn-sm btn-gray"
+                                   href="{{ route('crm.pricing.rate-references.document', $activeReference) }}">
+                                    Descargar documento
+                                </a>
+                            </div>
+                        @endif
+                    @else
+                        <div class="warning">
+                            No existe una tarifa comercial de referencia
+                            activa para este servicio.
+                        </div>
+                    @endif
+                </section>
+            </div>
+
+            <details style="margin-top:14px;">
+                <summary>
+                    Historial de referencias
+                    ({{ $rateReferences->count() }})
+                </summary>
+
+                @forelse($rateReferences as $reference)
+                    <div class="rate-line">
+                        <div class="grid-3">
+                            <div>
+                                <strong>
+                                    {{ $reference->name }}
+                                </strong>
+                                <div class="muted">
+                                    V{{ $reference->version }}
+                                    /
+                                    {{ $reference->status }}
+                                </div>
+                            </div>
+
+                            <div>
+                                <strong>Condición pactada</strong>
+                                <div class="muted">
+                                    Base
+                                    ${{ number_format((float) $reference->base_price, 2) }}
+                                    /
+                                    {{ number_format((float) ($reference->included_weight_kg ?? 0), 3) }} kg incluidos
+                                    /
+                                    adicional
+                                    ${{ number_format((float) $reference->additional_weight_price, 2) }}
+                                </div>
+                            </div>
+
+                            <div>
+                                <strong>Vigencia</strong>
+                                <div class="muted">
+                                    {{ $reference->valid_from?->format('d/m/Y') ?? '-' }}
+                                    /
+                                    {{ $reference->valid_to?->format('d/m/Y') ?? '-' }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="inline" style="margin-top:10px;">
+                            <span class="badge {{ $reference->status === 'ACTIVE' ? 'on' : ($reference->status === 'DRAFT' ? 'draft' : 'off') }}">
+                                {{ $reference->status }}
+                            </span>
+
+                            <form method="POST"
+                                  action="{{ route('crm.pricing.rate-references.toggle', $reference) }}">
+                                @csrf
+                                <button class="btn btn-sm {{ $reference->status === 'ACTIVE' ? 'btn-red' : 'btn-green' }}"
+                                        type="submit">
+                                    {{ $reference->status === 'ACTIVE'
+                                        ? 'Desactivar referencia'
+                                        : 'Activar referencia' }}
+                                </button>
+                            </form>
+
+                            @if($reference->document_path)
+                                <a class="btn btn-sm btn-gray"
+                                   href="{{ route('crm.pricing.rate-references.document', $reference) }}">
+                                    Documento
+                                </a>
+                            @endif
+                        </div>
+                    </div>
+                @empty
+                    <div class="warning" style="margin-top:12px;">
+                        No se han capturado referencias comerciales.
+                    </div>
+                @endforelse
+            </details>
+
+            <details style="margin-top:14px;">
+                <summary>Nueva tarifa comercial de referencia</summary>
+
+                <form method="POST"
+                      enctype="multipart/form-data"
+                      action="{{ route('crm.pricing.rate-references.store', $agreementService) }}"
+                      style="margin-top:14px;">
+                    @csrf
+
+                    <div class="form-grid">
+                        <div style="grid-column:span 2;">
+                            <label>Nombre de la referencia</label>
+                            <input name="name"
+                                   placeholder="Ej. Acuerdo Xperta Estafeta 2026"
+                                   required>
+                        </div>
+
+                        <div>
+                            <label>Estatus inicial</label>
+                            <select name="status" required>
+                                <option value="DRAFT">Borrador</option>
+                                <option value="ACTIVE">Publicar activa</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label>Moneda</label>
+                            <input name="currency"
+                                   value="MXN"
+                                   maxlength="3"
+                                   required>
+                        </div>
+
+                        <div>
+                            <label>Peso incluido kg</label>
+                            <input type="number"
+                                   step="0.001"
+                                   name="included_weight_kg"
+                                   min="0">
+                        </div>
+
+                        <div>
+                            <label>Precio base pactado</label>
+                            <input type="number"
+                                   step="0.01"
+                                   name="base_price"
+                                   min="0"
+                                   required>
+                        </div>
+
+                        <div>
+                            <label>Unidad adicional kg</label>
+                            <input type="number"
+                                   step="0.001"
+                                   name="additional_weight_unit_kg"
+                                   min="0.001"
+                                   value="1">
+                        </div>
+
+                        <div>
+                            <label>Precio adicional</label>
+                            <input type="number"
+                                   step="0.01"
+                                   name="additional_weight_price"
+                                   min="0"
+                                   value="0">
+                        </div>
+
+                        <div>
+                            <label>IVA % referencia</label>
+                            <input type="number"
+                                   step="0.01"
+                                   name="tax_percentage"
+                                   min="0"
+                                   max="100"
+                                   value="16"
+                                   required>
+                        </div>
+
+                        <div>
+                            <label>Vigente desde</label>
+                            <input type="date" name="valid_from">
+                        </div>
+
+                        <div>
+                            <label>Vigente hasta</label>
+                            <input type="date" name="valid_to">
+                        </div>
+
+                        <div>
+                            <label>Contrato o folio</label>
+                            <input name="source_reference"
+                                   maxlength="160">
+                        </div>
+
+                        <div style="grid-column:span 2;">
+                            <label>Documento soporte</label>
+                            <input type="file"
+                                   name="source_document"
+                                   accept=".pdf,.xls,.xlsx,.csv,.doc,.docx">
+                        </div>
+
+                        <div style="grid-column:span 2;">
+                            <label>Notas</label>
+                            <textarea name="notes"
+                                      placeholder="Condiciones comerciales y observaciones"></textarea>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:14px;">
+                        <button class="btn btn-sm" type="submit">
+                            Crear versión de referencia
+                        </button>
+                    </div>
+                </form>
+            </details>
         @else
             <details>
                 <summary>
