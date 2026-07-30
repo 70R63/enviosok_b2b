@@ -1,0 +1,188 @@
+:root {
+    --zigo-blue: #2563eb;
+    --zigo-indigo: #4f46e5;
+    --zigo-yellow: #facc15;
+    --zigo-text: #111827;
+    --zigo-muted: #6b7280;
+    --zigo-border: #d1d5db;
+    --zigo-background: #f4f7fb;
+    --zigo-danger-bg: #fee2e2;
+    --zigo-danger: #991b1b;
+    --zigo-success-bg: #dcfce7;
+    --zigo-success: #166534;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: var(--zigo-background);
+    color: var(--zigo-text);
+}
+
+.zigo-auth-container {
+    max-width: 980px;
+    margin: 60px auto;
+    padding: 0 20px;
+}
+
+.zigo-auth-card {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    overflow: hidden;
+    background: #ffffff;
+    border-radius: 22px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .10);
+}
+
+.zigo-auth-side {
+    padding: 50px;
+    color: #ffffff;
+    background: linear-gradient(
+        135deg,
+        var(--zigo-blue),
+        var(--zigo-indigo)
+    );
+}
+
+.zigo-auth-side h1 {
+    margin: 0 0 20px;
+    font-size: 42px;
+}
+
+.zigo-auth-side p {
+    font-size: 18px;
+    line-height: 1.5;
+}
+
+.zigo-auth-brand {
+    margin-top: 55px;
+    text-align: center;
+}
+
+.zigo-auth-brand img {
+    width: 260px;
+    max-width: 90%;
+    height: auto;
+}
+
+.zigo-auth-tagline {
+    margin-top: 12px;
+    color: #eaf2ff;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+.zigo-auth-form {
+    padding: 50px;
+}
+
+.zigo-auth-form h2 {
+    margin: 0 0 14px;
+    font-size: 32px;
+}
+
+.zigo-auth-description {
+    margin: 0 0 25px;
+    color: var(--zigo-muted);
+    line-height: 1.55;
+}
+
+.zigo-auth-group {
+    margin-bottom: 18px;
+}
+
+.zigo-auth-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 800;
+}
+
+.zigo-auth-group input {
+    width: 100%;
+    padding: 15px;
+    border: 1px solid var(--zigo-border);
+    border-radius: 12px;
+    font-size: 16px;
+}
+
+.zigo-auth-group input:focus {
+    border-color: var(--zigo-blue);
+    outline: 3px solid rgba(37, 99, 235, .15);
+}
+
+.zigo-auth-button {
+    width: 100%;
+    padding: 16px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--zigo-yellow);
+    color: var(--zigo-text);
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: 900;
+}
+
+.zigo-auth-links {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    margin-top: 18px;
+    text-align: center;
+    flex-wrap: wrap;
+}
+
+.zigo-auth-links a {
+    color: var(--zigo-blue);
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.zigo-auth-alert {
+    margin-bottom: 18px;
+    padding: 12px;
+    border-radius: 10px;
+    font-weight: 700;
+    line-height: 1.45;
+}
+
+.zigo-auth-alert-error {
+    background: var(--zigo-danger-bg);
+    color: var(--zigo-danger);
+}
+
+.zigo-auth-alert-success {
+    background: var(--zigo-success-bg);
+    color: var(--zigo-success);
+}
+
+.zigo-auth-help {
+    margin-top: 8px;
+    color: var(--zigo-muted);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+@media (max-width: 768px) {
+    .zigo-auth-container {
+        margin: 24px auto;
+    }
+
+    .zigo-auth-card {
+        grid-template-columns: 1fr;
+    }
+
+    .zigo-auth-side,
+    .zigo-auth-form {
+        padding: 30px;
+    }
+
+    .zigo-auth-side h1 {
+        font-size: 34px;
+    }
+}

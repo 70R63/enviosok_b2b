@@ -1,22 +1,11 @@
 <?php
 
 return [
-
-    /*
-    |--------------------------------------------------------------------------
-    | Password Reset Language Lines
-    |--------------------------------------------------------------------------
-    |
-    | The following language lines are the default lines which match reasons
-    | that are given by the password broker for a password update attempt
-    | has failed, such as for an invalid token or invalid new password.
-    |
-    */
-
-    'reset' => '¡Su contraseña ha sido restablecida!',
-    'sent' => '¡Recordatorio de contraseña enviado!',
-    'token' => 'Este token de restablecimiento de contraseña es inválido.',
-    'user' => 'No se ha encontrado un usuario con esa dirección de correo.',
-    'throttled' => 'Por favor espere antes de volver a intentarlo.',
-    'password' => 'Las contraseñas deben tener al menos seis caracteres y coincidir con la confirmación.'
+    'reset' => 'Tu contraseña fue restablecida correctamente. Ya puedes iniciar sesión.',
+    'sent' => 'Enviamos la liga de recuperación a tu correo.',
+    'sent_generic' => 'Si el correo está registrado, recibirás una liga para restablecer tu contraseña. Revisa también la carpeta de correo no deseado.',
+    'token' => 'La liga de recuperación es inválida o ya expiró.',
+    'user' => 'No fue posible procesar la solicitud.',
+    'throttled' => 'Espera un momento antes de solicitar otra liga.',
+    'password' => 'La contraseña debe cumplir los requisitos y coincidir con la confirmación.',
 ];
