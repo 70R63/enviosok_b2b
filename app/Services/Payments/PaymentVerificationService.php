@@ -5,12 +5,14 @@ namespace App\Services\Payments;
 use App\Exceptions\Payments\PaymentVerificationException;
 use App\Models\B2cCotizacion;
 use App\Models\B2cMovimientoSaldo;
+use App\Services\Billing\B2cCheckoutDebtService;
 use Illuminate\Support\Facades\DB;
 
 class PaymentVerificationService
 {
     public function __construct(
-        private MercadoPagoPaymentClient $mercadoPagoClient
+        private MercadoPagoPaymentClient $mercadoPagoClient,
+        private B2cCheckoutDebtService $checkoutDebtService
     ) {
     }
 
@@ -130,6 +132,9 @@ class PaymentVerificationService
                     'payment_verification_error' => null,
                 ])->save();
 
+                $this->checkoutDebtService
+                    ->releaseReserved($locked);
+
                 return $locked->refresh();
             }
 
@@ -149,9 +154,13 @@ class PaymentVerificationService
                 );
             }
 
+            $expectedPaymentTotal =
+                $this->checkoutDebtService
+                    ->expectedPaymentTotal($locked);
+
             if (
                 $this->moneyToCents($amount)
-                !== $this->moneyToCents($locked->precio)
+                !== $this->moneyToCents($expectedPaymentTotal)
             ) {
                 return $this->markFailed(
                     $locked,
@@ -176,20 +185,31 @@ class PaymentVerificationService
                 'payment_verified_external_reference' => $externalReference,
             ])->save();
 
+            $this->checkoutDebtService->applyReserved(
+                $locked,
+                'mercado_pago',
+                $paymentId
+            );
+
             return $locked->refresh();
         });
     }
 
     public function markBalancePaymentVerified(
-        B2cCotizacion $cotizacion
+        B2cCotizacion $cotizacion,
+        ?float $paymentTotal = null
     ): B2cCotizacion {
+        $verifiedTotal = $paymentTotal
+            ?? $this->checkoutDebtService
+                ->expectedPaymentTotal($cotizacion);
+
         $cotizacion->forceFill([
             'payment_verification_status' => 'VERIFIED',
             'payment_verification_source' => 'BALANCE',
             'payment_verification_error' => null,
             'payment_verification_attempted_at' => now(),
             'payment_verified_at' => now(),
-            'payment_verified_amount' => $cotizacion->precio,
+            'payment_verified_amount' => $verifiedTotal,
             'payment_verified_currency' => 'MXN',
             'payment_verified_external_reference' =>
                 'SALDO-' . $cotizacion->id,
@@ -205,6 +225,10 @@ class PaymentVerificationService
     public function isEligibleForGuide(
         B2cCotizacion $cotizacion
     ): bool {
+        $expectedPaymentTotal =
+            $this->checkoutDebtService
+                ->expectedPaymentTotal($cotizacion);
+
         if ($cotizacion->payment_status === 'saldo_prepago') {
             $movement = B2cMovimientoSaldo::query()
                 ->where('user_id', $cotizacion->user_id)
@@ -219,7 +243,7 @@ class PaymentVerificationService
 
             return $movement
                 && $this->moneyToCents($movement->monto)
-                    === $this->moneyToCents($cotizacion->precio);
+                    === $this->moneyToCents($expectedPaymentTotal);
         }
 
         return $cotizacion->payment_status === 'approved'
@@ -229,7 +253,7 @@ class PaymentVerificationService
                 === 'MXN'
             && $this->moneyToCents(
                 $cotizacion->payment_verified_amount
-            ) === $this->moneyToCents($cotizacion->precio)
+            ) === $this->moneyToCents($expectedPaymentTotal)
             && $cotizacion->payment_verified_external_reference
                 === 'B2C-' . $cotizacion->id;
     }

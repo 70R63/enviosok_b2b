@@ -20,6 +20,7 @@ use App\Exceptions\Identity\IdentityVerificationRequiredException;
 use App\Exceptions\Payments\PaymentVerificationException;
 use App\Services\Identity\IdentityGuideAccessService;
 use App\Services\Payments\PaymentVerificationService;
+use App\Services\Billing\B2cCheckoutDebtService;
 use App\Services\Shipping\EstafetaGuideService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -537,7 +538,8 @@ public function checkout(B2cCotizacion $cotizacion)
 
 public function confirmarEnvio(
     B2cCotizacion $cotizacion,
-    IdentityGuideAccessService $identityGuideAccessService
+    IdentityGuideAccessService $identityGuideAccessService,
+    B2cCheckoutDebtService $checkoutDebtService
 ) {
     if ($cotizacion->user_id !== auth()->id()) {
         abort(403);
@@ -599,12 +601,18 @@ public function confirmarEnvio(
             (int) $cotizacion->id
         );
 
+    $paymentSummary =
+        $checkoutDebtService->previewForCotizacion(
+            $cotizacion
+        );
+
     return view(
         'b2c.confirmar-envio',
         compact(
             'cotizacion',
             'saldo',
-            'identityAccess'
+            'identityAccess',
+            'paymentSummary'
         )
     );
 }
@@ -613,7 +621,8 @@ public function procesarConfirmacion(
     Request $request,
     B2cCotizacion $cotizacion,
     IdentityGuideAccessService $identityGuideAccessService,
-    PaymentVerificationService $verificationService
+    PaymentVerificationService $verificationService,
+    B2cCheckoutDebtService $checkoutDebtService
 ) {
     if ($cotizacion->user_id !== auth()->id()) {
         abort(403);
@@ -642,6 +651,11 @@ public function procesarConfirmacion(
         'metodo_pago' => [
             'required',
             'in:mercado_pago,saldo',
+        ],
+        'total_mostrado' => [
+            'nullable',
+            'numeric',
+            'min:0',
         ],
     ]);
 
@@ -681,11 +695,40 @@ public function procesarConfirmacion(
         'estatus' => 'CHECKOUT_COMPLETO',
     ]);
 
+    $paymentSummary =
+        $checkoutDebtService->reserveForCotizacion(
+            $cotizacion->fresh()
+        );
+
+    $displayedTotal = round(
+        (float) (
+            $data['total_mostrado']
+            ?? $paymentSummary['payment_total']
+        ),
+        2
+    );
+
+    if (
+        abs(
+            $displayedTotal
+            - (float) $paymentSummary['payment_total']
+        ) > 0.009
+    ) {
+        return redirect()
+            ->route('b2c.confirmar', $cotizacion->id)
+            ->with(
+                'error',
+                'Tu resumen de pago se actualizó. '
+                . 'Revísalo antes de continuar.'
+            );
+    }
+
     if ($data['metodo_pago'] === 'saldo') {
         return $this->pagarConSaldo(
             $cotizacion->fresh(),
             $verificationService,
-            $identityGuideAccessService
+            $identityGuideAccessService,
+            $checkoutDebtService
         );
     }
 
@@ -1291,7 +1334,8 @@ public function procesarCheckout(
 
 public function pago(
     B2cCotizacion $cotizacion,
-    IdentityGuideAccessService $identityGuideAccessService
+    IdentityGuideAccessService $identityGuideAccessService,
+    B2cCheckoutDebtService $checkoutDebtService
 ) {
     $hasOwner = !empty($cotizacion->user_id);
 
@@ -1390,6 +1434,11 @@ public function pago(
         }
     }
 
+    $paymentSummary =
+        $checkoutDebtService->reserveForCotizacion(
+            $cotizacion->fresh()
+        );
+
     SDK::setAccessToken($accessToken);
 
     $item = new Item();
@@ -1403,8 +1452,20 @@ public function pago(
         (float) $cotizacion->precio;
     $item->currency_id = 'MXN';
 
+    $items = [$item];
+
+    if ((float) $paymentSummary['debt_total'] > 0) {
+        $debtItem = new Item();
+        $debtItem->title = 'Adeudo pendiente ZIGO';
+        $debtItem->quantity = 1;
+        $debtItem->unit_price =
+            (float) $paymentSummary['debt_total'];
+        $debtItem->currency_id = 'MXN';
+        $items[] = $debtItem;
+    }
+
     $preference = new Preference();
-    $preference->items = [$item];
+    $preference->items = $items;
     $preference->external_reference =
         'B2C-' . $cotizacion->id;
 
@@ -1435,6 +1496,10 @@ public function pago(
     try {
         $preference->save();
     } catch (\Throwable $exception) {
+        $checkoutDebtService->releaseReserved(
+            $cotizacion
+        );
+
         if ($hasOwner) {
             B2cCotizacion::query()
                 ->whereKey($cotizacion->id)
@@ -1468,6 +1533,10 @@ public function pago(
         !$preference->id
         || !$preference->init_point
     ) {
+        $checkoutDebtService->releaseReserved(
+            $cotizacion
+        );
+
         if ($hasOwner) {
             B2cCotizacion::query()
                 ->whereKey($cotizacion->id)
@@ -1935,9 +2004,20 @@ public function guardarRegistroB2c(Request $request)
         ->with('success', 'Cuenta creada correctamente.');
 }
 
-public function dashboardB2c()
-{
-    $userId = auth()->id();
+public function dashboardB2c(
+    B2cCheckoutDebtService $checkoutDebtService
+) {
+    $userId = (int) auth()->id();
+
+    $saldoResumen = B2cSaldo::firstOrCreate(
+        ['user_id' => $userId],
+        ['saldo' => 0]
+    );
+
+    $adeudoPendiente =
+        $checkoutDebtService->pendingTotalForUser(
+            $userId
+        );
 
     $cotizacionActual = null;
 
@@ -2019,7 +2099,9 @@ public function dashboardB2c()
         'totalGuias',
         'totalErrores',
         'ultimosEnvios',
-        'cotizacionActual'
+        'cotizacionActual',
+        'saldoResumen',
+        'adeudoPendiente'
     ));
 }
 
@@ -2938,7 +3020,8 @@ public function eliminarDireccionB2c(B2cDireccion $direccion)
 public function pagarConSaldo(
     B2cCotizacion $cotizacion,
     PaymentVerificationService $verificationService,
-    IdentityGuideAccessService $identityGuideAccessService
+    IdentityGuideAccessService $identityGuideAccessService,
+    B2cCheckoutDebtService $checkoutDebtService
 ) {
     if ($cotizacion->user_id !== auth()->id()) {
         abort(403);
@@ -2962,7 +3045,8 @@ public function pagarConSaldo(
             function () use (
                 $cotizacion,
                 $verificationService,
-                $identityGuideAccessService
+                $identityGuideAccessService,
+                $checkoutDebtService
             ) {
                 $identityGuideAccessService
                     ->assertCanProceed(
@@ -3003,6 +3087,24 @@ public function pagarConSaldo(
                         ->first();
 
                 if ($existingMovement) {
+                    $paymentSummary =
+                        $checkoutDebtService
+                            ->reservedSummary(
+                                $lockedCotizacion
+                            );
+
+                    if (
+                        abs(
+                            (float) $existingMovement->monto
+                            - (float) $paymentSummary['payment_total']
+                        ) > 0.009
+                    ) {
+                        throw new \DomainException(
+                            'El movimiento de saldo existente '
+                            . 'no coincide con el total actual.'
+                        );
+                    }
+
                     $lockedCotizacion->forceFill([
                         'estatus' => 'PAGADA',
                         'payment_status' =>
@@ -3012,9 +3114,16 @@ public function pagarConSaldo(
                             . $lockedCotizacion->id,
                     ])->save();
 
+                    $checkoutDebtService->applyReserved(
+                        $lockedCotizacion,
+                        'saldo_prepago',
+                        'SALDO-' . $lockedCotizacion->id
+                    );
+
                     $verificationService
                         ->markBalancePaymentVerified(
-                            $lockedCotizacion
+                            $lockedCotizacion,
+                            (float) $paymentSummary['payment_total']
                         );
 
                     return;
@@ -3036,8 +3145,14 @@ public function pagarConSaldo(
                     ]);
                 }
 
+                $paymentSummary =
+                    $checkoutDebtService
+                        ->reserveForCotizacion(
+                            $lockedCotizacion
+                        );
+
                 $total =
-                    (float) $lockedCotizacion->precio;
+                    (float) $paymentSummary['payment_total'];
 
                 $saldoAnterior =
                     (float) $saldo->saldo;
@@ -3078,9 +3193,16 @@ public function pagarConSaldo(
                         . $lockedCotizacion->id,
                 ])->save();
 
+                $checkoutDebtService->applyReserved(
+                    $lockedCotizacion,
+                    'saldo_prepago',
+                    'SALDO-' . $lockedCotizacion->id
+                );
+
                 $verificationService
                     ->markBalancePaymentVerified(
-                        $lockedCotizacion
+                        $lockedCotizacion,
+                        $total
                     );
             }
         );

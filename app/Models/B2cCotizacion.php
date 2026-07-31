@@ -183,6 +183,14 @@ class B2cCotizacion extends Model
         );
     }
 
+    public function checkoutDebtAllocations(): HasMany
+    {
+        return $this->hasMany(
+            B2cCheckoutDebtAllocation::class,
+            'checkout_cotizacion_id'
+        );
+    }
+
     public function hasGeneratedGuide(): bool
     {
         $guideStatus = strtoupper(

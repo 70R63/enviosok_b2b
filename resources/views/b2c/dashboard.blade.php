@@ -54,8 +54,17 @@
         .content{padding:40px}
         .title{font-size:38px;font-weight:900;margin-bottom:8px}
         .subtitle{color:#64748b;margin-bottom:30px}
-        .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:30px}
+        .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:24px}
         .card{background:white;border-radius:18px;padding:24px;box-shadow:0 10px 24px rgba(0,0,0,.08)}
+        .financial-summary{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:30px}
+        .financial-card{display:flex;align-items:center;justify-content:space-between;gap:20px;background:white;border-radius:18px;padding:20px 24px;box-shadow:0 10px 24px rgba(0,0,0,.08);text-decoration:none;color:#111827;border:1px solid #e2e8f0}
+        .financial-card:hover{border-color:#93c5fd;transform:translateY(-1px)}
+        .financial-title{font-size:14px;color:#64748b;font-weight:800}
+        .financial-value{font-size:30px;font-weight:900;margin-top:7px}
+        .financial-value.balance{color:#16a34a}
+        .financial-value.debt{color:#dc2626}
+        .financial-value.clear{color:#334155}
+        .financial-link{color:#2563eb;font-size:13px;font-weight:900;white-space:nowrap}
         .label{color:#64748b;font-size:14px}
         .value{font-size:32px;font-weight:900;margin-top:8px}
         .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
@@ -191,6 +200,19 @@
             font-weight:900;
             cursor:pointer
         }
+
+        @media(max-width:1100px){
+            .cards{grid-template-columns:repeat(2,1fr)}
+            .financial-summary{grid-template-columns:1fr}
+        }
+
+        @media(max-width:760px){
+            .layout{grid-template-columns:1fr}
+            .sidebar{display:none}
+            .content{padding:20px}
+            .cards{grid-template-columns:1fr}
+            .financial-card{align-items:flex-start}
+        }
     </style>
 
     <link
@@ -250,6 +272,55 @@
                 <div class="value">{{ $totalErrores }}</div>
             </div>
         </div>
+
+        <section class="financial-summary">
+            <a
+                class="financial-card"
+                href="{{ route('b2c.prepago') }}"
+            >
+                <div>
+                    <div class="financial-title">
+                        Saldo disponible
+                    </div>
+                    <div class="financial-value balance">
+                        ${{ number_format(
+                            (float) $saldoResumen->saldo,
+                            2
+                        ) }} MXN
+                    </div>
+                </div>
+                <span class="financial-link">
+                    Ver movimientos
+                </span>
+            </a>
+
+            <a
+                class="financial-card"
+                href="{{ route('b2c.adeudos.index') }}"
+            >
+                <div>
+                    <div class="financial-title">
+                        Adeudo pendiente
+                    </div>
+
+                    @if((float) $adeudoPendiente > 0)
+                        <div class="financial-value debt">
+                            ${{ number_format(
+                                (float) $adeudoPendiente,
+                                2
+                            ) }} MXN
+                        </div>
+                    @else
+                        <div class="financial-value clear">
+                            Sin adeudos pendientes
+                        </div>
+                    @endif
+                </div>
+                <span class="financial-link">
+                    Ver adeudos
+                </span>
+            </a>
+        </section>
 
         @include('b2c.partials.cotizador', [
             'cotizadorAction' => route('b2c.cotizador-rapido'),

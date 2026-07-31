@@ -212,6 +212,20 @@
             text-align: right;
         }
 
+        .summary-line.debt {
+            color: #b91c1c;
+            font-weight: 800;
+        }
+
+        .debt-detail-link {
+            display: inline-block;
+            margin-top: 4px;
+            color: #2563eb;
+            font-size: 13px;
+            font-weight: 900;
+            text-decoration: none;
+        }
+
         .summary-total {
             display: flex;
             justify-content: space-between;
@@ -456,7 +470,15 @@
         );
     }
 
-    $total = (float) $cotizacion->precio;
+    $adeudoPendiente = (float) (
+        $paymentSummary['debt_total'] ?? 0
+    );
+
+    $total = (float) (
+        $paymentSummary['payment_total']
+        ?? $cotizacion->precio
+    );
+
     $saldoDisponible = (float) ($saldo->saldo ?? 0);
     $saldoSuficiente = $saldoDisponible >= $total;
 
@@ -711,6 +733,26 @@
                     </strong>
                 </div>
 
+                @if($adeudoPendiente > 0)
+                    <div class="summary-line debt">
+                        <span>Adeudo pendiente</span>
+
+                        <strong>
+                            ${{ number_format(
+                                $adeudoPendiente,
+                                2
+                            ) }} MXN
+                        </strong>
+                    </div>
+
+                    <a
+                        class="debt-detail-link"
+                        href="{{ route('b2c.adeudos.index') }}"
+                    >
+                        Ver detalle del adeudo
+                    </a>
+                @endif
+
                 <div class="summary-total">
                     <span>Total</span>
 
@@ -733,10 +775,19 @@
 
                     @if($saldoSuficiente)
                         <div class="balance-state ok">
-                            Tu saldo es suficiente para pagar este envío.
+                            @if($adeudoPendiente > 0)
+                                Tu saldo cubre este envío e incluye
+                                el adeudo pendiente.
+                            @else
+                                Tu saldo es suficiente para pagar
+                                este envío.
+                            @endif
                         </div>
                     @else
                         <div class="balance-state error">
+                            @if($adeudoPendiente > 0)
+                                El total incluye tu adeudo pendiente.
+                            @endif
                             Saldo insuficiente. Faltan
                             ${{ number_format(
                                 $total - $saldoDisponible,
@@ -816,6 +867,12 @@
                 value="mercado_pago"
             >
 
+            <input
+                type="hidden"
+                name="total_mostrado"
+                value="{{ number_format($total, 2, '.', '') }}"
+            >
+
             <button
                 type="submit"
                 class="payment-btn mp"
@@ -838,6 +895,12 @@
                 type="hidden"
                 name="metodo_pago"
                 value="saldo"
+            >
+
+            <input
+                type="hidden"
+                name="total_mostrado"
+                value="{{ number_format($total, 2, '.', '') }}"
             >
 
             <button

@@ -116,7 +116,22 @@
     </style>
 </head>
 @php
-    $isPublicCheckout = $cotizacion->referencia === 'LANDING_PUBLICA' && empty($cotizacion->user_id);
+    $isPublicCheckout =
+        $cotizacion->referencia === 'LANDING_PUBLICA'
+        && empty($cotizacion->user_id);
+
+    $adeudoIncluido = (float) $cotizacion
+        ->checkoutDebtAllocations()
+        ->where('estatus', 'APLICADO')
+        ->sum('monto');
+
+    $totalPagado = (float) (
+        $cotizacion->payment_verified_amount
+        ?: (
+            (float) $cotizacion->precio
+            + $adeudoIncluido
+        )
+    );
 @endphp
 <body>
 
@@ -182,9 +197,21 @@
         <div class="card">
             <div class="label">Total pagado</div>
             <div class="value">
-               ${{ number_format($cotizacion->precio, 2) }} MXN
+               ${{ number_format($totalPagado, 2) }} MXN
             </div>
         </div>
+
+        @if($adeudoIncluido > 0)
+            <div class="card">
+                <div class="label">Adeudo incluido</div>
+                <div class="value">
+                    ${{ number_format(
+                        $adeudoIncluido,
+                        2
+                    ) }} MXN
+                </div>
+            </div>
+        @endif
 
         <div class="card">
             <div class="label">ID de pago</div>

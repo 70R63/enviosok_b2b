@@ -9,6 +9,11 @@ use Illuminate\Support\Facades\DB;
 
 class B2cDebtPaymentService
 {
+    public function __construct(
+        private B2cCheckoutDebtService $checkoutDebtService
+    ) {
+    }
+
     public function payWithBalance(
         B2cAdeudo $adeudo,
         int $userId
@@ -32,6 +37,16 @@ class B2cDebtPaymentService
             if (!$lockedDebt->isPending()) {
                 throw new \DomainException(
                     'El adeudo ya no está disponible para pago.'
+                );
+            }
+
+            if (
+                $this->checkoutDebtService
+                    ->debtHasActiveReservation($lockedDebt)
+            ) {
+                throw new \DomainException(
+                    'Este adeudo ya está incluido en un pago '
+                    . 'de envío en curso.'
                 );
             }
 
