@@ -275,16 +275,19 @@ Route::middleware(['auth', 'roles:sysadmin,admin,adminops,operaciones'])
 
 //LOGIN SOPORTE
 Route::get('/soporte/login', [B2cIncidenciaAdminController::class, 'login'])
+    ->middleware('zigo.portal:support')
     ->name('soporte.login');
 
 Route::post('/soporte/login', [B2cIncidenciaAdminController::class, 'loginPost'])
+    ->middleware('zigo.portal:support')
     ->name('soporte.login.post');
 
 Route::post('/soporte/logout', [B2cIncidenciaAdminController::class, 'logoutSoporte'])
-            ->name('soporte.logout');
+    ->middleware('zigo.portal:support')
+    ->name('soporte.logout');
 
 // Portal Soporte
-Route::middleware(['auth', 'roles:sysadmin,admin,adminops,operaciones'])
+Route::middleware(['zigo.portal:support', 'auth', 'roles:sysadmin,admin,adminops,operaciones'])
     ->prefix('soporte')
     ->name('soporte.')
     ->group(function () {
