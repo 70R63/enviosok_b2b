@@ -68,6 +68,6 @@ class Kernel extends HttpKernel
         'AccesosApi'   => \App\Http\Middleware\AccesosApi::class,
         'zigo.api' => \App\Http\Middleware\ValidateZigoApiKey::class,
         'zigo.product' => \App\Http\Middleware\EnsureApiProductAccess::class,
+        'zigo.portal' => \App\Http\Middleware\EnsureZigoPortalHost::class,
     ];
 }
- 

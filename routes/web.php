@@ -329,15 +329,18 @@ Route::middleware(['auth', 'roles:sysadmin,admin,adminops,operaciones,cliente'])
 // PORTAL CRM / ADMIN GENERAL
 // ===============================
 Route::get('/crm/login', [B2cIncidenciaAdminController::class, 'loginCrm'])
+    ->middleware('zigo.portal:crm')
     ->name('crm.login');
 
 Route::post('/crm/login', [B2cIncidenciaAdminController::class, 'loginCrmPost'])
+    ->middleware('zigo.portal:crm')
     ->name('crm.login.post');
 
 Route::post('/crm/logout', [B2cIncidenciaAdminController::class, 'logoutCrm'])
+    ->middleware('zigo.portal:crm')
     ->name('crm.logout');
 
-Route::middleware(['auth', 'roles:sysadmin,admin'])
+Route::middleware(['zigo.portal:crm', 'auth', 'roles:sysadmin,admin'])
     ->prefix('crm')
     ->name('crm.')
     ->group(function () {
