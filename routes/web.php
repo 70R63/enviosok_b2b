@@ -307,15 +307,18 @@ Route::middleware(['auth', 'roles:sysadmin,admin,adminops,operaciones'])
 // PORTAL NEGOCIOS / EMPRESAS B2B
 // ===============================
 Route::get('/negocios/login', [B2cIncidenciaAdminController::class, 'loginNegocios'])
+    ->middleware('zigo.portal:b2b')
     ->name('negocios.login');
 
 Route::post('/negocios/login', [B2cIncidenciaAdminController::class, 'loginNegociosPost'])
+    ->middleware('zigo.portal:b2b')
     ->name('negocios.login.post');
 
 Route::post('/negocios/logout', [B2cIncidenciaAdminController::class, 'logoutNegocios'])
+    ->middleware('zigo.portal:b2b')
     ->name('negocios.logout');
 
-Route::middleware(['auth', 'roles:sysadmin,admin,adminops,operaciones,cliente'])
+Route::middleware(['zigo.portal:b2b', 'auth', 'roles:sysadmin,admin,adminops,operaciones,cliente'])
     ->prefix('negocios')
     ->name('negocios.')
     ->group(function () {
