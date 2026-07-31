@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\ZigoDomainResolver;
 use Illuminate\Auth\Middleware\Authenticate as Middleware;
 use Log;
 class Authenticate extends Middleware
@@ -15,8 +16,26 @@ class Authenticate extends Middleware
     protected function redirectTo($request)
     {
         Log::info(__CLASS__." ".__FUNCTION__." ".__LINE__); 
-        if (! $request->expectsJson()) {
-            return route('login');
+        if ($request->expectsJson()) {
+            return null;
         }
+
+        $domainResolver = app(ZigoDomainResolver::class);
+
+        if ($domainResolver->isSubdomainRoutingEnabled()) {
+            $loginRoutes = [
+                'crm' => 'crm.login',
+                'b2b' => 'negocios.login',
+                'support' => 'soporte.login',
+            ];
+
+            $portal = $domainResolver->currentPortal($request->getHost());
+
+            if (isset($loginRoutes[$portal])) {
+                return route($loginRoutes[$portal]);
+            }
+        }
+
+        return route('login');
     }
 }
