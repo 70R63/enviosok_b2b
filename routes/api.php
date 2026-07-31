@@ -377,7 +377,7 @@ Route::middleware(['throttle:50,1','AccesosApi'])->group(function(){
     });
 });
 
-Route::middleware('zigo.api')->prefix('hub')->group(function () {
+Route::middleware(['zigo.portal:api', 'zigo.api'])->prefix('hub')->group(function () {
     Route::get('/ping', function (Request $request) {
         return response()->json([
             'success' => true,
