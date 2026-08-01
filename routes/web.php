@@ -464,6 +464,9 @@ Route::middleware(['zigo.portal:crm', 'auth', 'roles:sysadmin,admin'])
         Route::get('/seguridad/permisos', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'permisos'])
             ->name('seguridad.permisos');
 
+        Route::get('/seguridad/auditoria', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'auditoria'])
+            ->name('seguridad.auditoria');
+
         Route::get('/seguridad/usuarios/crear', [\App\Http\Controllers\CRM\CrmSecurityController::class, 'crearUsuario'])
             ->name('seguridad.usuarios.crear');
 

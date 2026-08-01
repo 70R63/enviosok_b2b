@@ -38,6 +38,14 @@ return [
         ),
     ],
 
+    'b2c' => [
+        'empresa_id' => env('B2C_EMPRESA_ID'),
+        'user_id' => env('B2C_USER_ID'),
+        'estafeta_servicio_id' => env(
+            'B2C_ESTAFETA_SERVICIO_ID'
+        ),
+    ],
+
     'xperta' => [
         'enabled' => env('XPERTA_ENABLED', false),
         'environment' => env('XPERTA_ENVIRONMENT', 'sandbox'),
