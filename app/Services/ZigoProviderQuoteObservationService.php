@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\B2cCotizacion;
 use App\Models\ZigoAgreementService;
 use App\Models\ZigoProviderQuoteObservation;
+use App\Services\Shipping\Xperta\XpertaExternalMessageSanitizer;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -28,7 +29,7 @@ class ZigoProviderQuoteObservationService
                 2
             ),
             errorMessage: null,
-            providerData: $providerData
+            providerData: $this->safeProviderData($providerData)
         );
     }
 
@@ -45,7 +46,9 @@ class ZigoProviderQuoteObservationService
             success: false,
             total: null,
             extendedAreaAmount: 0.0,
-            errorMessage: $exception->getMessage(),
+            errorMessage: XpertaExternalMessageSanitizer::sanitize(
+                $exception->getMessage()
+            ),
             providerData: null
         );
     }
@@ -138,12 +141,38 @@ class ZigoProviderQuoteObservationService
                 . 'la observación tarifaria',
                 [
                     'service_code' => $serviceCode,
-                    'message' => $exception->getMessage(),
+                    'message' => XpertaExternalMessageSanitizer::sanitize(
+                        $exception->getMessage()
+                    ),
                 ]
             );
 
             return null;
         }
+    }
+
+    private function safeProviderData(array $providerData): array
+    {
+        $safe = [];
+
+        foreach ([
+            'costo',
+            'kgs_extras',
+            'costo_kgs_extras',
+            'costo_seguro',
+            'costo_ae',
+            'sub_total',
+            'total',
+        ] as $field) {
+            if (
+                isset($providerData[$field])
+                && is_numeric($providerData[$field])
+            ) {
+                $safe[$field] = (float) $providerData[$field];
+            }
+        }
+
+        return $safe;
     }
 
     private function resolveAgreementService(

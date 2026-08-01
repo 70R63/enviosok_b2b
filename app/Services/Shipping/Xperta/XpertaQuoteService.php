@@ -36,12 +36,15 @@ class XpertaQuoteService
             try {
                 $options[] = $this->quote($cotizacion, $service);
             } catch (Throwable $exception) {
-                $errors[$service] = $exception->getMessage();
+                $safeMessage = XpertaExternalMessageSanitizer::sanitize(
+                    $exception->getMessage()
+                );
+                $errors[$service] = $safeMessage;
 
                 Log::warning('Xperta rechazó un servicio de cotización', [
                     'cotizacion_id' => $cotizacion->id,
                     'service' => $service,
-                    'error' => $exception->getMessage(),
+                    'error' => $safeMessage,
                 ]);
             }
         }
@@ -115,39 +118,40 @@ class XpertaQuoteService
                 )
                 : 0.0;
 
-            $response = $this->client->send(
-                (string) config(
-                    'services.xperta.quote_method',
-                    'GET'
-                ),
-                $path,
-                [
-                    'token' =>
-                        $this->tokenService->encodedToken(),
-                    'peso' => (float) (
-                        $cotizacion->peso_real
-                        ?: $cotizacion->peso
+            $response = $this->tokenService->withEncodedToken(
+                fn (string $token) => $this->client->send(
+                    (string) config(
+                        'services.xperta.quote_method',
+                        'POST'
                     ),
-                    'largo' => $length,
-                    'ancho' => $width,
-                    'alto' => $height,
-                    'cp' => substr(
-                        (string) $cotizacion->cp_origen,
-                        0,
-                        5
-                    ),
-                    'cp_d' => substr(
-                        (string) $cotizacion->cp_destino,
-                        0,
-                        5
-                    ),
-                    'valor_declarado' => round(
-                        $declaredValue,
-                        2
-                    ),
-                ],
-                $this->providerHeaders(),
-                true
+                    $path,
+                    [
+                        'token' => $token,
+                        'peso' => (float) (
+                            $cotizacion->peso_real
+                            ?: $cotizacion->peso
+                        ),
+                        'largo' => $length,
+                        'ancho' => $width,
+                        'alto' => $height,
+                        'cp' => substr(
+                            (string) $cotizacion->cp_origen,
+                            0,
+                            5
+                        ),
+                        'cp_d' => substr(
+                            (string) $cotizacion->cp_destino,
+                            0,
+                            5
+                        ),
+                        'valor_declarado' => round(
+                            $declaredValue,
+                            2
+                        ),
+                    ],
+                    $this->client->providerHeaders(false),
+                    true
+                )
             );
 
             $data = data_get(
@@ -326,12 +330,4 @@ class XpertaQuoteService
         };
     }
 
-    private function providerHeaders(): array
-    {
-        return [
-            'Corporativo' => (string) config(
-                'services.xperta.corporativo'
-            ),
-        ];
-    }
 }

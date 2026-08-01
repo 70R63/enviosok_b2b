@@ -379,6 +379,13 @@ Route::middleware(['zigo.portal:crm', 'auth', 'roles:sysadmin,admin'])
             ->name('shipping.xperta.test-token');
 
         Route::post(
+            '/paqueterias/xperta/probar-frequency',
+            [CrmShippingProviderController::class, 'testFrequency']
+        )
+            ->middleware('throttle:12,1')
+            ->name('shipping.xperta.test-frequency');
+
+        Route::post(
             '/paqueterias/xperta/probar-cotizacion',
             [CrmShippingProviderController::class, 'testQuote']
         )

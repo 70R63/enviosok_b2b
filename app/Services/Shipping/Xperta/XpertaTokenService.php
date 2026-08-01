@@ -42,6 +42,21 @@ class XpertaTokenService
         Cache::forget($this->cacheKey());
     }
 
+    public function withEncodedToken(callable $operation): mixed
+    {
+        try {
+            return $operation($this->encodedToken());
+        } catch (XpertaHttpException $exception) {
+            if (!in_array($exception->statusCode(), [401, 403], true)) {
+                throw $exception;
+            }
+
+            $this->forget();
+
+            return $operation($this->encodedToken(true));
+        }
+    }
+
     private function requestRawToken(int $minutes): string
     {
         $path = $this->client->resolvePath(
@@ -62,7 +77,7 @@ class XpertaTokenService
                 'password' => config('services.xperta.password'),
                 'minutos' => $minutes,
             ],
-            $this->authenticationHeaders()
+            $this->client->providerHeaders()
         );
 
         $token = trim(
@@ -76,16 +91,6 @@ class XpertaTokenService
         }
 
         return $token;
-    }
-
-    private function authenticationHeaders(): array
-    {
-        return [
-            'x-api-key' => (string) config('services.xperta.api_key'),
-            'Corporativo' => (string) config(
-                'services.xperta.corporativo'
-            ),
-        ];
     }
 
     private function cacheKey(): string

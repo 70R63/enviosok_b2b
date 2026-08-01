@@ -19,8 +19,16 @@ class XpertaFrequencyService
         if (!config('services.xperta.frequency_enabled', true)) {
             return [
                 'available' => true,
-                'source' => 'disabled',
-                'response' => [],
+                'origin' => $originPostalCode,
+                'destination' => $destinationPostalCode,
+                'services' => [],
+                'restriction' => null,
+                'restriction_description' => null,
+                'raw_status' => 'disabled',
+                'provider_success' => null,
+                'provider_message' => 'Consulta Frequency desactivada.',
+                'response_code' => null,
+                'raw_response' => [],
             ];
         }
 
@@ -34,84 +42,114 @@ class XpertaFrequencyService
         $path = $this->client->resolvePath(
             (string) config(
                 'services.xperta.frequency_path',
-                '/api/v1/empresas/{empresa}/ltds/{ltd}/frecuencia/{origin}/{destination}'
+                '/api/v1/empresas/{corporativo}/ltds/{ltd}/frecuencia/{origen}/{destino}'
             ),
             [
-                'empresa' => config('services.xperta.empresa'),
+                'corporativo' => config('services.xperta.corporativo'),
                 'ltd' => config('services.xperta.ltd', 'estafeta'),
-                'origin' => $originPostalCode,
-                'destination' => $destinationPostalCode,
+                'origen' => $originPostalCode,
+                'destino' => $destinationPostalCode,
             ]
         );
 
-        $response = $this->client->send(
-            (string) config(
-                'services.xperta.frequency_method',
-                'GET'
-            ),
-            $path,
-            [
-                'empresa_id' => config(
-                    'services.xperta.frequency_empresa_id',
-                    config('services.xperta.empresa')
-                ),
-                'token' => $this->tokenService->encodedToken(),
-            ],
-            $this->providerHeaders()
+        $response = $this->tokenService->withEncodedToken(
+            fn (string $token) => $this->client->send(
+                'POST',
+                $path,
+                ['token' => $token],
+                $this->client->providerHeaders()
+            )
         );
 
-        $blockedMessage = $this->findBlockedMessage($response);
+        return $this->normalize(
+            $response,
+            $originPostalCode,
+            $destinationPostalCode
+        );
+    }
 
-        if ($blockedMessage !== null) {
-            throw new RuntimeException(
-                'Xperta reportó que la ruta no está disponible: '
-                . $blockedMessage
-            );
+    private function normalize(
+        array $response,
+        string $origin,
+        string $destination
+    ): array
+    {
+        $data = data_get($response, 'data', []);
+
+        if (!is_array($data)) {
+            $data = [];
+        }
+
+        $services = data_get($data, 'services', []);
+        if (!is_array($services)) {
+            $services = [];
         }
 
         return [
-            'available' => true,
-            'source' => 'xperta_frequency',
-            'response' => $response,
+            'available' => (bool) data_get($data, 'available', false),
+            'origin' => (string) data_get($data, 'origin', $origin),
+            'destination' => (string) data_get(
+                $data,
+                'destination',
+                $destination
+            ),
+            'services' => array_values($services),
+            'restriction' => $this->safeOptionalMessage(
+                data_get($data, 'restriction')
+            ),
+            'restriction_description' => $this->safeOptionalMessage(
+                data_get($data, 'restriction_description')
+            ),
+            'raw_status' => 'received',
+            'provider_success' => array_key_exists('success', $response)
+                ? (bool) $response['success']
+                : null,
+            'provider_message' => XpertaExternalMessageSanitizer::sanitize(
+                $this->providerMessage($response)
+            ),
+            'response_code' => $this->safeResponseCode($response),
+            'raw_response' => $response,
         ];
     }
 
-    private function findBlockedMessage(array $response): ?string
+    private function providerMessage(array $response): ?string
     {
-        $descriptions = [];
-
-        array_walk_recursive(
-            $response,
-            function ($value, $key) use (&$descriptions) {
-                if (
-                    in_array(
-                        strtolower((string) $key),
-                        ['description', 'descripcion', 'message', 'mensaje'],
-                        true
-                    )
-                    && is_string($value)
-                ) {
-                    $descriptions[] = trim($value);
-                }
+        foreach ([
+            data_get($response, 'message'),
+            data_get($response, 'data.message'),
+            data_get($response, 'error'),
+            data_get($response, 'data.error'),
+        ] as $message) {
+            if (is_string($message) && trim($message) !== '') {
+                return $message;
             }
-        );
+        }
 
-        foreach ($descriptions as $description) {
-            $normalized = mb_strtolower($description);
+        return null;
+    }
 
-            foreach (
-                [
-                    'bloqueado',
-                    'sin cobertura',
-                    'no disponible',
-                    'no se encuentra',
-                    'no existe cobertura',
-                ] as $needle
-            ) {
-                if (str_contains($normalized, $needle)) {
-                    return mb_substr($description, 0, 500);
-                }
-            }
+    private function safeOptionalMessage($message): ?string
+    {
+        if (!is_string($message) || trim($message) === '') {
+            return null;
+        }
+
+        return XpertaExternalMessageSanitizer::sanitize($message);
+    }
+
+    private function safeResponseCode(array $response): string|int|null
+    {
+        $code = data_get($response, 'code', data_get($response, 'status'));
+
+        if (is_int($code)) {
+            return $code;
+        }
+
+        if (
+            is_string($code)
+            && preg_match('/^[A-Za-z0-9_.-]{1,50}$/', $code)
+        ) {
+            return $code;
         }
 
         return null;
@@ -134,13 +172,4 @@ class XpertaFrequencyService
         return $postalCode;
     }
 
-    private function providerHeaders(): array
-    {
-        return [
-            'x-api-key' => (string) config('services.xperta.api_key'),
-            'Corporativo' => (string) config(
-                'services.xperta.corporativo'
-            ),
-        ];
-    }
 }

@@ -95,8 +95,36 @@
             </form>
         </div>
 
+        <div class="card" style="margin-bottom:22px">
+            <h2>Probar Frequency</h2>
+            <p>Consulta cobertura sin cotizar y sin generar guía.</p>
+            <form method="POST" action="{{ route('crm.shipping.xperta.test-frequency') }}">
+                @csrf
+                <div class="form-grid">
+                    <div><label>CP origen</label><input name="cp_origen" value="{{ old('cp_origen', '09800') }}" required maxlength="5"></div>
+                    <div><label>CP destino</label><input name="cp_destino" value="{{ old('cp_destino', '57820') }}" required maxlength="5"></div>
+                </div>
+                <button class="btn" type="submit">Consultar Frequency</button>
+            </form>
+
+            @if(session('xperta_frequency_result'))
+                @php($frequency = session('xperta_frequency_result'))
+                <div style="margin-top:22px">
+                    <h3>Resultado normalizado</h3>
+                    <table><tbody>
+                        <tr><th>Disponible</th><td>{{ $frequency['available'] ? 'Sí' : 'No' }}</td></tr>
+                        <tr><th>Origen</th><td>{{ $frequency['origin'] }}</td></tr>
+                        <tr><th>Destino</th><td>{{ $frequency['destination'] }}</td></tr>
+                        <tr><th>Servicios</th><td>{{ implode(', ', $frequency['services']) ?: 'Sin servicios' }}</td></tr>
+                        <tr><th>Restricción</th><td>{{ $frequency['restriction'] ?? 'Sin restricción' }}</td></tr>
+                        <tr><th>Descripción</th><td>{{ $frequency['restriction_description'] ?? 'Sin descripción' }}</td></tr>
+                    </tbody></table>
+                </div>
+            @endif
+        </div>
+
         <div class="card">
-            <h2>Probar frecuencia y cotización</h2>
+            <h2>Probar cotización</h2>
             <p>Esta operación no genera guía y no modifica cotizaciones B2C.</p>
 
             <form method="POST" action="{{ route('crm.shipping.xperta.test-quote') }}">

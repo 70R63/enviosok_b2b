@@ -8,6 +8,23 @@ use RuntimeException;
 
 class XpertaApiClient
 {
+    public function providerHeaders(bool $includeApiKey = true): array
+    {
+        $headers = [
+            'Corporativo' => (string) config(
+                'services.xperta.corporativo'
+            ),
+        ];
+
+        if ($includeApiKey) {
+            $headers['x-api-key'] = (string) config(
+                'services.xperta.api_key'
+            );
+        }
+
+        return $headers;
+    }
+
     public function send(
         string $method,
         string $path,
@@ -127,7 +144,8 @@ class XpertaApiClient
         }
 
         if (!$response->successful()) {
-            throw new RuntimeException(
+            throw new XpertaHttpException(
+                $response->status(),
                 'Xperta respondió HTTP '
                 . $response->status()
                 . ': '
@@ -169,11 +187,11 @@ class XpertaApiClient
 
         foreach ($candidates as $candidate) {
             if (is_string($candidate) && trim($candidate) !== '') {
-                return mb_substr(trim($candidate), 0, 500);
+                return XpertaExternalMessageSanitizer::sanitize($candidate);
             }
         }
 
-        return 'respuesta de error sin detalle';
+        return XpertaExternalMessageSanitizer::sanitize(null);
     }
 
     private function assertBaseConfiguration(): void

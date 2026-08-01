@@ -4,6 +4,8 @@ namespace App\Http\Controllers\CRM;
 
 use App\Http\Controllers\Controller;
 use App\Models\B2cCotizacion;
+use App\Services\Shipping\Xperta\XpertaExternalMessageSanitizer;
+use App\Services\Shipping\Xperta\XpertaFrequencyService;
 use App\Services\Shipping\Xperta\XpertaQuoteService;
 use App\Services\Shipping\Xperta\XpertaTokenService;
 use Illuminate\Http\Request;
@@ -71,7 +73,9 @@ class CrmShippingProviderController extends Controller
         } catch (Throwable $exception) {
             return back()->with(
                 'error',
-                $exception->getMessage()
+                XpertaExternalMessageSanitizer::sanitize(
+                    $exception->getMessage()
+                )
             );
         }
     }
@@ -119,7 +123,63 @@ class CrmShippingProviderController extends Controller
         } catch (Throwable $exception) {
             return back()
                 ->withInput()
-                ->with('error', $exception->getMessage());
+                ->with(
+                    'error',
+                    XpertaExternalMessageSanitizer::sanitize(
+                        $exception->getMessage()
+                    )
+                );
+        }
+    }
+
+    public function testFrequency(
+        Request $request,
+        XpertaFrequencyService $frequencyService
+    ) {
+        $data = $request->validate([
+            'cp_origen' => ['required', 'digits:5'],
+            'cp_destino' => ['required', 'digits:5'],
+        ]);
+
+        try {
+            $result = $frequencyService->check(
+                $data['cp_origen'],
+                $data['cp_destino']
+            );
+
+            $sessionResult = [
+                'available' => (bool) $result['available'],
+                'origin' => (string) $result['origin'],
+                'destination' => (string) $result['destination'],
+                'services' => array_values(array_filter(
+                    array_map(
+                        fn ($service) => is_string($service)
+                            ? XpertaExternalMessageSanitizer::sanitize($service)
+                            : null,
+                        $result['services']
+                    )
+                )),
+                'restriction' => $result['restriction'],
+                'restriction_description' =>
+                    $result['restriction_description'],
+                'raw_status' => $result['raw_status'],
+                'provider_success' => $result['provider_success'],
+                'provider_message' => $result['provider_message'],
+                'response_code' => $result['response_code'],
+            ];
+
+            return back()
+                ->with('success', 'Frequency Xperta consultado correctamente.')
+                ->with('xperta_frequency_result', $sessionResult);
+        } catch (Throwable $exception) {
+            return back()
+                ->withInput()
+                ->with(
+                    'error',
+                    XpertaExternalMessageSanitizer::sanitize(
+                        $exception->getMessage()
+                    )
+                );
         }
     }
 }

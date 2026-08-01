@@ -58,7 +58,7 @@ return [
         ),
         'frequency_path' => env(
             'XPERTA_FREQUENCY_PATH',
-            '/api/v1/empresas/{empresa}/ltds/{ltd}/frecuencia/{origin}/{destination}'
+            '/api/v1/empresas/{corporativo}/ltds/{ltd}/frecuencia/{origen}/{destino}'
         ),
         'quote_path' => env(
             'XPERTA_QUOTE_PATH',
@@ -88,13 +88,9 @@ return [
 
         'frequency_method' => env(
             'XPERTA_FREQUENCY_METHOD',
-            'GET'
+            'POST'
         ),
         'quote_method' => env('XPERTA_QUOTE_METHOD', 'POST'),
-        'frequency_empresa_id' => env(
-            'XPERTA_FREQUENCY_EMPRESA_ID',
-            env('XPERTA_EMPRESA')
-        ),
         'frequency_enabled' => env(
             'XPERTA_FREQUENCY_ENABLED',
             false

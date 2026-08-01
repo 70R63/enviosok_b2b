@@ -349,22 +349,11 @@ class XpertaGuideService
 
     private function providerHeaders(): array
     {
-        $headers = [
-            'Corporativo' => (string) config(
-                'services.xperta.corporativo'
-            ),
-        ];
-
-        if (
-            config(
+        return $this->client->providerHeaders(
+            (bool) config(
                 'services.xperta.send_api_key_on_operations',
                 true
             )
-        ) {
-            $headers['x-api-key'] =
-                (string) config('services.xperta.api_key');
-        }
-
-        return $headers;
+        );
     }
 }
