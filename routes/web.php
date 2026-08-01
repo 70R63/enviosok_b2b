@@ -20,6 +20,7 @@ use App\Http\Controllers\CRM\CrmGuideController;
 use App\Http\Controllers\CRM\CrmDebtController;
 use App\Http\Controllers\CRM\CrmShippingProviderController;
 use App\Http\Controllers\CRM\CrmIdentityVerificationController;
+use App\Http\Controllers\Negocios\GuiaController as NegociosGuiaController;
 use App\Models\B2cCotizacion;
 
 /*
@@ -328,6 +329,17 @@ Route::middleware(['zigo.portal:b2b', 'auth', 'roles:sysadmin,admin,adminops,ope
         Route::get('/dashboard', function () {
             return view('negocios.dashboard');
         })->name('dashboard');
+
+        Route::get('/guias', [NegociosGuiaController::class, 'index'])
+            ->name('guias.index');
+
+        Route::get('/guias/{guia}/etiqueta', [NegociosGuiaController::class, 'etiqueta'])
+            ->whereNumber('guia')
+            ->name('guias.etiqueta');
+
+        Route::get('/guias/{guia}', [NegociosGuiaController::class, 'show'])
+            ->whereNumber('guia')
+            ->name('guias.show');
     });
 
 
