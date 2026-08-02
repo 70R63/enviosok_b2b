@@ -45,9 +45,15 @@
         .submit{background:#2563eb;color:white;border:none;border-radius:12px;padding:15px 20px;font-weight:900;font-size:16px;width:100%;cursor:pointer}
         .alert{background:#dcfce7;color:#166534;border-radius:12px;padding:14px;margin-bottom:18px;font-weight:800}
         .footer{background:#020617;color:#cbd5e1;padding:36px 22px}
-        .footer-inner{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:24px}
+        .footer-inner{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:2fr repeat(4,1fr);gap:24px}
         .footer h4{color:white;margin:0 0 12px}
         .footer a{display:block;color:#cbd5e1;margin:8px 0}
+        .zigo-social-follow{text-align:center}
+        .zigo-social-links{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px}
+        .footer .zigo-social-link{display:inline-flex;align-items:center;gap:6px;margin:0;padding:6px 8px;border-radius:999px;font-size:13px;line-height:1;text-decoration:none;transition:color .2s ease,background-color .2s ease,transform .2s ease}
+        .zigo-social-link svg{width:17px;height:17px;flex:0 0 auto;fill:currentColor}
+        .footer .zigo-social-link:hover{color:white;background:rgba(255,255,255,.1);transform:translateY(-2px)}
+        .zigo-social-link:focus-visible{outline:2px solid white;outline-offset:3px}
         .whatsapp{position:fixed;right:22px;bottom:22px;background:#22c55e;color:white;padding:14px 18px;border-radius:999px;font-weight:900;box-shadow:0 12px 30px rgba(34,197,94,.35);z-index:99}
 
         @media(max-width:900px){
@@ -246,6 +252,7 @@
             <a href="#">Términos y condiciones</a>
             <a href="#">Política de uso</a>
         </div>
+        @include('public.partials.social-links')
     </div>
 </footer>
 

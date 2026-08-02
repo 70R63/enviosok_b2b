@@ -696,8 +696,8 @@
             width: min(1180px, calc(100% - 40px));
             margin: 0 auto;
             display: grid;
-            grid-template-columns: 2fr 1fr 1fr 1fr;
-            gap: 42px;
+            grid-template-columns: 2fr repeat(4, 1fr);
+            gap: 28px;
         }
 
         .zigo-footer h4 {
@@ -722,6 +722,47 @@
 
         .zigo-footer a:hover {
             color: #ffffff;
+        }
+
+        .zigo-social-follow {
+            text-align: center;
+        }
+
+        .zigo-social-links {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .zigo-footer .zigo-social-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0;
+            padding: 6px 8px;
+            border-radius: 999px;
+            font-size: 13px;
+            line-height: 1;
+            transition: color .2s ease, background-color .2s ease, transform .2s ease;
+        }
+
+        .zigo-social-link svg {
+            width: 17px;
+            height: 17px;
+            flex: 0 0 auto;
+            fill: currentColor;
+        }
+
+        .zigo-footer .zigo-social-link:hover {
+            background: rgba(255, 255, 255, .1);
+            transform: translateY(-2px);
+        }
+
+        .zigo-social-link:focus-visible {
+            outline: 2px solid #ffffff;
+            outline-offset: 3px;
         }
 
         @media (max-width: 768px) {
@@ -1229,6 +1270,8 @@
                 <a href="{{ route('legal.terminos') }}">Términos y condiciones</a>
                 <a href="{{ route('legal.politica-envios') }}">Política de envíos</a>
             </div>
+
+            @include('public.partials.social-links')
         </div>
     </footer>
 
