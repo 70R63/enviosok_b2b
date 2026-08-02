@@ -256,11 +256,14 @@
     </div>
 </footer>
 
+@php($publicWhatsapp = app(\App\Services\Marketing\PublicChannelService::class)->active()->firstWhere('channel', 'whatsapp'))
+@if($publicWhatsapp)
 <a class="whatsapp"
-   href="https://wa.me/5215555555555?text=Hola%20ZIGO%2C%20quiero%20informaci%C3%B3n%20sobre%20cuenta%20empresarial"
-   target="_blank">
+   href="{{ $publicWhatsapp['url'] }}"
+   target="_blank" rel="noopener noreferrer">
     WhatsApp
 </a>
+@endif
 
 </body>
 </html>

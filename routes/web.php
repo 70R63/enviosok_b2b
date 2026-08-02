@@ -20,6 +20,7 @@ use App\Http\Controllers\CRM\CrmGuideController;
 use App\Http\Controllers\CRM\CrmDebtController;
 use App\Http\Controllers\CRM\CrmShippingProviderController;
 use App\Http\Controllers\CRM\CrmIdentityVerificationController;
+use App\Http\Controllers\CRM\CrmPublicChannelController;
 use App\Models\B2cCotizacion;
 
 /*
@@ -353,6 +354,12 @@ Route::middleware(['zigo.portal:crm', 'auth', 'roles:sysadmin,admin'])
         Route::get('/dashboard', function () {
             return view('crm.dashboard');
         })->name('dashboard');
+
+        Route::get('/marketing/canales-publicos', [CrmPublicChannelController::class, 'index'])
+            ->name('marketing.public-channels.index');
+
+        Route::put('/marketing/canales-publicos', [CrmPublicChannelController::class, 'update'])
+            ->name('marketing.public-channels.update');
 
         Route::get(
             '/paqueterias',

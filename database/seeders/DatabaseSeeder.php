@@ -15,6 +15,9 @@ class DatabaseSeeder extends Seeder
     public function run()
     {
         //DB::unprepared(file_get_contents(resource_path().'/db/sepomex.sql'));
-        $this->call([TipoVialidadSeeder::class]);
+        $this->call([
+            TipoVialidadSeeder::class,
+            ZigoPublicChannelsSeeder::class,
+        ]);
     }
 }

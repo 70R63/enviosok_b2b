@@ -1,8 +1,12 @@
+@inject('publicChannelService', 'App\Services\Marketing\PublicChannelService')
+@php($publicChannels = $publicChannelService->active()->keyBy('channel'))
+
 <div class="zigo-social-follow">
     <h4>Síguenos</h4>
     <div class="zigo-social-links">
+        @if($publicChannels->has('facebook'))
         <a class="zigo-social-link"
-           href="{{ config('social.facebook') }}"
+           href="{{ $publicChannels->get('facebook')['url'] }}"
            target="_blank"
            rel="noopener noreferrer"
            aria-label="Seguir a ZIGO en Facebook">
@@ -11,8 +15,10 @@
             </svg>
             <span>Facebook</span>
         </a>
+        @endif
+        @if($publicChannels->has('instagram'))
         <a class="zigo-social-link"
-           href="{{ config('social.instagram') }}"
+           href="{{ $publicChannels->get('instagram')['url'] }}"
            target="_blank"
            rel="noopener noreferrer"
            aria-label="Seguir a ZIGO en Instagram">
@@ -21,8 +27,10 @@
             </svg>
             <span>Instagram</span>
         </a>
+        @endif
+        @if($publicChannels->has('tiktok'))
         <a class="zigo-social-link"
-           href="{{ config('social.tiktok') }}"
+           href="{{ $publicChannels->get('tiktok')['url'] }}"
            target="_blank"
            rel="noopener noreferrer"
            aria-label="Seguir a ZIGO en TikTok">
@@ -31,5 +39,19 @@
             </svg>
             <span>TikTok</span>
         </a>
+        @endif
     </div>
+
+    @php($contactChannels = $publicChannels->only(['whatsapp', 'commercial_phone', 'support_phone', 'commercial_email', 'support_email']))
+    @if($contactChannels->isNotEmpty())
+        <h4>Contacto</h4>
+        <div class="zigo-public-contact">
+            @foreach($contactChannels as $channel)
+                <a href="{{ $channel['url'] }}"
+                   @if($channel['channel'] === 'whatsapp') target="_blank" rel="noopener noreferrer" @endif>
+                    {{ $channel['label'] }}
+                </a>
+            @endforeach
+        </div>
+    @endif
 </div>

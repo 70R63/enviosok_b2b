@@ -132,6 +132,14 @@
             Tarifas
         </a>
 
+        <div style="margin:20px 0 6px;color:#94a3b8;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;">
+            Marketing
+        </div>
+        <a href="{{ route('crm.marketing.public-channels.index') }}"
+           class="{{ request()->routeIs('crm.marketing.public-channels.*') ? 'active' : '' }}">
+            Canales públicos
+        </a>
+
         <a href="{{ route('crm.seguridad.index') }}"
            class="{{ request()->routeIs('crm.seguridad.*') ? 'active' : '' }}">
             Seguridad
