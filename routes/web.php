@@ -832,7 +832,7 @@ Route::post('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, '
     ->name('b2c.checkout.procesar');
 
 //LANDING PARA PROXIMAMENTE
-Route::get('/', [WaitlistController::class, 'index'])
+Route::get('/', [CotizacionPublicaController::class, 'index'])
     ->name('home');
 
 Route::get('/proximamente', [WaitlistController::class, 'index'])
