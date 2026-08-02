@@ -7,12 +7,12 @@
 
     <div class="summary-grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
         @foreach([
-            'internos' => 'Usuarios internos',
-            'b2b' => 'Usuarios B2B',
-            'b2c' => 'Usuarios B2C',
+            'internos' => 'Personal ZIGO',
+            'b2b' => 'Clientes B2B',
+            'b2c' => 'Clientes B2C',
             'inactivos' => 'Inactivos',
             'roles' => 'Roles',
-            'sin_clasificar' => 'Sin clasificación',
+            'sin_clasificar' => 'Por revisar',
         ] as $key => $label)
             <div class="summary-card"><span>{{ $label }}</span><strong>{{ $counts[$key] }}</strong></div>
         @endforeach

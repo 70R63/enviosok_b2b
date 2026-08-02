@@ -34,8 +34,6 @@
             Clientes
         </a>
 
-        <a href="#">Usuarios B2C</a>
-
         <a href="{{ route('crm.identity.index') }}"
            class="{{ request()->routeIs('crm.identity.*') ? 'active' : '' }}">
             Verificaciones
@@ -47,8 +45,6 @@
             @endif
         </a>
 
-        <a href="#">Usuarios Negocios</a>
-        <a href="#">Usuarios Soporte</a>
         <a href="#">Empresas</a>
 
         <a href="{{ route('crm.clientes.index', ['commercial_status' => 'prospecto']) }}"
@@ -140,17 +136,6 @@
            class="{{ request()->routeIs('crm.seguridad.*') ? 'active' : '' }}">
             Seguridad
         </a>
-
-        @if(request()->routeIs('crm.seguridad.*'))
-            <div style="margin-left:14px;border-left:2px solid rgba(255,255,255,.2);padding-left:10px">
-                <a href="{{ route('crm.seguridad.index') }}">Resumen</a>
-                <a href="{{ route('crm.seguridad.usuarios') }}">Identidades</a>
-                <a href="{{ route('crm.seguridad.roles') }}">Roles</a>
-                <a href="{{ route('crm.seguridad.auditoria') }}">Auditoría</a>
-            </div>
-        @endif
-
-        <a href="#">Configuración</a>
 
         <form method="POST" action="{{ route('crm.logout') }}">
             @csrf

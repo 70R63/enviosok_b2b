@@ -9,7 +9,7 @@
 @if(session('error')) <div class="alert alert-error">{{ session('error') }}</div> @endif
 
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
-    @foreach(['internos'=>'Internos','b2b'=>'B2B','b2c'=>'B2C','inactivos'=>'Inactivos','sin_clasificar'=>'Sin clasificar'] as $key=>$label)
+    @foreach(['internos'=>'Personal ZIGO','b2b'=>'Clientes B2B','b2c'=>'Clientes B2C','inactivos'=>'Inactivos','sin_clasificar'=>'Por revisar'] as $key=>$label)
         <a class="btn btn-small {{ $tab === $key ? '' : 'btn-gray' }}" href="{{ route('crm.seguridad.usuarios', ['tab'=>$key]) }}">{{ $label }}</a>
     @endforeach
 </div>
