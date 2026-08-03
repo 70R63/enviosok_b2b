@@ -22,18 +22,14 @@ class Authenticate extends Middleware
 
         $domainResolver = app(ZigoDomainResolver::class);
 
-        if ($domainResolver->isSubdomainRoutingEnabled()) {
-            $loginRoutes = [
-                'crm' => 'crm.login',
-                'b2b' => 'negocios.login',
-                'support' => 'soporte.login',
-            ];
+        $loginRoute = $domainResolver->loginRouteName(
+            $domainResolver->currentPortal($request->getHost())
+        );
 
-            $portal = $domainResolver->currentPortal($request->getHost());
-
-            if (isset($loginRoutes[$portal])) {
-                return route($loginRoutes[$portal]);
-            }
+        if ($loginRoute !== null) {
+            return $loginRoute === 'devops.login'
+                ? route($loginRoute, [], false)
+                : route($loginRoute);
         }
 
         return route('login');

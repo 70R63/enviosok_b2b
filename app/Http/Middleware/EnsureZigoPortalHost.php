@@ -17,6 +17,11 @@ class EnsureZigoPortalHost
 
     public function handle(Request $request, Closure $next, string $portal)
     {
+        abort_unless(
+            $this->domainResolver->supportsPortal($portal),
+            404
+        );
+
         if (app()->runningInConsole()
             || !$this->domainResolver->isSubdomainRoutingEnabled()) {
             return $next($request);

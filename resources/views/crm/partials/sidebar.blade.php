@@ -140,6 +140,15 @@
             Canales públicos
         </a>
 
+        @if(auth()->user()?->hasRol('sysadmin') || auth()->user()?->hasRol('admin') || auth()->user()?->hasRol('soporte'))
+            <div style="margin:20px 0 6px;color:#94a3b8;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;">
+                DevOps
+            </div>
+            <a href="{{ config('zigo_domains.portals.devops.url') }}">
+                Centro de despliegues
+            </a>
+        @endif
+
         <a href="{{ route('crm.seguridad.index') }}"
            class="{{ request()->routeIs('crm.seguridad.*') ? 'active' : '' }}">
             Seguridad

@@ -21,6 +21,8 @@ use App\Http\Controllers\CRM\CrmDebtController;
 use App\Http\Controllers\CRM\CrmShippingProviderController;
 use App\Http\Controllers\CRM\CrmIdentityVerificationController;
 use App\Http\Controllers\CRM\CrmPublicChannelController;
+use App\Http\Controllers\CRM\CrmDevOpsController;
+use App\Http\Controllers\DevOps\DevOpsAuthController;
 use App\Models\B2cCotizacion;
 
 /*
@@ -35,10 +37,16 @@ use App\Models\B2cCotizacion;
 */
 
 
-Route::get('/', [CotizacionPublicaController::class, 'index'])->name('home');
+Route::domain(config('zigo_domains.portals.b2c.host'))
+    ->group(function () {
+        Route::get('/', [CotizacionPublicaController::class, 'index'])
+            ->name('home');
 
-Route::get('/limpiar-cotizacion', [CotizacionPublicaController::class, 'limpiarCotizacion'])
-    ->name('landing.cotizacion.limpiar');
+        Route::get('/limpiar-cotizacion', [
+            CotizacionPublicaController::class,
+            'limpiarCotizacion',
+        ])->name('landing.cotizacion.limpiar');
+    });
 
 Route::resource('profile','userProfileController');
 
@@ -330,6 +338,51 @@ Route::middleware(['zigo.portal:b2b', 'auth', 'roles:sysadmin,admin,adminops,ope
             return view('negocios.dashboard');
         })->name('dashboard');
     });
+
+Route::domain(config('zigo_domains.portals.devops.host'))
+    ->middleware(['ensure.zigo.portal:devops'])
+    ->group(function (): void {
+        Route::get('/login', [DevOpsAuthController::class, 'showLogin'])
+            ->name('devops.login');
+        Route::post('/login', [DevOpsAuthController::class, 'login'])
+            ->middleware('throttle:5,1')
+            ->name('devops.login.store');
+    });
+
+Route::domain(config('zigo_domains.portals.devops.host'))
+    ->middleware(['ensure.zigo.portal:devops', 'auth', 'roles:sysadmin,admin,soporte', 'throttle:30,1'])
+    ->name('devops.')
+    ->group(function (): void {
+        Route::get('/', [CrmDevOpsController::class, 'index'])->name('index');
+        Route::post('/logout', [DevOpsAuthController::class, 'logout'])->name('logout');
+        Route::get('/deployments', [CrmDevOpsController::class, 'deployments'])->name('deployments.index');
+        Route::get('/deployments/create', [CrmDevOpsController::class, 'create'])->name('deployments.create');
+        Route::post('/deployments', [CrmDevOpsController::class, 'store'])->middleware('throttle:5,1')->name('deployments.store');
+        Route::get('/deployments/{deployment}', [CrmDevOpsController::class, 'show'])->whereNumber('deployment')->name('deployments.show');
+        Route::post('/deployments/{deployment}/validate', [CrmDevOpsController::class, 'validatePackage'])->whereNumber('deployment')->middleware('throttle:5,1')->name('deployments.validate');
+        Route::post('/deployments/{deployment}/deploy', [CrmDevOpsController::class, 'deploy'])->whereNumber('deployment')->middleware('throttle:3,1')->name('deployments.deploy');
+        Route::post('/deployments/{deployment}/rollback', [CrmDevOpsController::class, 'rollback'])->whereNumber('deployment')->middleware('throttle:3,1')->name('deployments.rollback');
+        Route::get('/health', [CrmDevOpsController::class, 'health'])->name('health');
+        Route::post('/health/run', [CrmDevOpsController::class, 'runHealth'])->middleware('throttle:5,1')->name('health.run');
+    });
+
+Route::any('/crm/devops/{path?}', function (?string $path = null) {
+    $target = rtrim((string) config('zigo_domains.portals.devops.url'), '/');
+    if ($path !== null && $path !== '') {
+        $target .= '/' . ltrim($path, '/');
+    }
+    if (request()->getQueryString()) {
+        $target .= '?' . request()->getQueryString();
+    }
+
+    return redirect()->away(
+        $target,
+        request()->isMethod('GET') || request()->isMethod('HEAD') ? 302 : 307
+    );
+})
+    ->where('path', '.*')
+    ->middleware(['ensure.zigo.portal:crm', 'auth', 'roles:sysadmin,admin,soporte'])
+    ->name('crm.devops.redirect');
 
 
 // ===============================
@@ -837,10 +890,6 @@ Route::get('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'c
 
 Route::post('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'procesarCheckout'])
     ->name('b2c.checkout.procesar');
-
-//LANDING PARA PROXIMAMENTE
-Route::get('/', [CotizacionPublicaController::class, 'index'])
-    ->name('home');
 
 Route::get('/proximamente', [WaitlistController::class, 'index'])
     ->name('waitlist.index');

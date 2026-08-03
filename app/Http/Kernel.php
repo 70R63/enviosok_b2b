@@ -32,6 +32,7 @@ class Kernel extends HttpKernel
         'web' => [
             \App\Http\Middleware\EncryptCookies::class,
             \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+            \App\Http\Middleware\UseZigoPortalSessionCookie::class,
             \Illuminate\Session\Middleware\StartSession::class,
             \Illuminate\View\Middleware\ShareErrorsFromSession::class,
             \App\Http\Middleware\VerifyCsrfToken::class,
@@ -69,5 +70,6 @@ class Kernel extends HttpKernel
         'zigo.api' => \App\Http\Middleware\ValidateZigoApiKey::class,
         'zigo.product' => \App\Http\Middleware\EnsureApiProductAccess::class,
         'zigo.portal' => \App\Http\Middleware\EnsureZigoPortalHost::class,
+        'ensure.zigo.portal' => \App\Http\Middleware\EnsureZigoPortalHost::class,
     ];
 }

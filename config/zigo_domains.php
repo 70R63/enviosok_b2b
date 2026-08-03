@@ -31,6 +31,10 @@ $portalUrls = [
         env('ZIGO_API_URL'),
         'https://api.zigo-envios.com'
     ),
+    'devops' => $normalizeUrl(
+        env('ZIGO_DEVOPS_URL'),
+        'https://devops.zigo-envios.com'
+    ),
 ];
 
 $portals = [];
@@ -40,6 +44,21 @@ foreach ($portalUrls as $portal => $url) {
         'url' => $url,
         'host' => strtolower((string) parse_url($url, PHP_URL_HOST)),
     ];
+}
+
+$configuredDevOpsHost = trim((string) env('ZIGO_DEVOPS_HOST', ''));
+
+if ($configuredDevOpsHost !== '') {
+    $devOpsHost = parse_url(
+        str_contains($configuredDevOpsHost, '://')
+            ? $configuredDevOpsHost
+            : '//' . $configuredDevOpsHost,
+        PHP_URL_HOST
+    );
+
+    $portals['devops']['host'] = strtolower(
+        rtrim((string) $devOpsHost, '.')
+    );
 }
 
 return [

@@ -4,6 +4,15 @@ namespace App\Services;
 
 class ZigoDomainResolver
 {
+    public const PORTALS = [
+        'b2c',
+        'b2b',
+        'crm',
+        'support',
+        'api',
+        'devops',
+    ];
+
     public function currentPortal(?string $host = null): ?string
     {
         return $this->portalForHost($host ?? request()->getHost());
@@ -27,6 +36,35 @@ class ZigoDomainResolver
         $url = config("zigo_domains.portals.{$portal}.url");
 
         return is_string($url) && $url !== '' ? $url : null;
+    }
+
+    public function host(string $portal): ?string
+    {
+        if (!in_array($portal, self::PORTALS, true)) {
+            return null;
+        }
+
+        $host = config("zigo_domains.portals.{$portal}.host");
+
+        return is_string($host) && $host !== '' ? $host : null;
+    }
+
+    public function supportsPortal(string $portal): bool
+    {
+        return in_array($portal, self::PORTALS, true)
+            && $this->host($portal) !== null;
+    }
+
+    public function loginRouteName(?string $portal): ?string
+    {
+        $routes = [
+            'devops' => 'devops.login',
+            'crm' => 'crm.login',
+            'b2b' => 'negocios.login',
+            'support' => 'soporte.login',
+        ];
+
+        return $routes[$portal] ?? null;
     }
 
     public function isSubdomainRoutingEnabled(): bool
