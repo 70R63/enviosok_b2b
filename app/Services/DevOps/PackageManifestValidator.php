@@ -166,7 +166,16 @@ class PackageManifestValidator
     private function validateMigrationsAndSeeders(array $manifest, array $files): void
     {
         foreach ($manifest['migrations'] as $migration) {
-            $this->failUnless(is_string($migration) && str_starts_with($migration, 'database/migrations/') && str_ends_with($migration, '.php') && in_array($migration, $files, true), 'Migración declarada inválida.');
+            $this->failUnless(
+                is_string($migration)
+                    && str_starts_with(
+                        $migration,
+                        'database/migrations/'
+                    )
+                    && str_ends_with($migration, '.php')
+                    && in_array($migration, $files, true),
+                'Migración declarada inválida.'
+            );
         }
         $actualMigrations = array_values(array_filter($files, fn (string $path): bool => str_starts_with($path, 'database/migrations/')));
         $this->failUnless($manifest['migrate'] || $actualMigrations === [], 'El paquete incluye migraciones pero migrate es falso.');
