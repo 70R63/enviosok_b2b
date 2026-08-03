@@ -29,12 +29,12 @@
 @if($deployment->status === 'validated')
     @if(!config('zigo_devops.enabled'))<div class="alert alert-info">La ejecución está deshabilitada por configuración.</div>
     @elseif($deployment->environment === 'production' && !config('zigo_devops.allow_production'))<div class="alert alert-info">Los despliegues a producción están deshabilitados.</div>
-    @else<form method="POST" action="{{ url('/deployments/' . $deployment->id . '/deploy') }}">@csrf
+    @else<form method="POST" action="{{ url('/deployments/' . $deployment->id . '/deploy') }}" onsubmit="if(this.dataset.submitting==='true'){return false;}this.dataset.submitting='true';const button=this.querySelector('button[type=submit]');button.disabled=true;button.textContent='Desplegando…';">@csrf
         @if($deployment->environment === 'production')<label for="production_confirmation"><strong>Escribe DESPLEGAR-PRD para confirmar</strong></label><input id="production_confirmation" name="production_confirmation" autocomplete="off" required style="max-width:320px;margin:8px 0 14px;">@endif
         <button class="btn" type="submit">Desplegar en {{ $deployment->environment === 'production' ? 'PRD' : 'Stage' }}</button>
     </form>@endif
 @endif
-@if($deployment->rollback_available)<form method="POST" action="{{ url('/deployments/' . $deployment->id . '/rollback') }}" style="margin-top:14px;">@csrf<button class="btn btn-gray" type="submit">Rollback de archivos</button></form>@endif
+@if($deployment->rollback_available)<form method="POST" action="{{ url('/deployments/' . $deployment->id . '/rollback') }}" style="margin-top:14px;" onsubmit="if(this.dataset.submitting==='true'){return false;}this.dataset.submitting='true';const button=this.querySelector('button[type=submit]');button.disabled=true;button.textContent='Revirtiendo…';">@csrf<button class="btn btn-gray" type="submit">Rollback de archivos</button></form>@endif
 </section>
 @endif
 

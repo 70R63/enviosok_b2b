@@ -30,7 +30,7 @@ class DeploymentExecutor
         }
         $copied = false; $migrationApplied = false;
 
-        $deployment->update(['status' => 'deploying', 'approved_by_user_id' => auth()->id(), 'started_at' => now(), 'finished_at' => null]);
+        $deployment->update(['approved_by_user_id' => auth()->id()]);
         $this->log($deployment, 'info', 'start', 'Despliegue iniciado.');
 
         try {
@@ -81,7 +81,7 @@ class DeploymentExecutor
 
     private function assertDeployable(ZigoDeployment $deployment): void
     {
-        if (!config('zigo_devops.enabled') || $deployment->status !== 'validated') { throw new RuntimeException('El despliegue no está habilitado o validado.'); }
+        if (!config('zigo_devops.enabled') || $deployment->status !== 'deploying') { throw new RuntimeException('El despliegue no está habilitado o iniciado.'); }
         if ($deployment->environment === 'production' && !config('zigo_devops.allow_production')) { throw new RuntimeException('Los despliegues a producción están deshabilitados.'); }
     }
 

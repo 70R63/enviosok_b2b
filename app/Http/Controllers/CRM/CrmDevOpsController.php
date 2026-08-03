@@ -82,6 +82,26 @@ class CrmDevOpsController extends Controller
             abort_unless(config('zigo_devops.allow_production'), 403, 'Producción está deshabilitada.');
             $request->validate(['production_confirmation' => ['required', Rule::in(['DESPLEGAR-PRD'])]]);
         }
+
+        abort_unless($deployment->status === 'validated', 422);
+
+        $updated = ZigoDeployment::query()
+            ->whereKey($deployment->id)
+            ->where('status', 'validated')
+            ->update([
+                'status' => 'deploying',
+                'started_at' => now(),
+                'finished_at' => null,
+            ]);
+
+        if ($updated !== 1) {
+            return back()->withErrors([
+                'deployment' => 'El despliegue ya fue iniciado o cambió de estado.',
+            ]);
+        }
+
+        $deployment->refresh();
+
         try {
             $executor->deploy($deployment);
             return back()->with('success', 'Despliegue completado.');

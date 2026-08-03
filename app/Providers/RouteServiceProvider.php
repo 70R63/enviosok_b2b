@@ -50,5 +50,63 @@ class RouteServiceProvider extends ServiceProvider
         RateLimiter::for('api', function (Request $request) {
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
+
+        RateLimiter::for(
+            'devops-package-store',
+            fn (Request $request) => Limit::perMinute(10)
+                ->by($this->devOpsRateLimitKey($request, 'store'))
+        );
+        RateLimiter::for(
+            'devops-package-validate',
+            fn (Request $request) => Limit::perMinute(5)
+                ->by($this->devOpsRateLimitKey(
+                    $request,
+                    'validate',
+                    true
+                ))
+        );
+        RateLimiter::for(
+            'devops-package-deploy',
+            fn (Request $request) => Limit::perMinute(2)
+                ->by($this->devOpsRateLimitKey(
+                    $request,
+                    'deploy',
+                    true
+                ))
+        );
+        RateLimiter::for(
+            'devops-package-rollback',
+            fn (Request $request) => Limit::perMinute(2)
+                ->by($this->devOpsRateLimitKey(
+                    $request,
+                    'rollback',
+                    true
+                ))
+        );
+        RateLimiter::for(
+            'devops-health-run',
+            fn (Request $request) => Limit::perMinute(5)
+                ->by($this->devOpsRateLimitKey($request, 'health'))
+        );
+    }
+
+    private function devOpsRateLimitKey(
+        Request $request,
+        string $action,
+        bool $includeDeployment = false
+    ): string {
+        $userId = $request->user()?->getAuthIdentifier() ?? 'guest';
+        $key = "{$action}:{$userId}";
+
+        if ($includeDeployment) {
+            $deployment = $request->route('deployment');
+            $deploymentId = is_object($deployment)
+                && method_exists($deployment, 'getKey')
+                    ? $deployment->getKey()
+                    : $deployment;
+            $key .= ':' . ($deploymentId ?? 'unknown');
+        }
+
+        return $key;
     }
 }
