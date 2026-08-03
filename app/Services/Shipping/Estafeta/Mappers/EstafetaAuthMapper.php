@@ -1,0 +1,4 @@
+<?php
+namespace App\Services\Shipping\Estafeta\Mappers;
+use App\Services\Shipping\Estafeta\Data\EstafetaAuthResponse;
+final class EstafetaAuthMapper { public function fromProvider(array $data,bool $httpSuccess=true,?string $correlationId=null):EstafetaAuthResponse{$token=$data['access_token']??null;return new EstafetaAuthResponse($httpSuccess&&is_string($token)&&$token!=='',is_string($token)?$token:null,isset($data['expires_in'])?(int)$data['expires_in']:null,isset($data['token_type'])?(string)$data['token_type']:null,isset($data['error'])?(string)$data['error']:null,isset($data['error_description'])?(string)$data['error_description']:null,['correlation_id'=>$correlationId,'raw_classification'=>$httpSuccess?'success':'authentication_error','response_summary'=>['has_token'=>filled($token),'has_expiry'=>isset($data['expires_in'])]]);} }

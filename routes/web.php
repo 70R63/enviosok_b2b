@@ -1008,3 +1008,9 @@ Route::resource('saldos/externas','Saldos\GuiasExternasController')
 
 
 require __DIR__.'/auth.php';
+
+Route::domain(config('zigo_domains.portals.crm.host'))->middleware(['auth','roles:sysadmin'])->group(function(){
+    Route::get('/crm/paqueterias/diagnostico', [\App\Http\Controllers\CRM\CrmShippingDiagnosticController::class, 'index'])->name('crm.shipping.diagnostics');
+    Route::post('/internal/shipping/quote-probe', \App\Http\Controllers\Internal\ShippingQuoteProbeController::class)->middleware('throttle:3,1')->name('crm.shipping.quote-probe');
+});
+Route::domain(config('zigo_domains.portals.devops.host'))->middleware(['auth','roles:sysadmin'])->post('/internal/shipping/quote-probe', \App\Http\Controllers\Internal\ShippingQuoteProbeController::class)->middleware('throttle:3,1')->name('devops.shipping.quote-probe');

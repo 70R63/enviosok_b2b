@@ -1,0 +1,4 @@
+<?php
+namespace App\Console\Commands;
+use App\Services\Shipping\ProviderStrategyResolver;use Illuminate\Console\Command;
+final class ShippingStrategyCommand extends Command {protected $signature='zigo:shipping-strategy {--environment=stage} {--operation=all} {--carrier=estafeta}';protected $description='Resuelve estrategia shipping por operación.';public function handle(ProviderStrategyResolver $resolver):int{$environment=(string)$this->option('environment');$operation=(string)$this->option('operation');$ops=$operation==='all'?['auth','coverage','quote','shipment','tracking','cancellation']:[$operation];foreach($ops as $op){$d=$resolver->resolve($op,(string)$this->option('carrier'),$environment);$this->line($op.': '.$d['strategy'].' — '.implode(', ',$d['reasons']??[]));}return self::SUCCESS;}}

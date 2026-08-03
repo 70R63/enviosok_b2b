@@ -1,0 +1,4 @@
+<?php
+namespace App\Services\Shipping\Providers;
+use App\Contracts\Shipping\CarrierQuoteProvider;use App\Services\Shipping\Data\{UnifiedQuoteRequest,UnifiedQuoteResponse};use App\Services\ZigoContractRateService;use Illuminate\Support\Str;
+final class ContractualEstafetaQuoteProvider implements CarrierQuoteProvider {public function __construct(private ZigoContractRateService $rates){}public function strategy():string{return'contractual_local';}public function quote(UnifiedQuoteRequest $r):UnifiedQuoteResponse{$rate=$this->rates->calculate(['carrier'=>'ESTAFETA','service_code'=>$r->serviceCode??'TERRESTRE','weight_kg'=>$r->weight]);return new UnifiedQuoteResponse(true,$this->strategy(),'none',[['carrier'=>'estafeta','service_code'=>$rate['service_code'],'provider_base_price'=>$rate['provider_base_price'],'commercial_price'=>null,'currency'=>$rate['currency'],'extended_area'=>false]],(string)Str::uuid(),null,false,['contract_rate_id'=>$rate['contract_rate_id']]);}}

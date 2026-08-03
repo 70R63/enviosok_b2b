@@ -36,6 +36,10 @@ return [
             'ZIGO_SHIPPING_PROVIDER',
             'legacy_estafeta'
         ),
+        'contract_recorder_enabled' => env('ZIGO_SHIPPING_CONTRACT_RECORDER_ENABLED', false),
+        'contract_recorder_allow_production' => env('ZIGO_SHIPPING_CONTRACT_RECORDER_ALLOW_PRODUCTION', false),
+        'unified_quote_enabled' => env('ZIGO_B2C_UNIFIED_QUOTE_ENABLED', false),
+        'stage_active_checks' => env('ZIGO_DEVOPS_SHIPPING_STAGE_ACTIVE_CHECKS', false),
     ],
 
     'b2c' => [

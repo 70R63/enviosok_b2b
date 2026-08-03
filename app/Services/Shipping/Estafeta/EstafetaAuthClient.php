@@ -1,0 +1,6 @@
+<?php
+namespace App\Services\Shipping\Estafeta;
+use App\Services\Shipping\Estafeta\Data\{EstafetaAuthRequest,EstafetaOperationResult};
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
+class EstafetaAuthClient { public function authenticate():EstafetaOperationResult { $dto=new EstafetaAuthRequest((string)config('zigo_estafeta.client_id'),(string)config('zigo_estafeta.client_secret'),(string)config('zigo_estafeta.scope'));$base=rtrim((string)config('zigo_estafeta.auth_url'),'/');$path=ltrim((string)config('zigo_estafeta.auth_path'),'/');$url=str_ends_with($base,$path)?$base:$base.'/'.$path;$id=(string)Str::uuid();$start=hrtime(true);$response=Http::asForm()->acceptJson()->timeout((int)config('zigo_estafeta.timeout'))->connectTimeout((int)config('zigo_estafeta.connect_timeout'))->withHeaders(['X-Correlation-ID'=>$id])->post($url,$dto->toForm());$data=(array)($response->json()??[]);$ok=$response->successful()&&filled($data['access_token']??null);return new EstafetaOperationResult($ok,$ok?'success':($response->status()===401?'authentication_error':'provider_error'),$response->status(),$data,$id,(int)round((hrtime(true)-$start)/1000000),0,isset($data['error'])?(string)$data['error']:null); } }
