@@ -25,7 +25,7 @@
 
 @if($canDeploy)
 <section class="card"><h2>Acciones controladas</h2>
-@if(in_array($deployment->status, ['uploaded', 'failed'], true))<form method="POST" action="{{ url('/deployments/' . $deployment->id . '/validate') }}">@csrf<button class="btn" type="submit">Validar paquete</button></form>@endif
+@if(in_array($deployment->status, ['uploaded', 'failed'], true))<form method="POST" action="{{ url('/deployments/' . $deployment->id . '/validate') }}" onsubmit="this.querySelector('button[type=submit]').disabled=true;this.querySelector('button[type=submit]').textContent='Validando…';">@csrf<button class="btn" type="submit">Validar paquete</button></form>@endif
 @if($deployment->status === 'validated')
     @if(!config('zigo_devops.enabled'))<div class="alert alert-info">La ejecución está deshabilitada por configuración.</div>
     @elseif($deployment->environment === 'production' && !config('zigo_devops.allow_production'))<div class="alert alert-info">Los despliegues a producción están deshabilitados.</div>

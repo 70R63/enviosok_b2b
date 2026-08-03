@@ -350,18 +350,18 @@ Route::domain(config('zigo_domains.portals.devops.host'))
     });
 
 Route::domain(config('zigo_domains.portals.devops.host'))
-    ->middleware(['ensure.zigo.portal:devops', 'auth', 'roles:sysadmin,admin,soporte', 'throttle:30,1'])
+    ->middleware(['ensure.zigo.portal:devops', 'auth', 'roles:sysadmin,admin,soporte'])
     ->name('devops.')
     ->group(function (): void {
         Route::get('/', [CrmDevOpsController::class, 'index'])->name('index');
-        Route::post('/logout', [DevOpsAuthController::class, 'logout'])->name('logout');
+        Route::post('/logout', [DevOpsAuthController::class, 'logout'])->middleware('throttle:10,1')->name('logout');
         Route::get('/deployments', [CrmDevOpsController::class, 'deployments'])->name('deployments.index');
         Route::get('/deployments/create', [CrmDevOpsController::class, 'create'])->name('deployments.create');
-        Route::post('/deployments', [CrmDevOpsController::class, 'store'])->middleware('throttle:5,1')->name('deployments.store');
+        Route::post('/deployments', [CrmDevOpsController::class, 'store'])->middleware('throttle:10,1')->name('deployments.store');
         Route::get('/deployments/{deployment}', [CrmDevOpsController::class, 'show'])->whereNumber('deployment')->name('deployments.show');
         Route::post('/deployments/{deployment}/validate', [CrmDevOpsController::class, 'validatePackage'])->whereNumber('deployment')->middleware('throttle:5,1')->name('deployments.validate');
-        Route::post('/deployments/{deployment}/deploy', [CrmDevOpsController::class, 'deploy'])->whereNumber('deployment')->middleware('throttle:3,1')->name('deployments.deploy');
-        Route::post('/deployments/{deployment}/rollback', [CrmDevOpsController::class, 'rollback'])->whereNumber('deployment')->middleware('throttle:3,1')->name('deployments.rollback');
+        Route::post('/deployments/{deployment}/deploy', [CrmDevOpsController::class, 'deploy'])->whereNumber('deployment')->middleware('throttle:2,1')->name('deployments.deploy');
+        Route::post('/deployments/{deployment}/rollback', [CrmDevOpsController::class, 'rollback'])->whereNumber('deployment')->middleware('throttle:2,1')->name('deployments.rollback');
         Route::get('/health', [CrmDevOpsController::class, 'health'])->name('health');
         Route::post('/health/run', [CrmDevOpsController::class, 'runHealth'])->middleware('throttle:5,1')->name('health.run');
     });
