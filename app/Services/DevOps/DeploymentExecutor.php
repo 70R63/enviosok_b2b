@@ -99,11 +99,27 @@ class DeploymentExecutor
 
     private function lintPhp(ZigoDeployment $deployment, string $staging, array $files): void
     {
+        $stagingRoot = realpath($staging);
+        if ($stagingRoot === false || !is_dir($stagingRoot)) { throw new RuntimeException('El directorio temporal del despliegue no está disponible.'); }
+
         foreach ($files as $file) {
             if (!str_ends_with(strtolower($file['path']), '.php')) { continue; }
-            $process = new Process([PHP_BINARY, '-l', $staging . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $file['path'])]);
+            $relative = $file['path'];
+            $candidate = $stagingRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+            $absolute = realpath($candidate);
+            if ($absolute === false || !is_file($absolute) || !$this->isWithinDirectory($absolute, $stagingRoot)) {
+                throw new RuntimeException("El archivo PHP temporal no está disponible: {$relative}.");
+            }
+
+            $process = new Process([$this->phpBinary(), '-l', $absolute]);
             $process->setTimeout(30); $process->run();
-            if (!$process->isSuccessful()) { throw new RuntimeException('Falló php -l para ' . $file['path'] . '.'); }
+            if (!$process->isSuccessful()) {
+                $exitCode = $process->getExitCode() ?? -1;
+                $stdout = $this->sanitizeProcessOutput($process->getOutput(), [$absolute, $stagingRoot]);
+                $stderr = $this->sanitizeProcessOutput($process->getErrorOutput(), [$absolute, $stagingRoot]);
+                $this->log($deployment, 'error', 'php-l', "php -l falló. Archivo: {$relative}. Código: {$exitCode}. stdout: {$stdout}. stderr: {$stderr}.");
+                throw new RuntimeException("Falló php -l para {$relative}. Código: {$exitCode}.");
+            }
         }
         $this->log($deployment, 'info', 'php-l', 'Sintaxis PHP validada.');
     }
@@ -140,9 +156,45 @@ class DeploymentExecutor
 
     private function runArtisan(ZigoDeployment $deployment, string $target, array $arguments, string $step): void
     {
-        $process = new Process(array_merge([PHP_BINARY, 'artisan'], $arguments), $target, null, null, 300); $process->run();
-        if (!$process->isSuccessful()) { throw new RuntimeException("Falló el paso interno {$step}."); }
+        $process = new Process(array_merge([$this->phpBinary(), 'artisan'], $arguments), $target, null, null, 300); $process->run();
+        if (!$process->isSuccessful()) {
+            $exitCode = $process->getExitCode() ?? -1;
+            $stdout = $this->sanitizeProcessOutput($process->getOutput(), [$target]);
+            $stderr = $this->sanitizeProcessOutput($process->getErrorOutput(), [$target]);
+            $this->log($deployment, 'error', $step, "Proceso interno falló. Código: {$exitCode}. stdout: {$stdout}. stderr: {$stderr}.");
+            throw new RuntimeException("Falló el paso interno {$step}. Código: {$exitCode}.");
+        }
         $this->log($deployment, 'info', $step, "Paso interno {$step} completado.");
+    }
+
+    private function phpBinary(): string
+    {
+        $configured = config('zigo_devops.php_binary');
+        if (!is_string($configured) || trim($configured) === '') { throw new RuntimeException('El binario PHP CLI configurado no está disponible.'); }
+        $binary = realpath(trim($configured));
+        if ($binary === false || !is_file($binary) || !is_executable($binary)) { throw new RuntimeException('El binario PHP CLI configurado no está disponible.'); }
+        return $binary;
+    }
+
+    private function isWithinDirectory(string $path, string $directory): bool
+    {
+        $normalizedPath = str_replace('\\', '/', $path);
+        $normalizedDirectory = rtrim(str_replace('\\', '/', $directory), '/');
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $normalizedPath = strtolower($normalizedPath);
+            $normalizedDirectory = strtolower($normalizedDirectory);
+        }
+        return str_starts_with($normalizedPath, $normalizedDirectory . '/');
+    }
+
+    private function sanitizeProcessOutput(string $output, array $paths): string
+    {
+        $sanitized = strip_tags($output);
+        foreach (array_merge($paths, [base_path(), storage_path()]) as $path) {
+            if (is_string($path) && $path !== '') { $sanitized = str_ireplace([$path, str_replace('\\', '/', $path)], '[PATH]', $sanitized); }
+        }
+        $sanitized = preg_replace('/(?i)(password|token|secret|api[_-]?key|authorization)\s*[:=]\s*[^\s,;]+/', '$1=[REDACTED]', $sanitized);
+        return substr(trim((string) $sanitized), 0, 500);
     }
 
     private function log(ZigoDeployment $deployment, string $level, string $step, string $message): void

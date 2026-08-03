@@ -18,7 +18,7 @@ param(
     [string] $BaseCommit,
 
     [Parameter(Mandatory = $true)]
-    [ValidatePattern('^[a-fA-F0-9]{7,40}$')]
+    [ValidatePattern('^(HEAD|[a-fA-F0-9]{7,40})$')]
     [string] $TargetCommit,
 
     [Parameter(Mandatory = $true)]
@@ -102,24 +102,46 @@ function Assert-PortableAllowedPath {
     }
 }
 
+function Test-AllowedRoot {
+    param([Parameter(Mandatory = $true)][string] $Path)
+
+    foreach ($root in $allowedRoots) {
+        if ($Path.StartsWith($root, [StringComparison]::Ordinal)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 Invoke-GitChecked @('cat-file', '-e', "$BaseCommit`^{commit}") | Out-Null
 Invoke-GitChecked @('cat-file', '-e', "$TargetCommit`^{commit}") | Out-Null
+$targetCommitHash = (Invoke-GitChecked @('rev-parse', '--verify', "$TargetCommit`^{commit}") | Select-Object -First 1).Trim().ToLowerInvariant()
 
 $deletedFiles = @(Invoke-GitChecked @(
     'diff', '--name-only', '--diff-filter=D', $BaseCommit, $TargetCommit
-)) | Where-Object { $_ -ne '' }
-if ($deletedFiles.Count -gt 0) {
-    throw 'El contrato MVP no permite eliminar archivos: ' + ($deletedFiles -join ', ')
+)) | Where-Object { $_ -ne '' } | ForEach-Object {
+    $_.Replace('\', '/')
+} | Sort-Object -Unique
+$allowedDeletedFiles = @($deletedFiles | Where-Object { Test-AllowedRoot $_ })
+if ($allowedDeletedFiles.Count -gt 0) {
+    throw 'El contrato MVP no permite eliminar archivos permitidos: ' + ($allowedDeletedFiles -join ', ')
 }
 
-$files = @(Invoke-GitChecked @(
+$changedFiles = @(Invoke-GitChecked @(
     'diff', '--name-only', '--diff-filter=ACMRT', $BaseCommit, $TargetCommit
 )) | Where-Object { $_ -ne '' } | ForEach-Object {
     $_.Replace('\', '/')
 } | Sort-Object -Unique
+$files = @($changedFiles | Where-Object { Test-AllowedRoot $_ })
+$excludedFiles = @(
+    $changedFiles | Where-Object { -not (Test-AllowedRoot $_) }
+    $deletedFiles | Where-Object { -not (Test-AllowedRoot $_) }
+) | Sort-Object -Unique
 
 if ($files.Count -eq 0) {
-    throw 'No hay archivos para empaquetar entre los commits indicados.'
+    $excludedSummary = if ($excludedFiles.Count -gt 0) { $excludedFiles -join ', ' } else { '(ninguno)' }
+    throw "No quedan archivos permitidos para empaquetar después del filtro. Archivos excluidos: $excludedSummary"
 }
 foreach ($file in $files) {
     Assert-PortableAllowedPath $file
@@ -197,7 +219,7 @@ try {
             package_name = $PackageName
             environment = $Environment
             branch = if ($Branch) { $Branch } else { $null }
-            commit_hash = $TargetCommit.ToLowerInvariant()
+            commit_hash = $targetCommitHash
             files = @($manifestFiles)
             migrate = ($migrations.Count -gt 0)
             migrations = @($migrations)
@@ -264,4 +286,14 @@ try {
     }
 }
 
-Write-Output $resolvedOutput
+Write-Output 'Archivos incluidos:'
+$files | ForEach-Object { Write-Output "  - $_" }
+Write-Output 'Archivos excluidos:'
+if ($excludedFiles.Count -eq 0) {
+    Write-Output '  - (ninguno)'
+} else {
+    $excludedFiles | ForEach-Object { Write-Output "  - $_" }
+}
+Write-Output "Ruta del ZIP: $resolvedOutput"
+Write-Output "SHA-256: $((Get-FileHash -LiteralPath $resolvedOutput -Algorithm SHA256).Hash.ToLowerInvariant())"
+Write-Output "Commit objetivo: $targetCommitHash"
