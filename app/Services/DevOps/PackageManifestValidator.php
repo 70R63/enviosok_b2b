@@ -30,16 +30,27 @@ class PackageManifestValidator
                 $stat = $zip->statIndex($index);
                 $this->failUnless(is_array($stat), 'No fue posible inspeccionar una entrada del ZIP.');
                 $raw = (string) $stat['name'];
-                $this->failUnless(!str_contains($raw, '\\'), 'El ZIP contiene separadores de ruta no permitidos.');
-                $path = trim($raw, '/');
+                $normalized = str_replace('\\', '/', $raw);
+                $this->failUnless(
+                    !str_starts_with($normalized, '/')
+                        && !preg_match('/^[A-Za-z]:/', $normalized),
+                    "Ruta absoluta no permitida: {$normalized}"
+                );
+                $path = trim($normalized, '/');
                 if ($path === '') { continue; }
-                $isDirectory = str_ends_with($raw, '/');
-                $this->validatePath($path, $isDirectory);
                 $this->failUnless(!$this->isSymlink($zip, $index), "No se permiten enlaces simbólicos: {$path}");
-                $this->failUnless($isDirectory || !$this->isExecutable($zip, $index), "No se permiten archivos ejecutables: {$path}");
+
+                if ($this->isDirectory($zip, $index, $normalized)) {
+                    $this->validateDirectoryPath($path);
+                    continue;
+                }
+
+                $this->failUnless(!str_contains($raw, '\\'), "El archivo contiene separadores Windows no permitidos: {$raw}");
+                $this->validatePath($path);
+                $this->failUnless(!$this->isExecutable($zip, $index), "No se permiten archivos ejecutables: {$path}");
                 $totalSize += (int) ($stat['size'] ?? 0);
                 $this->failUnless($totalSize <= $maxBytes * 4, 'El contenido descomprimido excede el límite de seguridad.');
-                if (!$isDirectory) { $entries[$path] = $index; }
+                $entries[$path] = $index;
             }
 
             $this->failUnless(isset($entries['deploy-manifest.json']), 'Falta deploy-manifest.json en la raíz.');
@@ -63,7 +74,7 @@ class PackageManifestValidator
                 $this->failUnless(is_array($file) && count($file) === 2 && array_diff(array_keys($file), ['path', 'sha256']) === [] && isset($file['path'], $file['sha256']), 'Cada archivo debe declarar únicamente path y sha256.');
                 $path = (string) ($file['path'] ?? '');
                 $sha = strtolower((string) ($file['sha256'] ?? ''));
-                $this->validatePath($path, false);
+                $this->validatePath($path);
                 $this->failUnless($path !== 'deploy-manifest.json' && preg_match('/^[a-f0-9]{64}$/', $sha), "SHA-256 inválido para {$path}.");
                 $this->failUnless(isset($entries[$path]) && !isset($declared[$path]), "Archivo faltante o duplicado: {$path}");
                 $contents = $zip->getFromIndex($entries[$path]);
@@ -113,7 +124,7 @@ class PackageManifestValidator
         return $manifest;
     }
 
-    private function validatePath(string $path, bool $directory): void
+    private function validatePath(string $path): void
     {
         $this->failUnless($path !== '' && !str_starts_with($path, '/') && !preg_match('/^[A-Za-z]:/', $path), "Ruta absoluta no permitida: {$path}");
         $parts = explode('/', $path);
@@ -123,9 +134,26 @@ class PackageManifestValidator
             $this->failUnless($part !== '' && !in_array($lower, self::BLOCKED_PARTS, true) && !str_starts_with($lower, '.env'), "Ruta bloqueada: {$path}");
         }
         if ($path !== 'deploy-manifest.json') {
-            $this->failUnless(collect(self::ROOTS)->contains(fn (string $root): bool => str_starts_with($path . ($directory ? '/' : ''), $root)), "Ruta fuera de allowlist: {$path}");
+            $this->failUnless(collect(self::ROOTS)->contains(fn (string $root): bool => str_starts_with($path, $root)), "Ruta fuera de allowlist: {$path}");
             $this->failUnless(!in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), self::BLOCKED_EXTENSIONS, true), "Tipo de archivo bloqueado: {$path}");
         }
+    }
+
+    private function validateDirectoryPath(string $path): void
+    {
+        $this->failUnless(
+            $path !== ''
+                && !str_starts_with($path, '/')
+                && !preg_match('/^[A-Za-z]:/', $path),
+            "Ruta absoluta no permitida: {$path}"
+        );
+
+        $parts = explode('/', $path);
+        $this->failUnless(
+            !in_array('..', $parts, true)
+                && !in_array('.', $parts, true),
+            "Ruta relativa insegura: {$path}"
+        );
     }
 
     private function validateRevision(array $manifest): void
@@ -153,6 +181,34 @@ class PackageManifestValidator
     {
         $opsys = 0; $attributes = 0;
         return $zip->getExternalAttributesIndex($index, $opsys, $attributes) && (($attributes >> 16) & 0170000) === 0120000;
+    }
+
+    private function isDirectory(
+        ZipArchive $zip,
+        int $index,
+        string $normalizedName
+    ): bool {
+        if (str_ends_with($normalizedName, '/')) {
+            return true;
+        }
+
+        $opsys = 0;
+        $attributes = 0;
+
+        if (!$zip->getExternalAttributesIndex(
+            $index,
+            $opsys,
+            $attributes
+        )) {
+            return false;
+        }
+
+        if ($opsys === ZipArchive::OPSYS_UNIX
+            && (($attributes >> 16) & 0170000) === 0040000) {
+            return true;
+        }
+
+        return ($attributes & 0x10) === 0x10;
     }
 
     private function isExecutable(ZipArchive $zip, int $index): bool
