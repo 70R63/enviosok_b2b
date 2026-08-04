@@ -121,7 +121,7 @@
 
     .option{
         display:grid;
-        grid-template-columns:140px 1fr 220px 180px 170px;
+        grid-template-columns:120px minmax(210px,1.3fr) minmax(220px,1fr) 150px 150px;
         align-items:center;
         gap:18px;
         border:1px solid #e5e7eb;
@@ -161,6 +161,76 @@
         font-size:12px;
         font-weight:900;
     }
+
+    .quote-facts{
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:7px 12px;
+        color:#475569;
+        font-size:13px;
+        line-height:1.35;
+    }
+
+    .quote-facts strong{color:#0f172a}
+
+    .quote-modal{
+        display:none;
+        position:fixed;
+        inset:0;
+        z-index:10000;
+        padding:20px;
+        background:rgba(15,23,42,.62);
+        align-items:center;
+        justify-content:center;
+    }
+
+    .quote-modal.is-open{display:flex}
+
+    .quote-modal-card{
+        width:min(620px,100%);
+        max-height:calc(100vh - 40px);
+        overflow:auto;
+        background:#fff;
+        border-radius:20px;
+        padding:26px;
+        box-shadow:0 24px 60px rgba(15,23,42,.3);
+    }
+
+    .quote-modal-grid{
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:12px;
+        margin:20px 0;
+    }
+
+    .quote-modal-item{
+        padding:12px;
+        border-radius:12px;
+        background:#f8fafc;
+        color:#475569;
+        font-size:13px;
+    }
+
+    .quote-modal-item strong{
+        display:block;
+        margin-top:4px;
+        color:#0f172a;
+        font-size:15px;
+    }
+
+    .quote-modal-price{
+        padding:16px;
+        border-radius:14px;
+        background:#fff7ed;
+        color:#9a3412;
+        font-size:24px;
+        font-weight:900;
+        text-align:center;
+    }
+
+    .quote-modal-actions{display:flex;gap:10px;margin-top:18px}
+    .quote-modal-actions .btn{flex:1}
+    .quote-modal-close{background:#e2e8f0;color:#334155}
 
     .price{
         font-size:28px;
@@ -287,6 +357,16 @@
         .logo-carrier{
             margin:auto;
         }
+
+        .quote-facts{text-align:left}
+    }
+
+    @media(max-width:560px){
+        .content{padding:20px 14px}
+        .card{padding:15px}
+        .quote-facts,.quote-modal-grid{grid-template-columns:1fr}
+        .quote-modal-actions{flex-direction:column-reverse}
+        .title{font-size:29px}
     }
 </style>
 </head>
@@ -386,15 +466,18 @@
                                 </div>
                             @endif
 
-                            @if($opcion['extended_area'] ?? false)
+                            @if($opcion['is_reexpedition'] ?? $opcion['extended_area'] ?? false)
                                 <div class="extended-area">
                                     Zona extendida · cargo incluido
                                 </div>
                             @endif
                         </div>
 
-                        <div>
-                            {{ $opcion['entrega'] }}
+                        <div class="quote-facts">
+                            <span><strong>Entrega:</strong> {{ $opcion['estimated_delivery_date'] ?: ($opcion['entrega'] ?? 'Por confirmar') }}</span>
+                            <span><strong>Periodicidad:</strong> {{ $opcion['periodicity_name'] ?: 'Según cobertura' }}</span>
+                            <span><strong>Días:</strong> {{ implode(', ', $opcion['operating_days'] ?? []) ?: 'Por confirmar' }}</span>
+                            <span><strong>Zona:</strong> {{ $opcion['zone_code'] ?: 'No especificada' }}</span>
                         </div>
 
                         <div class="price">
@@ -402,7 +485,19 @@
                         </div>
 
                         <div class="actions">
-                            <button class="btn" type="submit">
+                            <button
+                                class="btn js-quote-summary"
+                                type="button"
+                                data-service="{{ $opcion['servicio'] }}"
+                                data-origin="{{ $cotizacion->cp_origen }}"
+                                data-destination="{{ $cotizacion->cp_destino }}"
+                                data-weight="{{ $opcion['weight_billable'] }} kg"
+                                data-dimensions="{{ $opcion['dimensions'] }}"
+                                data-insurance="{{ $opcion['insurance_enabled'] ? 'Incluido' : 'No incluido' }}"
+                                data-extended-area="{{ ($opcion['is_reexpedition'] ?? $opcion['extended_area'] ?? false) ? 'Sí, cargo incluido' : 'No' }}"
+                                data-delivery="{{ $opcion['estimated_delivery_date'] ?: ($opcion['entrega'] ?? 'Por confirmar') }}"
+                                data-price="${{ number_format($opcion['commercial_price'], 2) }} MXN"
+                            >
                                 Seleccionar
                             </button>
                         </div>
@@ -427,5 +522,59 @@
             </aside>
         </div>
     </main>
+
+    <div class="quote-modal" id="quote-summary-modal" role="dialog" aria-modal="true" aria-labelledby="quote-modal-title">
+        <div class="quote-modal-card">
+            <h2 id="quote-modal-title">Resumen de tu cotización</h2>
+            <p class="modal-text">Verifica los datos antes de continuar.</p>
+            <div class="quote-modal-grid" id="quote-modal-details"></div>
+            <div class="quote-modal-price" id="quote-modal-price"></div>
+            <div class="quote-modal-actions">
+                <button class="btn quote-modal-close" type="button" id="quote-modal-close">Regresar</button>
+                <button class="btn" type="button" id="quote-modal-confirm">Continuar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            const modal = document.getElementById('quote-summary-modal');
+            const details = document.getElementById('quote-modal-details');
+            const price = document.getElementById('quote-modal-price');
+            let selectedForm = null;
+            const labels = {
+                service: 'Servicio', origin: 'CP origen', destination: 'CP destino',
+                weight: 'Peso facturable', dimensions: 'Dimensiones', insurance: 'Seguro',
+                extendedArea: 'Área extendida', delivery: 'Fecha estimada'
+            };
+
+            document.querySelectorAll('.js-quote-summary').forEach((button) => {
+                button.addEventListener('click', () => {
+                    selectedForm = button.closest('form');
+                    details.replaceChildren();
+                    Object.entries(labels).forEach(([key, label]) => {
+                        const item = document.createElement('div');
+                        item.className = 'quote-modal-item';
+                        item.append(document.createTextNode(label));
+                        const value = document.createElement('strong');
+                        value.textContent = button.dataset[key] || 'No especificado';
+                        item.append(value);
+                        details.append(item);
+                    });
+                    price.textContent = button.dataset.price;
+                    modal.classList.add('is-open');
+                    document.getElementById('quote-modal-confirm').focus();
+                });
+            });
+
+            const close = () => modal.classList.remove('is-open');
+            document.getElementById('quote-modal-close').addEventListener('click', close);
+            modal.addEventListener('click', (event) => { if (event.target === modal) close(); });
+            document.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
+            document.getElementById('quote-modal-confirm').addEventListener('click', () => {
+                if (selectedForm) selectedForm.requestSubmit();
+            });
+        })();
+    </script>
 </body>
 </html>

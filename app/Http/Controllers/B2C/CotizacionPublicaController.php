@@ -4273,6 +4273,21 @@ public function opcionesB2c(B2cCotizacion $cotizacion)
                 'precio' =>
                     $pricing['final_price'],
 
+                'commercial_price' =>
+                    $pricing['final_price'],
+
+                'weight_billable' =>
+                    round((float) (
+                        $cotizacion->peso_facturable
+                        ?: $cotizacion->peso
+                    ), 3),
+
+                'dimensions' =>
+                    $cotizacion->medidas ?: 'No aplica',
+
+                'insurance_enabled' =>
+                    (bool) $cotizacion->requiere_seguro_envio,
+
                 'pricing' =>
                     $pricing,
 
