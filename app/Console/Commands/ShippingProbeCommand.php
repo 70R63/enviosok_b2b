@@ -4,6 +4,7 @@ use App\Models\ZigoProviderApiEvent;
 use App\Services\Shipping\{ProviderStrategyResolver,UnifiedShippingQuoteService};
 use App\Services\Shipping\Data\UnifiedQuoteRequest;
 use App\Services\Shipping\Diagnostics\ShippingContractRecorder;
+use App\Services\Shipping\Xperta\XpertaProviderException;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\{Schema,Storage};
 use Illuminate\Support\Str;
@@ -35,7 +36,7 @@ final class ShippingProbeCommand extends Command {
   $request=new UnifiedQuoteRequest('estafeta','64000','64000',1,20,20,20,'box',$service,0);
   $started=hrtime(true);
   try{$result=$quotes->quote($request,'production',true,true)->toArray();$this->event($result,$this->elapsed($started));return$this->productionReport($result,true,null);}
-  catch(Throwable $e){$code=$this->errorCode($e);$this->event(['success'=>false,'errorCode'=>$code],$this->elapsed($started));return$this->productionReport(null,true,$code);}
+  catch(Throwable $e){$code=$this->errorCode($e);$metadata=$e instanceof XpertaProviderException?$e->diagnosticMetadata:[];$this->event(['success'=>false,'errorCode'=>$code,'diagnosticMetadata'=>$metadata],$this->elapsed($started));return$this->productionReport(null,true,$code);}
  }
 
  private function stage(ProviderStrategyResolver $resolver,UnifiedShippingQuoteService $quotes,ShippingContractRecorder $recorder):int{
@@ -55,6 +56,6 @@ final class ShippingProbeCommand extends Command {
  private function store(array $report):string{$path='private/shipping-probes/probe-'.now()->format('Ymd-His-u').'.json';Storage::disk('local')->put($path,json_encode($report,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));return$path;}
  private function output(string $path,bool $ready):void{$this->line('Reporte: storage/app/'.$path);$this->line('READY_FOR_B2C_QUOTE_ADAPTER='.($ready?'true':'false'));}
  private function elapsed(int $started):int{return(int)round((hrtime(true)-$started)/1000000);}
- private function errorCode(Throwable $e):string{$m=strtolower($e->getMessage());if(preg_match('/http\s+(\d{3})/',$m,$match))return'XPERTA_HTTP_'.$match[1];if(str_contains($m,'timed out')||str_contains($m,'timeout'))return'XPERTA_TIMEOUT';return'XPERTA_QUOTE_FAILED';}
- private function event(array $result,int $duration):void{try{if(!Schema::hasTable('zigo_provider_api_events'))return;ZigoProviderApiEvent::create(['provider'=>'xperta','operation'=>'quote_probe','environment'=>'production','correlation_id'=>$result['correlationId']??(string)Str::uuid(),'status'=>($result['success']??false)?'success':'failed','http_status'=>null,'provider_code'=>$result['errorCode']??null,'duration_ms'=>$duration,'retry_count'=>0,'requested_by_user_id'=>null,'metadata'=>['carrier'=>'estafeta','commercial_persistence'=>false]]);}catch(Throwable $ignored){}}
+ private function errorCode(Throwable $e):string{if($e instanceof XpertaProviderException)return$e->errorCode;$m=strtolower($e->getMessage());if(preg_match('/http\s+(\d{3})/',$m,$match))return'XPERTA_HTTP_'.$match[1];if(str_contains($m,'timed out')||str_contains($m,'timeout'))return'XPERTA_TIMEOUT';return'XPERTA_QUOTE_FAILED';}
+ private function event(array $result,int $duration):void{try{if(!Schema::hasTable('zigo_provider_api_events'))return;$diagnostic=(array)($result['diagnosticMetadata']??[]);$correlation=$result['correlationId']??$diagnostic['correlation_id']??(string)Str::uuid();ZigoProviderApiEvent::create(['provider'=>'xperta','operation'=>'quote_probe','environment'=>'production','correlation_id'=>$correlation,'status'=>($result['success']??false)?'success':'failed','http_status'=>$diagnostic['http_status']??null,'provider_code'=>$result['errorCode']??null,'duration_ms'=>$duration,'retry_count'=>0,'requested_by_user_id'=>null,'metadata'=>array_merge(['carrier'=>'estafeta','commercial_persistence'=>false],array_intersect_key($diagnostic,array_flip(['host','path','empresa','corporativo','ltd','service','http_status','provider_message_code','correlation_id'])))]);}catch(Throwable $ignored){}}
 }

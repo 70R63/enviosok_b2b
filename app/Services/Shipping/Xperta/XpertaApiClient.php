@@ -43,23 +43,25 @@ class XpertaApiClient
                 | JSON_THROW_ON_ERROR
             );
 
+            $url = $this->resolveUrl($path);
             $response = $request
                 ->withBody($json, 'application/json')
                 ->send(
                     strtoupper($method),
-                    $this->resolveUrl($path)
+                    $url
                 );
         } else {
+            $url = $this->resolveUrl($path);
             $response = $request
                 ->asJson()
                 ->send(
                     strtoupper($method),
-                    $this->resolveUrl($path),
+                    $url,
                     ['json' => $payload]
                 );
         }
 
-        return $this->decode($response);
+        return $this->decode($response, $url);
     }
 
     public function resolvePath(
@@ -109,7 +111,7 @@ class XpertaApiClient
         return $baseUrl . $normalizedPath;
     }
 
-    private function decode(Response $response): array
+    private function decode(Response $response, string $url): array
     {
         $json = $response->json();
 
@@ -124,6 +126,12 @@ class XpertaApiClient
                     ? '. Destino reportado: ' . mb_substr($location, 0, 300)
                     : '.')
             );
+        }
+
+        if ($response->status() === 403) {
+            $functionalMessage = $this->safeMessage($json);
+            [$errorCode, $messageCode] = $this->classifyForbidden($functionalMessage);
+            throw new XpertaProviderException($errorCode, $this->diagnosticMetadata($url, $response, $messageCode));
         }
 
         if (!$response->successful()) {
@@ -152,6 +160,41 @@ class XpertaApiClient
         }
 
         return $json;
+    }
+
+    private function classifyForbidden(string $message): array
+    {
+        $normalized = strtolower(\Illuminate\Support\Str::ascii($message));
+        if (str_contains($normalized, 'corporativo') && (str_contains($normalized, 'no autorizado') || str_contains($normalized, 'unauthorized'))) return ['XPERTA_CORPORATE_UNAUTHORIZED', 'corporate_unauthorized'];
+        if ((str_contains($normalized, 'api key') || str_contains($normalized, 'apikey') || str_contains($normalized, 'llave')) && (str_contains($normalized, 'no autoriz') || str_contains($normalized, 'invalid'))) return ['XPERTA_API_KEY_UNAUTHORIZED', 'api_key_unauthorized'];
+        if ((str_contains($normalized, 'credencial') || str_contains($normalized, 'autenticacion') || str_contains($normalized, 'usuario')) && (str_contains($normalized, 'no autoriz') || str_contains($normalized, 'invalid'))) return ['XPERTA_CREDENTIALS_UNAUTHORIZED', 'credentials_unauthorized'];
+        return ['XPERTA_HTTP_403', 'http_403'];
+    }
+
+    private function diagnosticMetadata(string $url, Response $response, string $messageCode): array
+    {
+        $path = (string) parse_url($url, PHP_URL_PATH);
+        preg_match('#/servicios/([^/]+)/#', $path, $service);
+        return [
+            'host' => (string) parse_url($url, PHP_URL_HOST),
+            'path' => $path,
+            'empresa' => (string) config('services.xperta.empresa'),
+            'corporativo' => (string) config('services.xperta.corporativo'),
+            'ltd' => (string) config('services.xperta.ltd'),
+            'service' => isset($service[1]) ? rawurldecode($service[1]) : null,
+            'http_status' => 403,
+            'provider_message_code' => $messageCode,
+            'correlation_id' => $this->correlationId($response),
+        ];
+    }
+
+    private function correlationId(Response $response): ?string
+    {
+        foreach (['X-Correlation-ID', 'X-Request-ID', 'Request-ID'] as $name) {
+            $value = trim((string) $response->header($name));
+            if ($value !== '') return mb_substr($value, 0, 100);
+        }
+        return null;
     }
 
     private function safeMessage($json): string
