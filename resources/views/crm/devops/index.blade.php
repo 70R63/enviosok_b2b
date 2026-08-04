@@ -1,23 +1,17 @@
 @extends('devops.layout')
-@section('title', 'ZIGO DevOps')
+@section('title','Centro de Control Enterprise - ZIGO')
 @section('content')
-<div class="title">Centro de despliegues</div>
-<div class="subtitle">Registro, validación y ejecución controlada hacia Stage y PRD.</div>
+<div class="title">Centro de Control Enterprise</div><div class="subtitle">Releases, plataforma, integraciones y operación de ZIGO.</div>
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 <div class="summary-grid">
-@foreach(['stage' => 'Stage', 'production' => 'PRD'] as $key => $label)
-    @php($deployment = $environments->get($key))
-    <div class="summary-card">
-        <span>{{ $label }}</span>
-        <strong style="font-size:20px;">{{ $deployment?->status ?? 'Sin despliegues' }}</strong>
-        @if($deployment)<div class="muted">{{ $deployment->commit_hash ?: 'Sin commit' }} · {{ $deployment->created_at->format('d/m/Y H:i') }}</div>@endif
-    </div>
+@foreach(['local'=>'Local','stage'=>'Stage','production'=>'Production'] as $key=>$label) @php($d=$environments->get($key)) @php($release=$releases->get($key))
+<div class="summary-card"><span>{{ $label }}</span><strong>{{ $d?->status ?? 'unknown' }}</strong><div class="muted">Deployment: {{ $d?->id ?? '—' }} · Commit: {{ $release?->commit_hash ?? $d?->commit_hash ?? '—' }}</div><div class="muted">Branch: {{ $release?->branch ?? $d?->branch ?? '—' }}</div><div class="muted">SHA: {{ $release?->package_sha256 ?? $d?->package_sha256 ?? '—' }}</div><div class="muted">Usuario: {{ $d?->requester?->name ?? '—' }} · Fecha: {{ $d?->finished_at ?? $d?->created_at ?? '—' }}</div><div class="muted">Duración: {{ $d?->started_at && $d?->finished_at ? $d->started_at->diffInSeconds($d->finished_at).'s' : '—' }} · Rollback: {{ $d?->rollback_available ? 'disponible':'no' }}</div><div class="muted">Producción: {{ $key==='production' ? (config('zigo_devops.allow_production')?'habilitada':'bloqueada') : 'no aplica' }}</div></div>
 @endforeach
 </div>
-<section class="card">
-    <div style="display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;">
-        <div><h2 style="margin:0 0 8px;">Último despliegue</h2><div class="muted">{{ $latest ? $latest->package_name . ' · ' . $latest->environment . ' · ' . $latest->status : 'Aún no hay paquetes registrados.' }}</div></div>
-        @if($canDeploy)<a class="btn" href="{{ url('/deployments/create') }}">Nuevo paquete</a>@endif
-    </div>
-</section>
+<section class="card"><h2>Resumen ejecutivo</h2><div class="summary-grid">@foreach($metrics as $key=>$value)<div class="summary-card"><span>{{ str_replace('_',' ',$key) }}</span><strong>{{ $value }}</strong></div>@endforeach</div></section>
+<section class="card"><h2>Stage vs PRD</h2><p><span class="badge">{{ $comparison['status'] }}</span> {{ $comparison['message'] }}</p><p>Stage: {{ $comparison['stage']?->commit_hash ?: 'unknown' }} · PRD: {{ $comparison['production']?->commit_hash ?: 'unknown' }}</p></section>
+<section class="card"><h2>Platform status</h2><div class="table-wrap"><table><thead><tr><th>Componente</th><th>Estado</th><th>Última revisión</th><th>Duración</th><th>Mensaje</th></tr></thead><tbody>@foreach($platform as $name=>$item)<tr><td>{{ $name }}</td><td><span class="badge">{{ $item['status'] }}</span></td><td>{{ $item['last_checked_at'] ?: '—' }}</td><td>{{ $item['duration_ms'] ?? '—' }}</td><td>{{ $item['message'] }}</td></tr>@endforeach</tbody></table></div></section>
+<section class="card"><h2>Integraciones</h2><div class="table-wrap"><table><thead><tr><th>Integración</th><th>Enabled</th><th>Configured</th><th>Estado</th><th>Última revisión</th><th>Mensaje</th></tr></thead><tbody>@foreach($integrations as $name=>$item)<tr><td>{{ $name }}</td><td>{{ $item['enabled']?'sí':'no' }}</td><td>{{ $item['configured']?'sí':'no' }}</td><td>{{ $item['last_status'] }}</td><td>{{ $item['last_checked_at'] ?: '—' }}</td><td>{{ $item['message'] }}</td></tr>@endforeach</tbody></table></div></section>
+<section class="card"><h2>Promoción Stage → PRD</h2><p>Elegible: <strong>{{ $promotion['eligible']?'sí':'no' }}</strong></p><p>Bloqueos: {{ implode(', ',$promotion['blockers']) }}</p>@if(!config('zigo_devops.allow_production'))<div class="alert alert-info">Production está bloqueado. No existe acción de promoción.</div>@endif</section>
+<section class="card"><h2>Alertas abiertas</h2><ul>@forelse($openAlerts as $alert)<li><strong>{{ $alert->severity }}</strong> · {{ $alert->title }} — {{ $alert->message }}</li>@empty<li>Sin alertas abiertas.</li>@endforelse</ul></section>
 @endsection

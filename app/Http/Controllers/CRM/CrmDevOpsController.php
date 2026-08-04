@@ -11,6 +11,8 @@ use App\Models\ZigoHealthCheck;
 use App\Services\DevOps\DeploymentExecutor;
 use App\Services\DevOps\HealthCheckService;
 use App\Services\DevOps\PackageManifestValidator;
+use App\Services\DevOps\{ReleaseService,EnvironmentComparisonService,PlatformStatusService,IntegrationStatusService,PromotionEligibilityService,DevOpsReportService,DeploymentTimelineViewModel,DevOpsAlertService,DevOpsAuditService};
+use App\Models\{ZigoDevOpsAlert,ZigoDevOpsAudit,ZigoDevOpsRelease};
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -20,12 +22,12 @@ use Throwable;
 
 class CrmDevOpsController extends Controller
 {
-    public function index(): View
+    public function index(ReleaseService $releases,EnvironmentComparisonService $comparison,PlatformStatusService $platform,IntegrationStatusService $integrations,PromotionEligibilityService $promotion,DevOpsReportService $reports): View
     {
         $this->authorizeRead();
         $latest = ZigoDeployment::with('requester')->latest()->first();
-        $environments = collect(['stage', 'production'])->mapWithKeys(fn (string $environment): array => [$environment => ZigoDeployment::with('requester')->where('environment', $environment)->latest()->first()]);
-        return view('crm.devops.index', ['latest' => $latest, 'environments' => $environments, 'canDeploy' => $this->isSysadmin()]);
+        $environments = collect(['local','stage', 'production'])->mapWithKeys(fn (string $environment): array => [$environment => ZigoDeployment::with('requester')->where('environment', $environment)->latest()->first()]);
+        $activeReleases=collect(['stage','production'])->mapWithKeys(fn($e)=>[$e=>$releases->active($e)]);return view('crm.devops.index', ['latest'=>$latest,'environments'=>$environments,'releases'=>$activeReleases,'comparison'=>$comparison->compare(),'platform'=>$platform->current('stage'),'integrations'=>$integrations->current('stage'),'promotion'=>$promotion->evaluate(),'metrics'=>$reports->metrics(),'openAlerts'=>ZigoDevOpsAlert::where('status','open')->latest()->limit(10)->get(),'canDeploy'=>$this->isSysadmin()]);
     }
 
     public function deployments(): View
@@ -44,7 +46,7 @@ class CrmDevOpsController extends Controller
         return view('crm.devops.deployments.create');
     }
 
-    public function store(StoreDeploymentRequest $request): RedirectResponse
+    public function store(StoreDeploymentRequest $request,DevOpsAuditService $audits): RedirectResponse
     {
         $file = $request->file('package');
         $deployment = ZigoDeployment::create(['environment' => $request->validated('environment'), 'package_name' => pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME), 'package_sha256' => hash_file('sha256', $file->getRealPath()), 'status' => 'uploaded', 'requested_by_user_id' => $request->user()->id]);
@@ -54,24 +56,26 @@ class CrmDevOpsController extends Controller
             return back()->withInput()->withErrors(['package' => 'No fue posible guardar el paquete en almacenamiento privado.']);
         }
         $this->log($deployment, 'info', 'upload', 'Paquete registrado; contenido pendiente de validación.');
+        $audits->record('upload','success',$deployment->environment,$deployment->id);
         return redirect('/deployments/' . $deployment->id)
             ->with('success', 'Paquete registrado. Valídalo antes de desplegar.');
     }
 
-    public function show(ZigoDeployment $deployment): View
+    public function show(ZigoDeployment $deployment,DeploymentTimelineViewModel $timeline): View
     {
         $this->authorizeRead();
         $deployment->load(['requester', 'approver', 'files', 'logs' => fn ($query) => $query->latest('created_at')]);
         $manifest = $this->summary($deployment);
-        return view('crm.devops.deployments.show', ['deployment' => $deployment, 'manifest' => $manifest, 'canDeploy' => $this->isSysadmin()]);
+        return view('crm.devops.deployments.show', ['deployment' => $deployment, 'manifest' => $manifest, 'timeline'=>$timeline->build($deployment),'canDeploy' => $this->isSysadmin()]);
     }
 
-    public function validatePackage(ZigoDeployment $deployment, PackageManifestValidator $validator, DeploymentExecutor $executor): RedirectResponse
+    public function validatePackage(ZigoDeployment $deployment, PackageManifestValidator $validator, DeploymentExecutor $executor,DevOpsAuditService $audits): RedirectResponse
     {
         $this->authorizeSysadmin(); abort_unless(in_array($deployment->status, ['uploaded', 'failed'], true), 422);
         $manifest = $validator->validate($executor->packagePath($deployment), $deployment->environment);
         $deployment->update(['package_name' => $manifest['package_name'], 'branch' => $manifest['branch'], 'commit_hash' => $manifest['commit_hash'], 'package_sha256' => $manifest['package_sha256'], 'status' => 'validated', 'summary' => json_encode($manifest, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'finished_at' => null]);
         $this->log($deployment, 'info', 'validate', 'ZIP, manifiesto, rutas y fingerprints validados.');
+        $audits->record('validate','success',$deployment->environment,$deployment->id);
         return back()->with('success', 'Paquete validado correctamente.');
     }
 
@@ -128,17 +132,24 @@ class CrmDevOpsController extends Controller
         return view('crm.devops.health', ['checks' => $checks, 'canRunHealth' => $this->isSysadmin() || auth()->user()->hasRol('soporte')]);
     }
 
-    public function runHealth(Request $request, HealthCheckService $service): RedirectResponse
+    public function runHealth(Request $request, HealthCheckService $service,DevOpsAuditService $audits,DevOpsAlertService $alerts): RedirectResponse
     {
         abort_unless($this->isSysadmin() || auth()->user()?->hasRol('soporte'), 403);
         $data = $request->validate(['environment' => ['required', Rule::in(['stage', 'production'])]]);
         try {
-            $service->run($data['environment'], $request->user()->id);
+            $results=$service->run($data['environment'], $request->user()->id);$failed=$results->where('status','failed');$audits->record('health',$failed->isEmpty()?'success':'failed',$data['environment']);if($failed->isNotEmpty())$alerts->create('health_failed','critical','Health checks fallidos','Uno o más health checks reportaron fallo.',$data['environment'],null,['failed_keys'=>$failed->pluck('check_key')->all()]);
             return back()->with('success', 'Health checks completados.');
         } catch (Throwable $exception) {
             return back()->with('error', 'No fue posible ejecutar los health checks con la configuración actual.');
         }
     }
+
+    public function releases(ReleaseService $service):View{$this->authorizeRead();return view('crm.devops.enterprise-table',['title'=>'Releases','headers'=>['Ambiente','Estado','Commit','Branch','SHA','Fecha'],'rows'=>$service->history()->limit(100)->get()->map(fn($r)=>[$r->environment,$r->status,$r->commit_hash?:'—',$r->branch?:'—',$r->package_sha256,$r->deployed_at])]);}
+    public function comparison(EnvironmentComparisonService $service):View{$this->authorizeRead();$c=$service->compare();return view('crm.devops.comparison',compact('c'));}
+    public function alerts():View{$this->authorizeRead();return view('crm.devops.alerts',['alerts'=>ZigoDevOpsAlert::with('deployment')->latest()->paginate(30),'canAcknowledge'=>$this->isSysadmin()]);}
+    public function acknowledgeAlert(ZigoDevOpsAlert $alert,DevOpsAlertService $service,DevOpsAuditService $audits):RedirectResponse{$this->authorizeSysadmin();$service->acknowledge($alert,auth()->id());$audits->record('acknowledge_alert','success',$alert->environment,$alert->deployment_id);return back()->with('success','Alerta reconocida.');}
+    public function audits():View{$this->authorizeRead();return view('crm.devops.enterprise-table',['title'=>'Auditoría','headers'=>['Fecha','Acción','Ambiente','Resultado','Deployment'],'rows'=>ZigoDevOpsAudit::latest()->limit(200)->get()->map(fn($a)=>[$a->created_at,$a->action,$a->environment?:'—',$a->result,$a->deployment_id?:'—'])]);}
+    public function reports(Request $request,DevOpsReportService $service):View{$this->authorizeRead();$filters=$request->only(['environment','status','user_id','from','to','branch','commit']);return view('crm.devops.reports',['metrics'=>$service->metrics($filters),'filters'=>$filters]);}
 
     private function authorizeRead(): void { abort_unless(auth()->user()?->hasRol('sysadmin') || auth()->user()?->hasRol('admin') || auth()->user()?->hasRol('soporte'), 403); }
     private function authorizeSysadmin(): void { abort_unless($this->isSysadmin(), 403); }

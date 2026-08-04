@@ -15,4 +15,6 @@ class ZigoDeployment extends Model
     public function logs(): HasMany { return $this->hasMany(ZigoDeploymentLog::class, 'deployment_id'); }
     public function requester(): BelongsTo { return $this->belongsTo(User::class, 'requested_by_user_id'); }
     public function approver(): BelongsTo { return $this->belongsTo(User::class, 'approved_by_user_id'); }
+    public function releases(): HasMany { return $this->hasMany(ZigoDevOpsRelease::class, 'deployment_id'); }
+    public function alerts(): HasMany { return $this->hasMany(ZigoDevOpsAlert::class, 'deployment_id'); }
 }

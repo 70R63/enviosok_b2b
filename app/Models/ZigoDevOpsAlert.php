@@ -1,0 +1,3 @@
+<?php
+namespace App\Models;use Illuminate\Database\Eloquent\Model;use Illuminate\Database\Eloquent\Relations\BelongsTo;
+final class ZigoDevOpsAlert extends Model {protected $table='zigo_devops_alerts';protected $fillable=['type','severity','environment','deployment_id','title','message','status','acknowledged_by_user_id','acknowledged_at','metadata'];protected $casts=['acknowledged_at'=>'datetime','metadata'=>'array'];public function deployment():BelongsTo{return$this->belongsTo(ZigoDeployment::class);}public function acknowledgedBy():BelongsTo{return$this->belongsTo(User::class,'acknowledged_by_user_id');}}

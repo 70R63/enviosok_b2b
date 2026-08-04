@@ -39,4 +39,5 @@
 @endif
 
 <section class="card"><h2>Logs sanitizados</h2><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Nivel</th><th>Paso</th><th>Mensaje</th></tr></thead><tbody>@forelse($deployment->logs as $log)<tr><td>{{ $log->created_at?->format('d/m/Y H:i:s') }}</td><td>{{ $log->level }}</td><td>{{ $log->step }}</td><td>{{ $log->message }}</td></tr>@empty<tr><td colspan="4">Sin logs.</td></tr>@endforelse</tbody></table></div></section>
+<section class="card"><h2>Timeline</h2><div class="table-wrap"><table><thead><tr><th>Paso</th><th>Hora</th><th>Duración ms</th><th>Nivel</th><th>Resultado</th><th>Mensaje</th></tr></thead><tbody>@foreach($timeline as $item)<tr><td>{{ $item['step'] }}</td><td>{{ $item['time'] ?: '—' }}</td><td>{{ $item['duration_ms'] ?? '—' }}</td><td>{{ $item['level'] }}</td><td>{{ $item['result'] }}</td><td>{{ $item['message'] }}</td></tr>@endforeach</tbody></table></div></section>
 @endsection

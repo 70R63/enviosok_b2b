@@ -11,7 +11,7 @@ use Throwable;
 
 class DeploymentExecutor
 {
-    public function __construct(private PackageManifestValidator $validator) {}
+    public function __construct(private PackageManifestValidator $validator,private ReleaseService $releases,private DevOpsAlertService $alerts,private DevOpsAuditService $audits) {}
 
     public function deploy(ZigoDeployment $deployment): void
     {
@@ -53,6 +53,8 @@ class DeploymentExecutor
 
             $deployment->update(['status' => 'success', 'finished_at' => now(), 'backup_path' => $backup, 'rollback_available' => true, 'summary' => $this->summary($manifest, $migrationApplied)]);
             $this->log($deployment, 'info', 'finish', 'Despliegue completado.');
+            $deployment->refresh();$this->releases->register($deployment);$this->audits->record('deploy','success',$deployment->environment,$deployment->id,['migration_executed'=>$migrationApplied]);
+            if($migrationApplied)$this->alerts->create('migration_executed','warning','Migraciones ejecutadas','El deployment aplicó migraciones sin rollback automático.',null,$deployment);
         } catch (Throwable $exception) {
             $this->log($deployment, 'error', 'failure', $exception->getMessage());
             if ($copied) {
@@ -60,6 +62,7 @@ class DeploymentExecutor
                 catch (Throwable $rollbackError) { $this->log($deployment, 'error', 'rollback', $rollbackError->getMessage()); $status = 'failed'; }
             } else { $status = 'failed'; }
             $deployment->update(['status' => $status, 'finished_at' => now(), 'backup_path' => is_dir($backup) ? $backup : null, 'rollback_available' => $status === 'failed' && is_dir($backup), 'summary' => $this->summary($manifest, $migrationApplied, $exception->getMessage())]);
+            $this->alerts->create('deployment_failed','critical','Deployment fallido','El deployment no concluyó correctamente.',null,$deployment,['result'=>$status]);$this->audits->record('deploy',$status,$deployment->environment,$deployment->id);
             throw $exception;
         } finally {
             $this->removeDirectory($staging);
@@ -72,6 +75,7 @@ class DeploymentExecutor
         $this->restoreFiles($deployment, $this->targetPath($deployment->environment), $deployment->backup_path);
         $deployment->update(['status' => 'rolled_back', 'rollback_available' => false, 'finished_at' => now()]);
         $this->log($deployment, 'warning', 'rollback', 'Rollback manual de archivos completado. Las migraciones no fueron revertidas.');
+        $this->alerts->create('rollback_executed','warning','Rollback ejecutado','Se ejecutó rollback manual de archivos.',null,$deployment);$this->audits->record('rollback','success',$deployment->environment,$deployment->id);
     }
 
     public function packagePath(ZigoDeployment $deployment): string

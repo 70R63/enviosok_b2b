@@ -1,0 +1,3 @@
+<?php
+namespace App\Models;use Illuminate\Database\Eloquent\Model;use Illuminate\Database\Eloquent\Relations\BelongsTo;
+final class ZigoDevOpsRelease extends Model {protected $table='zigo_devops_releases';protected $fillable=['environment','deployment_id','branch','commit_hash','package_sha256','status','deployed_at','deployed_by_user_id','files_fingerprint','metadata'];protected $casts=['deployed_at'=>'datetime','metadata'=>'array'];public function deployment():BelongsTo{return$this->belongsTo(ZigoDeployment::class,'deployment_id');}public function deployedBy():BelongsTo{return$this->belongsTo(User::class,'deployed_by_user_id');}}

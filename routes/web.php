@@ -364,6 +364,12 @@ Route::domain(config('zigo_domains.portals.devops.host'))
         Route::post('/deployments/{deployment}/rollback', [CrmDevOpsController::class, 'rollback'])->whereNumber('deployment')->middleware('throttle:devops-package-rollback')->name('deployments.rollback');
         Route::get('/health', [CrmDevOpsController::class, 'health'])->name('health');
         Route::post('/health/run', [CrmDevOpsController::class, 'runHealth'])->middleware('throttle:devops-health-run')->name('health.run');
+        Route::get('/releases', [CrmDevOpsController::class, 'releases'])->name('releases.index');
+        Route::get('/comparison', [CrmDevOpsController::class, 'comparison'])->name('comparison');
+        Route::get('/alerts', [CrmDevOpsController::class, 'alerts'])->name('alerts.index');
+        Route::post('/alerts/{alert}/acknowledge', [CrmDevOpsController::class, 'acknowledgeAlert'])->whereNumber('alert')->middleware('throttle:10,1')->name('alerts.acknowledge');
+        Route::get('/audits', [CrmDevOpsController::class, 'audits'])->name('audits.index');
+        Route::get('/reports', [CrmDevOpsController::class, 'reports'])->name('reports.index');
     });
 
 Route::any('/crm/devops/{path?}', function (?string $path = null) {
