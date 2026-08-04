@@ -7,4 +7,5 @@
     <a href="{{ url('/alerts') }}" class="{{ request()->is('alerts*') ? 'active' : '' }}">Alertas</a>
     <a href="{{ url('/audits') }}" class="{{ request()->is('audits*') ? 'active' : '' }}">Auditoría</a>
     <a href="{{ url('/reports') }}" class="{{ request()->is('reports*') ? 'active' : '' }}">Reportes</a>
+    <a href="{{ url('/integrations/xperta-estafeta') }}" class="{{ request()->is('integrations/xperta-estafeta*') ? 'active' : '' }}">Xperta / Estafeta</a>
 </nav>

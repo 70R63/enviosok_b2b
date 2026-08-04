@@ -1,5 +1,11 @@
 # ZIGO DevOps Enterprise Runbook
 
+## Probador Xperta / Estafeta Stage
+
+El probador visual usa exclusivamente `config/zigo_devops_integrations.php`, sección `xperta_stage`, alimentada por variables `ZIGO_DEVOPS_XPERTA_STAGE_*`. Nunca lee ni modifica `services.xperta`, `XPERTA_ENVIRONMENT`, credenciales PRD o el token operacional. Su caché es `zigo_devops:xperta_stage:token` y su lock `zigo_devops:xperta_stage:lock`.
+
+Para habilitarlo, configure todas las variables Stage documentadas en `.env.example`, use una URL HTTPS no productiva y active `ZIGO_DEVOPS_XPERTA_STAGE_TESTER_ENABLED=true`. El backend bloquea configuración incompleta, HTTP, hosts identificados como PRD y servicios fuera de `ZIGO_DEVOPS_XPERTA_STAGE_SERVICES`. Solo sysadmin ejecuta; admin y soporte conservan acceso de lectura. Para rollback, desactive la bandera y limpie la caché de configuración. No cambie `XPERTA_ENVIRONMENT`.
+
 ## Arquitectura
 
 El Centro de Control amplía el flujo existente Upload → Validate → Deploy → Rollback → Health → Historial. No modifica contratos públicos ni habilita production. Los módulos enterprise leen `zigo_deployments`, archivos, logs y health existentes.

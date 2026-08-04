@@ -23,6 +23,7 @@ use App\Http\Controllers\CRM\CrmIdentityVerificationController;
 use App\Http\Controllers\CRM\CrmPublicChannelController;
 use App\Http\Controllers\CRM\CrmDevOpsController;
 use App\Http\Controllers\DevOps\DevOpsAuthController;
+use App\Http\Controllers\DevOps\XpertaIntegrationController;
 use App\Models\B2cCotizacion;
 
 /*
@@ -370,6 +371,10 @@ Route::domain(config('zigo_domains.portals.devops.host'))
         Route::post('/alerts/{alert}/acknowledge', [CrmDevOpsController::class, 'acknowledgeAlert'])->whereNumber('alert')->middleware('throttle:10,1')->name('alerts.acknowledge');
         Route::get('/audits', [CrmDevOpsController::class, 'audits'])->name('audits.index');
         Route::get('/reports', [CrmDevOpsController::class, 'reports'])->name('reports.index');
+        Route::get('/integrations/xperta-estafeta', [XpertaIntegrationController::class, 'index'])->name('integrations.xperta');
+        Route::post('/integrations/xperta-estafeta/token', [XpertaIntegrationController::class, 'token'])->middleware('throttle:devops-xperta-token')->name('integrations.xperta.token');
+        Route::post('/integrations/xperta-estafeta/frequency', [XpertaIntegrationController::class, 'frequency'])->middleware('throttle:devops-xperta-frequency')->name('integrations.xperta.frequency');
+        Route::post('/integrations/xperta-estafeta/quote', [XpertaIntegrationController::class, 'quote'])->middleware('throttle:devops-xperta-quote')->name('integrations.xperta.quote');
     });
 
 Route::any('/crm/devops/{path?}', function (?string $path = null) {

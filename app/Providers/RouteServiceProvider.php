@@ -88,6 +88,10 @@ class RouteServiceProvider extends ServiceProvider
             fn (Request $request) => Limit::perMinute(5)
                 ->by($this->devOpsRateLimitKey($request, 'health'))
         );
+        foreach (['token' => 2, 'frequency' => 5, 'quote' => 3] as $operation => $limit) {
+            RateLimiter::for('devops-xperta-' . $operation, fn (Request $request) => Limit::perMinute($limit)
+                ->by($this->devOpsRateLimitKey($request, 'xperta-' . $operation)));
+        }
     }
 
     private function devOpsRateLimitKey(
