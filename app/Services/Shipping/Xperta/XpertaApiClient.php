@@ -4,10 +4,23 @@ namespace App\Services\Shipping\Xperta;
 
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use JsonException;
 use RuntimeException;
 
 class XpertaApiClient
 {
+    /**
+     * Send query parameters with an empty request body.
+     *
+     * @param array<string, mixed> $query
+     * @param array<string, string> $headers
+     * @return array{
+     *     json: array<mixed>,
+     *     http_status: int,
+     *     duration_ms: int,
+     *     correlation_id: string|null
+     * }
+     */
     public function sendQueryWithMeta(
         string $method,
         string $path,
@@ -23,7 +36,14 @@ class XpertaApiClient
             ['query' => $query]
         );
 
-        return $this->responseWithMeta($response, $url, $startedAt);
+        $result = $this->responseWithMeta($response, $url, $startedAt);
+
+        return [
+            'json' => $result['data'],
+            'http_status' => $result['http_status'],
+            'duration_ms' => $result['duration_ms'],
+            'correlation_id' => $result['correlation_id'],
+        ];
     }
 
     public function send(
@@ -145,7 +165,21 @@ class XpertaApiClient
 
     private function decode(Response $response, string $url): array
     {
-        $json = $response->json();
+        try {
+            $json = json_decode($response->body(), true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException $exception) {
+            throw new RuntimeException(
+                'Xperta devolvió una respuesta que no es JSON válido.',
+                0,
+                $exception
+            );
+        }
+
+        if (!is_array($json)) {
+            throw new RuntimeException(
+                'Xperta devolvió una respuesta JSON con una estructura inválida.'
+            );
+        }
 
         if (in_array($response->status(), [301, 302, 303, 307, 308], true)) {
             $location = trim((string) $response->header('Location'));
@@ -172,12 +206,6 @@ class XpertaApiClient
                 . $response->status()
                 . ': '
                 . $this->safeMessage($json)
-            );
-        }
-
-        if (!is_array($json)) {
-            throw new RuntimeException(
-                'Xperta devolvió una respuesta que no es JSON válido.'
             );
         }
 

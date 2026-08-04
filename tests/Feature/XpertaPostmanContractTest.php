@@ -154,12 +154,34 @@ final class XpertaPostmanContractTest extends TestCase
             ['x-api-key' => 'secret-api-key', 'Corporativo' => 'corp-real', 'minutos' => '60', 'Accept' => 'application/json']
         );
 
-        $this->assertSame('42|TOKEN-CONTENT', data_get($result, 'data.message.token'));
+        $this->assertSame(
+            ['json', 'http_status', 'duration_ms', 'correlation_id'],
+            array_keys($result)
+        );
+        $this->assertSame('42|TOKEN-CONTENT', data_get($result, 'json.message.token'));
         $this->assertSame(200, $result['http_status']);
         $this->assertIsInt($result['duration_ms']);
         $this->assertGreaterThanOrEqual(0, $result['duration_ms']);
         $this->assertSame('request-123', $result['correlation_id']);
         Http::assertSentCount(1);
+    }
+
+    public function test_login_timeout_is_not_retried(): void
+    {
+        $attempts = 0;
+        Http::fake(function () use (&$attempts) {
+            $attempts++;
+            throw new ConnectionException('timeout');
+        });
+
+        try {
+            app(XpertaTokenService::class)->token();
+            $this->fail('Expected connection timeout.');
+        } catch (ConnectionException $exception) {
+            $this->assertSame('timeout', $exception->getMessage());
+        }
+
+        $this->assertSame(1, $attempts);
     }
 
     public function test_login_403_is_classified_without_leaking_credentials(): void

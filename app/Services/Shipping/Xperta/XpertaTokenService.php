@@ -72,13 +72,13 @@ class XpertaTokenService
         $path = $this->tokenPath();
         $headers = $this->authenticationHeaders();
         $result = $this->client->sendQueryWithMeta('POST', $path, $this->tokenPayload($minutes), $headers);
-        $message = data_get($result, 'data.message');
+        $message = data_get($result, 'json.message');
         $tokenValue = is_array($message) ? ($message['token'] ?? null) : null;
 
         return [
             'token' => is_string($tokenValue) ? trim($tokenValue) : null,
             'token_key_present' => is_array($message) && array_key_exists('token', $message),
-            'response_shape_valid' => data_get($result, 'data.success') === true && is_array($message),
+            'response_shape_valid' => data_get($result, 'json.success') === true && is_array($message),
             'http_status' => $result['http_status'],
             'duration_ms' => $result['duration_ms'],
             'correlation_id' => $result['correlation_id'],
@@ -106,8 +106,8 @@ class XpertaTokenService
         $result = $this->client->sendQueryWithMeta(
             'POST', $this->tokenPath(), $this->tokenPayload($minutes), $this->authenticationHeaders()
         );
-        $token = trim((string) data_get($result, 'data.message.token', ''));
-        if (data_get($result, 'data.success') !== true) {
+        $token = trim((string) data_get($result, 'json.message.token', ''));
+        if (data_get($result, 'json.success') !== true) {
             throw new RuntimeException('Xperta devolvió una respuesta de login inválida.');
         }
         if ($token === '') {
@@ -116,7 +116,7 @@ class XpertaTokenService
         $token = $this->normalizeRawToken($token, false);
         return [
             'token' => $token,
-            'expires_at' => data_get($result, 'data.message.expires_at'),
+            'expires_at' => data_get($result, 'json.message.expires_at'),
         ];
     }
 
