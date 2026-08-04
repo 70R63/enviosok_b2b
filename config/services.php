@@ -40,6 +40,8 @@ return [
         'contract_recorder_allow_production' => env('ZIGO_SHIPPING_CONTRACT_RECORDER_ALLOW_PRODUCTION', false),
         'unified_quote_enabled' => env('ZIGO_B2C_UNIFIED_QUOTE_ENABLED', false),
         'stage_active_checks' => env('ZIGO_DEVOPS_SHIPPING_STAGE_ACTIVE_CHECKS', false),
+        'prd_quote_probe_enabled' => env('ZIGO_SHIPPING_PRD_QUOTE_PROBE_ENABLED', false),
+        'prd_quote_probe_timeout' => (int) env('ZIGO_SHIPPING_PRD_QUOTE_PROBE_TIMEOUT', 20),
     ],
 
     'b2c' => [

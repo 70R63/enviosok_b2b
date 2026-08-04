@@ -39,3 +39,15 @@ Generar plantilla redactada: `php artisan zigo:estafeta-config-template --enviro
 Diagnóstico seguro: `php artisan zigo:estafeta-health --environment=stage --check=all --cp-origin=64000 --cp-destination=64000 --weight=1 --length=20 --width=20 --height=20 --package-type=box --confirm-stage=ESTAFETA-STAGE`.
 
 Esta fase no habilita guías ni permite PRD.
+
+## EST-PRD-03.1 — probe único Xperta/Estafeta PRD
+
+El probe PRD permanece apagado con `ZIGO_SHIPPING_PRD_QUOTE_PROBE_ENABLED=false`. No modifica `ZIGO_B2C_UNIFIED_QUOTE_ENABLED`, no usa fallback legacy, no persiste cotizaciones comerciales y no permite `--record-contract`.
+
+Solo acepta `carrier=estafeta`, `operation=quote`, confirmación `SHIPPING-PRD` y el paquete canónico 64000→64000, 1 kg, 20×20×20 cm, tipo box. Ejecuta exclusivamente la estrategia `xperta_estafeta`, un solo servicio y sin retries funcionales.
+
+```bash
+php artisan zigo:shipping-probe --environment=production --carrier=estafeta --operation=quote --cp-origin=64000 --cp-destination=64000 --weight=1 --length=20 --width=20 --height=20 --package-type=box --confirm=SHIPPING-PRD
+```
+
+Antes de una ventana autorizada, habilitar temporalmente solo `ZIGO_SHIPPING_PRD_QUOTE_PROBE_ENABLED=true`, regenerar config cache y volver a `false` inmediatamente después. Nunca combinar con `--record-contract`.
