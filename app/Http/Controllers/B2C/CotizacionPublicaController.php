@@ -28,10 +28,12 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use MercadoPago\SDK;
 use MercadoPago\Preference;
 use MercadoPago\Item;
 use Carbon\Carbon;
+use Throwable;
 
 class CotizacionPublicaController extends Controller
 {
@@ -4286,8 +4288,24 @@ public function opcionesB2c(B2cCotizacion $cotizacion)
 
 private function getAvailableOptions(B2cCotizacion $cotizacion): array
     {
-        $baseOptions = app(ZigoProviderRateService::class)
-            ->getOptionsForCotizacion($cotizacion);
+        try {
+            $baseOptions = app(ZigoProviderRateService::class)
+                ->getOptionsForCotizacion($cotizacion);
+        } catch (Throwable $exception) {
+            Log::warning('B2C - proveedor de tarifas no disponible', [
+                'cotizacion_id' => $cotizacion->id,
+                'exception' => get_class($exception),
+                'provider_code' => property_exists($exception, 'errorCode')
+                    ? $exception->errorCode
+                    : null,
+            ]);
+            session()->flash(
+                'rate_error',
+                'No fue posible obtener tarifas de Estafeta en este momento. Intenta nuevamente.'
+            );
+
+            return [];
+        }
 
         return array_map(
             fn ($option) => $this->buildPricedOption($cotizacion, $option),

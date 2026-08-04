@@ -123,7 +123,7 @@ class XpertaQuoteService
                 $path,
                 [
                     'token' =>
-                        $this->tokenService->token(),
+                        $this->tokenService->encodedToken(),
                     'peso' => (float) (
                         $cotizacion->peso_real
                         ?: $cotizacion->peso

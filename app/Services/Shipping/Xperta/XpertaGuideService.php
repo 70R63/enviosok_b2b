@@ -37,7 +37,7 @@ class XpertaGuideService
 
         return [
             'token' => $includeToken
-                ? $this->tokenService->token()
+                ? $this->tokenService->encodedToken()
                 : '***TOKEN_BASE64***',
 
             'labelResponseOptions' => 'URL_ONLY',

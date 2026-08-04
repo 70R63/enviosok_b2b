@@ -2,9 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\B2C\CotizacionPublicaController;
+use App\Models\B2cCotizacion;
 use App\Services\Shipping\Data\UnifiedQuoteRequest;
 use App\Services\Shipping\Providers\XpertaEstafetaQuoteProvider;
 use App\Services\Shipping\Xperta\XpertaFrequencyService;
+use App\Services\Shipping\Xperta\XpertaGuideService;
+use App\Services\Shipping\Xperta\XpertaTokenService;
+use App\Services\ZigoProviderRateService;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -47,7 +53,7 @@ final class XpertaPostmanContractTest extends TestCase
 
     public function test_frequency_uses_corporativo_path_headers_and_token_only_body(): void
     {
-        Cache::put($this->cacheKey(), 'raw-token', 60);
+        Cache::put($this->cacheKey(), '123|raw-token', 60);
         Http::fake(['*' => Http::response(['success' => true, 'data' => []], 200)]);
         $before = DB::table('b2c_cotizaciones')->count();
 
@@ -61,14 +67,14 @@ final class XpertaPostmanContractTest extends TestCase
                 && $request->hasHeader('x-api-key', 'secret-api-key')
                 && $request->hasHeader('Content-Type', 'application/json')
                 && $request->hasHeader('Accept', 'application/json')
-                && $request->data() === ['token' => 'raw-token'];
+                && $request->data() === ['token' => base64_encode('123|raw-token')];
         });
         $this->assertSame($before, DB::table('b2c_cotizaciones')->count());
     }
 
     public function test_unified_quote_uses_exact_postman_body_and_headers_once(): void
     {
-        Cache::put($this->cacheKey(), 'raw-token', 60);
+        Cache::put($this->cacheKey(), '123|raw-token', 60);
         Http::fake(['*' => Http::response(['success' => true, 'data' => [[
             'costo' => 100, 'costo_ae' => 0, 'sub_total' => 100, 'total' => 116,
         ]]], 200)]);
@@ -88,7 +94,7 @@ final class XpertaPostmanContractTest extends TestCase
                 && $request->hasHeader('Content-Type', 'application/json')
                 && $request->hasHeader('Accept', 'application/json')
                 && $request->data() === [
-                    'token' => 'raw-token', 'peso' => 5.0, 'largo' => 25.0,
+                    'token' => base64_encode('123|raw-token'), 'peso' => 5.0, 'largo' => 25.0,
                     'ancho' => 25.0, 'alto' => 35.0, 'cp' => '09800',
                     'cp_d' => '57820', 'valor_declarado' => 0.0,
                 ];
@@ -96,6 +102,87 @@ final class XpertaPostmanContractTest extends TestCase
         $this->assertSame($before, DB::table('b2c_cotizaciones')->count());
         $this->assertFalse(config('services.shipping.unified_quote_enabled'));
         $this->assertFalse(config('services.shipping.prd_quote_probe_enabled'));
+    }
+
+    public function test_login_caches_raw_token_and_encodes_exactly_once(): void
+    {
+        $rawToken = '42|TOKEN-CONTENT';
+        Http::fake(['*' => Http::response([
+            'success' => true,
+            'message' => ['token' => $rawToken],
+        ], 200)]);
+
+        $tokens = app(XpertaTokenService::class);
+
+        $this->assertSame($rawToken, $tokens->token());
+        $this->assertSame($rawToken, Cache::get($this->cacheKey()));
+        $this->assertSame(base64_encode($rawToken), $tokens->encodedToken());
+        $this->assertSame($rawToken, base64_decode($tokens->encodedToken(), true));
+        Http::assertSentCount(1);
+    }
+
+    public function test_legacy_base64_cache_is_normalized_without_double_encoding(): void
+    {
+        $rawToken = '77|LEGACY';
+        Cache::put($this->cacheKey(), base64_encode($rawToken), 60);
+
+        $tokens = app(XpertaTokenService::class);
+
+        $this->assertSame($rawToken, $tokens->token());
+        $this->assertSame($rawToken, Cache::get($this->cacheKey()));
+        $this->assertSame(base64_encode($rawToken), $tokens->encodedToken());
+        Http::assertNothingSent();
+    }
+
+    public function test_guide_payload_uses_exact_base64_token(): void
+    {
+        Cache::put($this->cacheKey(), '88|GUIDE', 60);
+        $quote = \Mockery::mock(B2cCotizacion::class)->makePartial();
+        $quote->shouldReceive('hasCompleteShippingAddresses')->once()->andReturnTrue();
+        $quote->shouldReceive('hasCompletePackageData')->once()->andReturnTrue();
+        $quote->forceFill([
+            'tipo_envio' => 'caja', 'medidas' => '25x25x35', 'peso' => 9,
+            'ciudad_origen' => 'Mexico', 'estado_origen' => 'Ciudad de Mexico',
+            'ciudad_destino' => 'Neza', 'estado_destino' => 'Mexico',
+        ]);
+
+        $payload = app(XpertaGuideService::class)->buildPayload($quote);
+
+        $this->assertSame(base64_encode('88|GUIDE'), $payload['token']);
+        $this->assertSame('88|GUIDE', base64_decode($payload['token'], true));
+    }
+
+    /** @dataProvider providerFailures */
+    public function test_provider_failure_is_contained_without_http_500(string $failureType): void
+    {
+        $provider = \Mockery::mock(ZigoProviderRateService::class);
+        $provider->shouldReceive('getOptionsForCotizacion')->once()
+            ->andReturnUsing(function () use ($failureType): void {
+                if ($failureType === 'timeout') {
+                    throw new ConnectionException('timeout');
+                }
+
+                throw new \RuntimeException('XPERTA_HTTP_403');
+            });
+        app()->instance(ZigoProviderRateService::class, $provider);
+
+        $method = new \ReflectionMethod(CotizacionPublicaController::class, 'getAvailableOptions');
+        $method->setAccessible(true);
+        $result = $method->invoke(app(CotizacionPublicaController::class), new B2cCotizacion());
+
+        $this->assertSame([], $result);
+        $this->assertSame(
+            'No fue posible obtener tarifas de Estafeta en este momento. Intenta nuevamente.',
+            session('rate_error')
+        );
+    }
+
+    public static function providerFailures(): array
+    {
+        return [
+            '403' => ['403'],
+            'timeout' => ['timeout'],
+        ];
     }
 
     private function cacheKey(): string

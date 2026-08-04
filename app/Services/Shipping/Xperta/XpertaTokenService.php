@@ -16,7 +16,14 @@ class XpertaTokenService
 
     public function encodedToken(bool $refresh = false): string
     {
-        return base64_encode($this->token($refresh));
+        $rawToken = $this->token($refresh);
+        $encodedToken = base64_encode($rawToken);
+
+        if (base64_decode($encodedToken, true) !== $rawToken) {
+            throw new RuntimeException('No fue posible codificar el token de Xperta.');
+        }
+
+        return $encodedToken;
     }
 
     public function token(bool $refresh = false): string
@@ -33,11 +40,18 @@ class XpertaTokenService
             )
         );
 
-        $rawToken = Cache::get($this->cacheKey());
-        if (!is_string($rawToken) || $rawToken === '') {
+        $cachedToken = Cache::get($this->cacheKey());
+        if (!is_string($cachedToken) || trim($cachedToken) === '') {
             $fresh = $this->requestToken($minutes);
             $rawToken = $fresh['token'];
             Cache::put($this->cacheKey(), $rawToken, $this->cacheUntil($fresh['expires_at'], $minutes));
+        } else {
+            $rawToken = $this->normalizeRawToken($cachedToken);
+
+            // Repair legacy cache entries that accidentally stored Base64.
+            if ($rawToken !== $cachedToken) {
+                Cache::put($this->cacheKey(), $rawToken, now()->addMinutes(max(1, $minutes - 5)));
+            }
         }
 
         return $rawToken;
@@ -99,10 +113,29 @@ class XpertaTokenService
         if ($token === '') {
             throw new RuntimeException('Xperta no devolvió el token esperado en message.token.');
         }
+        $token = $this->normalizeRawToken($token, false);
         return [
             'token' => $token,
             'expires_at' => data_get($result, 'data.message.expires_at'),
         ];
+    }
+
+    private function normalizeRawToken(string $token, bool $allowLegacyEncoded = true): string
+    {
+        $token = trim($token);
+
+        if (str_contains($token, '|')) {
+            return $token;
+        }
+
+        if ($allowLegacyEncoded) {
+            $decoded = base64_decode($token, true);
+            if (is_string($decoded) && str_contains($decoded, '|')) {
+                return $decoded;
+            }
+        }
+
+        throw new RuntimeException('El token crudo de Xperta no contiene el separador esperado.');
     }
 
     private function tokenPath(): string

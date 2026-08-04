@@ -52,7 +52,7 @@ class XpertaFrequencyService
             ),
             $path,
             [
-                'token' => $this->tokenService->token(),
+                'token' => $this->tokenService->encodedToken(),
             ],
             $this->providerHeaders()
         );

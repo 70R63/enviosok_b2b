@@ -291,6 +291,11 @@
 </style>
 </head>
 <body>
+@if(session('rate_error'))
+    <div role="alert" style="margin:16px;padding:14px;border-radius:10px;background:#fee2e2;color:#991b1b;font-weight:700">
+        {{ session('rate_error') }}
+    </div>
+@endif
 
 <div class="layout">
     <aside class="sidebar">

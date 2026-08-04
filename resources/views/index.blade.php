@@ -933,6 +933,10 @@
         <div class="quote-card">
             <div class="quote-title">Cotiza gratis tu envío</div>
 
+            @if(session('rate_error'))
+                <div class="landing-alert" role="alert">{{ session('rate_error') }}</div>
+            @endif
+
             @if(session('login_required'))
                 <div class="landing-alert">
                     Para continuar con envíos tipo caja necesitas
