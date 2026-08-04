@@ -8,6 +8,8 @@ use App\Services\Shipping\Data\UnifiedQuoteRequest;
 use App\Services\Shipping\Providers\XpertaEstafetaQuoteProvider;
 use App\Services\Shipping\Xperta\XpertaFrequencyService;
 use App\Services\Shipping\Xperta\XpertaGuideService;
+use App\Services\Shipping\Xperta\XpertaApiClient;
+use App\Services\Shipping\Xperta\XpertaProviderException;
 use App\Services\Shipping\Xperta\XpertaTokenService;
 use App\Services\ZigoProviderRateService;
 use Illuminate\Http\Client\ConnectionException;
@@ -109,15 +111,72 @@ final class XpertaPostmanContractTest extends TestCase
         $rawToken = '42|TOKEN-CONTENT';
         Http::fake(['*' => Http::response([
             'success' => true,
-            'message' => ['token' => $rawToken],
-        ], 200)]);
+            'message' => [
+                'token' => $rawToken,
+                'expires_at' => now()->addHour()->toIso8601String(),
+            ],
+        ], 200, ['X-Correlation-ID' => 'login-contract-test'])]);
 
         $tokens = app(XpertaTokenService::class);
 
+        $this->assertTrue(method_exists(app(XpertaApiClient::class), 'sendQueryWithMeta'));
         $this->assertSame($rawToken, $tokens->token());
         $this->assertSame($rawToken, Cache::get($this->cacheKey()));
         $this->assertSame(base64_encode($rawToken), $tokens->encodedToken());
         $this->assertSame($rawToken, base64_decode($tokens->encodedToken(), true));
+        Http::assertSentCount(1);
+        Http::assertSent(function ($request): bool {
+            return $request->method() === 'POST'
+                && str_starts_with($request->url(), 'https://xperta.test/api/v1/corp-real/login?')
+                && $request->hasHeader('x-api-key', 'secret-api-key')
+                && $request->hasHeader('Corporativo', 'corp-real')
+                && $request->hasHeader('minutos', '60')
+                && $request->hasHeader('Accept', 'application/json')
+                && $request->body() === ''
+                && $request['email'] === 'secret@example.test'
+                && $request['password'] === 'secret-password'
+                && $request['minutos'] === 60;
+        });
+    }
+
+    public function test_login_client_returns_decoded_json_http_status_duration_and_correlation_id(): void
+    {
+        Http::fake(['*' => Http::response(
+            ['success' => true, 'message' => ['token' => '42|TOKEN-CONTENT']],
+            200,
+            ['X-Request-ID' => 'request-123']
+        )]);
+
+        $result = app(XpertaApiClient::class)->sendQueryWithMeta(
+            'POST',
+            '/api/v1/corp-real/login',
+            ['email' => 'secret@example.test', 'password' => 'secret-password', 'minutos' => 60],
+            ['x-api-key' => 'secret-api-key', 'Corporativo' => 'corp-real', 'minutos' => '60', 'Accept' => 'application/json']
+        );
+
+        $this->assertSame('42|TOKEN-CONTENT', data_get($result, 'data.message.token'));
+        $this->assertSame(200, $result['http_status']);
+        $this->assertIsInt($result['duration_ms']);
+        $this->assertGreaterThanOrEqual(0, $result['duration_ms']);
+        $this->assertSame('request-123', $result['correlation_id']);
+        Http::assertSentCount(1);
+    }
+
+    public function test_login_403_is_classified_without_leaking_credentials(): void
+    {
+        Http::fake(['*' => Http::response(['message' => 'Credenciales no autorizadas'], 403)]);
+
+        try {
+            app(XpertaTokenService::class)->token();
+            $this->fail('Expected XpertaProviderException.');
+        } catch (XpertaProviderException $exception) {
+            $this->assertSame('XPERTA_CREDENTIALS_UNAUTHORIZED', $exception->errorCode);
+            $serialized = json_encode($exception->diagnosticMetadata, JSON_THROW_ON_ERROR);
+            $this->assertStringNotContainsString('secret@example.test', $serialized);
+            $this->assertStringNotContainsString('secret-password', $serialized);
+            $this->assertStringNotContainsString('secret-api-key', $serialized);
+        }
+
         Http::assertSentCount(1);
     }
 

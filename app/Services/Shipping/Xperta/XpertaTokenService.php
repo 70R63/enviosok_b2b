@@ -169,6 +169,7 @@ class XpertaTokenService
                 'services.xperta.corporativo'
             ),
             'minutos' => (string) min(10080, max(1, (int) config('services.xperta.token_minutes', 1440))),
+            'Accept' => 'application/json',
         ];
     }
 

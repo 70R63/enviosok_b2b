@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -137,6 +138,23 @@ class XpertaTokenCheckCommandTest extends TestCase
         Http::fake(['*' => Http::response(['message' => 'Unauthorized'], 401)]);
         $this->artisan('zigo:xperta-token-check', $this->activeArgs())->assertExitCode(1);
         $this->assertSame('XPERTA_TOKEN_HTTP_401', $this->report()['error_code']);
+    }
+
+    public function test_timeout_is_classified_with_one_login_attempt(): void
+    {
+        $attempts = 0;
+        Http::fake(function () use (&$attempts): void {
+            $attempts++;
+
+            throw new ConnectionException('Connection timed out');
+        });
+
+        $this->artisan('zigo:xperta-token-check', $this->activeArgs())->assertExitCode(1);
+
+        $this->assertSame('XPERTA_TOKEN_NETWORK_ERROR', $this->report()['error_code']);
+        $this->assertSame('network_error', $this->report()['provider_message_code']);
+        $this->assertSame(1, $attempts);
+        $this->assertSecretsAbsent();
     }
 
     /** @dataProvider forbiddenProvider */
