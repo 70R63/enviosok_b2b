@@ -10,6 +10,47 @@ use Throwable;
 
 class ZigoProviderQuoteObservationService
 {
+    public function attachSelectionMetadata(
+        B2cCotizacion $cotizacion,
+        array $option
+    ): void {
+        try {
+            $observation = ZigoProviderQuoteObservation::query()
+                ->where('b2c_cotizacion_id', $cotizacion->id)
+                ->where('service_code', $option['service_code'])
+                ->where('success', true)
+                ->latest('id')
+                ->first();
+
+            if (!$observation) {
+                return;
+            }
+
+            $payload = (array) $observation->response_payload;
+            $payload['_zigo_selection'] = [
+                'estimated_delivery_date' => $option['estimated_delivery_date'],
+                'zone_code' => $option['zone_code'],
+                'periodicity_name' => $option['periodicity_name'],
+                'operating_days' => $option['operating_days'],
+                'is_reexpedition' => $option['is_reexpedition'],
+                'is_ocurre' => $option['is_ocurre'],
+                'restriction' => $option['restriction'],
+                'restriction_description' => $option['restriction_description'],
+            ];
+
+            $observation->update(['response_payload' => $payload]);
+        } catch (Throwable $exception) {
+            Log::warning(
+                'ZIGO Xperta - No se pudo adjuntar metadata de selección',
+                [
+                    'cotizacion_id' => $cotizacion->id,
+                    'service_code' => $option['service_code'] ?? null,
+                    'exception' => get_class($exception),
+                ]
+            );
+        }
+    }
+
     public function recordSuccess(
         B2cCotizacion $cotizacion,
         string $serviceCode,

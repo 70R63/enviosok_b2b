@@ -4470,6 +4470,9 @@ private function getAvailableOptions(B2cCotizacion $cotizacion): array
 
             'estatus' => 'SELECCIONADA',
         ]);
+
+        app(\App\Services\ZigoProviderQuoteObservationService::class)
+            ->attachSelectionMetadata($cotizacion, $option);
     }
 
     public function index()

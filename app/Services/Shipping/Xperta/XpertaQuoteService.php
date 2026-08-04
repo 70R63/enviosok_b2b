@@ -21,7 +21,7 @@ class XpertaQuoteService
     public function options(B2cCotizacion $cotizacion): array
     {
 
-        $services = config('services.xperta.services', []);
+        $services = $this->configuredServices();
 
         if (!is_array($services) || $services === []) {
             throw new RuntimeException(
@@ -30,26 +30,21 @@ class XpertaQuoteService
         }
 
         $options = [];
-        $errors = [];
 
         foreach ($services as $service) {
             try {
                 $options[] = $this->quote($cotizacion, $service);
             } catch (Throwable $exception) {
-                $errors[$service] = $exception->getMessage();
-
+                $failure = $this->failureContext($service, $exception);
                 Log::warning('Xperta rechazó un servicio de cotización', [
                     'cotizacion_id' => $cotizacion->id,
-                    'service' => $service,
-                    'error' => $exception->getMessage(),
-                ]);
+                ] + $failure);
             }
         }
 
         if ($options === []) {
             throw new RuntimeException(
-                'Xperta no devolvió servicios disponibles. '
-                . implode(' | ', array_values($errors))
+                'Xperta no devolvió cotizaciones para los servicios configurados.'
             );
         }
 
@@ -115,7 +110,7 @@ class XpertaQuoteService
                 )
                 : 0.0;
 
-            $response = $this->client->send(
+            $result = $this->client->sendWithMeta(
                 (string) config(
                     'services.xperta.quote_method',
                     'GET'
@@ -151,8 +146,8 @@ class XpertaQuoteService
             );
 
             $data = data_get(
-                $response,
-                'data.0'
+                $result,
+                'data.data.0'
             );
 
             if (!is_array($data)) {
@@ -193,6 +188,11 @@ class XpertaQuoteService
                     'cotizacion_id' =>
                         $cotizacion->id,
                     'service' => $service,
+                    'http_status' => $result['http_status'],
+                    'provider_code' => 'XPERTA_QUOTE_OK',
+                    'provider_message_code' => 'success',
+                    'duration_ms' => $result['duration_ms'],
+                    'success' => true,
                     'origin_zip' => substr(
                         (string) $cotizacion->cp_origen,
                         0,
@@ -221,6 +221,7 @@ class XpertaQuoteService
                     $this->deliveryLabel($service),
                 'base_price' => $total,
                 'provider_source' => 'xperta',
+                'correlation_id' => $result['correlation_id'],
                 'extended_area' =>
                     $extendedAreaAmount > 0,
                 'extended_area_amount' =>
@@ -335,6 +336,40 @@ class XpertaQuoteService
             'x-api-key' => (string) config('services.xperta.api_key'),
             'Content-Type' => 'application/json',
             'Accept' => 'application/json',
+        ];
+    }
+
+    /** @return list<string> */
+    private function configuredServices(): array
+    {
+        $configured = config('services.xperta.services', []);
+
+        if (!is_array($configured)) {
+            return [];
+        }
+
+        return array_values(array_unique(array_filter(array_map(
+            static fn ($service): string => strtolower(trim((string) $service)),
+            $configured
+        ), static fn (string $service): bool => $service !== '')));
+    }
+
+    /** @return array<string, mixed> */
+    private function failureContext(string $service, Throwable $exception): array
+    {
+        $metadata = $exception instanceof XpertaProviderException
+            ? $exception->diagnosticMetadata
+            : [];
+
+        return [
+            'service' => $service,
+            'http_status' => $metadata['http_status'] ?? null,
+            'provider_code' => $exception instanceof XpertaProviderException
+                ? $exception->errorCode
+                : 'XPERTA_QUOTE_FAILED',
+            'provider_message_code' => $metadata['provider_message_code'] ?? null,
+            'duration_ms' => $metadata['duration_ms'] ?? null,
+            'success' => false,
         ];
     }
 }

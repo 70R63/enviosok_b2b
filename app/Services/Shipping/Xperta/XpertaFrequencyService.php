@@ -20,7 +20,14 @@ class XpertaFrequencyService
             return [
                 'available' => true,
                 'source' => 'disabled',
-                'response' => [],
+                'zone_code' => null,
+                'periodicity_name' => null,
+                'operating_days' => [],
+                'is_reexpedition' => null,
+                'is_ocurre' => null,
+                'restriction' => null,
+                'restriction_description' => null,
+                'services' => [],
             ];
         }
 
@@ -66,11 +73,118 @@ class XpertaFrequencyService
             );
         }
 
-        return [
+        return $this->normalizeResponse($response) + [
             'available' => true,
             'source' => 'xperta_frequency',
-            'response' => $response,
         ];
+    }
+
+    private function normalizeResponse(array $response): array
+    {
+        $destination = data_get($response, 'data.destinations.0');
+
+        if (!is_array($destination)) {
+            throw new RuntimeException(
+                'Xperta no devolvió data.destinations[0] en la frecuencia.'
+            );
+        }
+
+        $required = [
+            'zoneCode', 'periodicityName', 'isMonday', 'isTuesday',
+            'isWednesday', 'isThursday', 'isFriday', 'isSaturday',
+            'isSunday', 'isReexpedition', 'isOcurre', 'restriction',
+            'restrictionDescription', 'service',
+        ];
+
+        foreach ($required as $field) {
+            if (!array_key_exists($field, $destination)) {
+                throw new RuntimeException(
+                    "Xperta no devolvió {$field} en data.destinations[0]."
+                );
+            }
+        }
+
+        if (!is_array($destination['service'])) {
+            throw new RuntimeException(
+                'Xperta no devolvió una lista service válida en la frecuencia.'
+            );
+        }
+
+        $services = [];
+        foreach ($destination['service'] as $service) {
+            if (!is_array($service)
+                || !array_key_exists('name', $service)
+                || !array_key_exists('estimatedDeliveryDate', $service)) {
+                throw new RuntimeException(
+                    'Xperta devolvió un servicio de frecuencia incompleto.'
+                );
+            }
+
+            $code = $this->serviceCode((string) $service['name']);
+            if (!in_array($code, ['terrestre', 'diasig'], true)) {
+                continue;
+            }
+
+            $services[$code] = [
+                'estimated_delivery_date' =>
+                    (string) $service['estimatedDeliveryDate'],
+            ];
+        }
+
+        if ($services === []) {
+            throw new RuntimeException(
+                'Xperta no devolvió servicios reconocidos en la frecuencia.'
+            );
+        }
+
+        return [
+            'zone_code' => (string) $destination['zoneCode'],
+            'periodicity_name' => (string) $destination['periodicityName'],
+            'operating_days' => $this->operatingDays($destination),
+            'is_reexpedition' => (bool) $destination['isReexpedition'],
+            'is_ocurre' => (bool) $destination['isOcurre'],
+            'restriction' => (bool) $destination['restriction'],
+            'restriction_description' =>
+                (string) $destination['restrictionDescription'],
+            'services' => $services,
+        ];
+    }
+
+    private function serviceCode(string $name): string
+    {
+        $name = preg_replace('/\s+/', ' ', trim($name));
+        $normalized = strtr(mb_strtolower($name), [
+            'á' => 'a', 'é' => 'e', 'í' => 'i',
+            'ó' => 'o', 'ú' => 'u', 'ü' => 'u', '.' => '',
+        ]);
+
+        return match ($normalized) {
+            'terrestre' => 'terrestre',
+            'dia sig', 'dia siguiente', 'diasig' => 'diasig',
+            default => $normalized,
+        };
+    }
+
+    private function operatingDays(array $destination): array
+    {
+        $days = [
+            'isMonday' => 'lunes',
+            'isTuesday' => 'martes',
+            'isWednesday' => 'miércoles',
+            'isThursday' => 'jueves',
+            'isFriday' => 'viernes',
+            'isSaturday' => 'sábado',
+            'isSunday' => 'domingo',
+        ];
+
+        $operatingDays = [];
+        foreach ($days as $field => $label) {
+            if ((bool) $destination[$field]) {
+                $operatingDays[] = $label;
+            }
+        }
+
+        return $operatingDays;
     }
 
     private function findBlockedMessage(array $response): ?string

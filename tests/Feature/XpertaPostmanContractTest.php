@@ -10,6 +10,7 @@ use App\Services\Shipping\Xperta\XpertaFrequencyService;
 use App\Services\Shipping\Xperta\XpertaGuideService;
 use App\Services\Shipping\Xperta\XpertaApiClient;
 use App\Services\Shipping\Xperta\XpertaProviderException;
+use App\Services\Shipping\Xperta\XpertaQuoteService;
 use App\Services\Shipping\Xperta\XpertaTokenService;
 use App\Services\ZigoProviderRateService;
 use Illuminate\Http\Client\ConnectionException;
@@ -56,10 +57,30 @@ final class XpertaPostmanContractTest extends TestCase
     public function test_frequency_uses_corporativo_path_headers_and_token_only_body(): void
     {
         Cache::put($this->cacheKey(), '123|raw-token', 60);
-        Http::fake(['*' => Http::response(['success' => true, 'data' => []], 200)]);
+        Http::fake(['*' => Http::response(['success' => true, 'data' => [
+            'destinations' => [[
+                'zoneCode' => '1',
+                'periodicityName' => 'Diaria',
+                'isMonday' => true,
+                'isTuesday' => true,
+                'isWednesday' => true,
+                'isThursday' => true,
+                'isFriday' => true,
+                'isSaturday' => true,
+                'isSunday' => false,
+                'isReexpedition' => false,
+                'isOcurre' => false,
+                'restriction' => false,
+                'restrictionDescription' => '',
+                'service' => [
+                    ['name' => '  DÍA SIG. ', 'estimatedDeliveryDate' => '2026-08-05'],
+                    ['name' => 'TERRESTRE', 'estimatedDeliveryDate' => '2026-08-06'],
+                ],
+            ]],
+        ]], 200)]);
         $before = DB::table('b2c_cotizaciones')->count();
 
-        app(XpertaFrequencyService::class)->check('09800', '57820');
+        $frequency = app(XpertaFrequencyService::class)->check('09800', '57820');
 
         Http::assertSentCount(1);
         Http::assertSent(function ($request): bool {
@@ -72,6 +93,25 @@ final class XpertaPostmanContractTest extends TestCase
                 && $request->data() === ['token' => base64_encode('123|raw-token')];
         });
         $this->assertSame($before, DB::table('b2c_cotizaciones')->count());
+        $this->assertSame('1', $frequency['zone_code']);
+        $this->assertSame('Diaria', $frequency['periodicity_name']);
+        $this->assertSame(
+            ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'],
+            $frequency['operating_days']
+        );
+        $this->assertNotContains('domingo', $frequency['operating_days']);
+        $this->assertFalse($frequency['is_reexpedition']);
+        $this->assertFalse($frequency['is_ocurre']);
+        $this->assertFalse($frequency['restriction']);
+        $this->assertSame('', $frequency['restriction_description']);
+        $this->assertSame(
+            '2026-08-06',
+            $frequency['services']['terrestre']['estimated_delivery_date']
+        );
+        $this->assertSame(
+            '2026-08-05',
+            $frequency['services']['diasig']['estimated_delivery_date']
+        );
     }
 
     public function test_unified_quote_uses_exact_postman_body_and_headers_once(): void
@@ -104,6 +144,73 @@ final class XpertaPostmanContractTest extends TestCase
         $this->assertSame($before, DB::table('b2c_cotizaciones')->count());
         $this->assertFalse(config('services.shipping.unified_quote_enabled'));
         $this->assertFalse(config('services.shipping.prd_quote_probe_enabled'));
+    }
+
+    public function test_quote_services_are_normalized_and_requested_independently(): void
+    {
+        config(['services.xperta.services' => [' Terrestre ', 'DIASIG', '', 'diasig']]);
+        Cache::put($this->cacheKey(), '123|raw-token', 60);
+        Http::fake(['*' => Http::response($this->quoteResponse(167.04), 200)]);
+        $before = DB::table('b2c_cotizaciones')->count();
+
+        $options = app(XpertaQuoteService::class)->options($this->quoteModel());
+
+        $this->assertCount(2, $options);
+        $this->assertSame(['terrestre', 'diasig'], array_column($options, 'service_code'));
+        Http::assertSentCount(2);
+        Http::assertSent(fn ($request): bool => str_contains(
+            $request->url(), '/servicios/terrestre/cotizaciones'
+        ));
+        Http::assertSent(fn ($request): bool => str_contains(
+            $request->url(), '/servicios/diasig/cotizaciones'
+        ));
+        $this->assertSame($before, DB::table('b2c_cotizaciones')->count());
+    }
+
+    /** @dataProvider oneServiceFailureCases */
+    public function test_one_failed_service_does_not_discard_the_other(
+        string $failedService,
+        string $expectedService
+    ): void {
+        config(['services.xperta.services' => ['terrestre', 'diasig']]);
+        Cache::put($this->cacheKey(), '123|raw-token', 60);
+        Http::fake(function ($request) use ($failedService) {
+            return str_contains($request->url(), "/servicios/{$failedService}/")
+                ? Http::response(['message' => 'detalle privado del proveedor'], 400)
+                : Http::response($this->quoteResponse(180.50), 200);
+        });
+
+        $options = app(XpertaQuoteService::class)->options($this->quoteModel());
+
+        $this->assertCount(1, $options);
+        $this->assertSame($expectedService, $options[0]['service_code']);
+        Http::assertSentCount(2);
+    }
+
+    public static function oneServiceFailureCases(): array
+    {
+        return [
+            'diasig fails' => ['diasig', 'terrestre'],
+            'terrestre fails' => ['terrestre', 'diasig'],
+        ];
+    }
+
+    public function test_all_quote_services_failed_returns_functional_error(): void
+    {
+        config(['services.xperta.services' => ['terrestre', 'diasig']]);
+        Cache::put($this->cacheKey(), '123|raw-token', 60);
+        Http::fake(['*' => Http::response(['message' => 'detalle privado del proveedor'], 400)]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage(
+            'Xperta no devolvió cotizaciones para los servicios configurados.'
+        );
+
+        try {
+            app(XpertaQuoteService::class)->options($this->quoteModel());
+        } finally {
+            Http::assertSentCount(2);
+        }
     }
 
     public function test_login_caches_raw_token_and_encodes_exactly_once(): void
@@ -272,5 +379,27 @@ final class XpertaPostmanContractTest extends TestCase
             config('services.xperta.base_url'), config('services.xperta.corporativo'),
             config('services.xperta.email'),
         ]));
+    }
+
+    private function quoteModel(): B2cCotizacion
+    {
+        return new B2cCotizacion([
+            'cp_origen' => '09800',
+            'cp_destino' => '57820',
+            'tipo_envio' => 'caja',
+            'peso' => 5,
+            'medidas' => '25x25x35',
+            'valor_declarado' => 0,
+        ]);
+    }
+
+    private function quoteResponse(float $total): array
+    {
+        return ['success' => true, 'data' => [[
+            'costo' => $total - 16,
+            'costo_ae' => 0,
+            'sub_total' => $total - 16,
+            'total' => $total,
+        ]]];
     }
 }

@@ -466,9 +466,13 @@
                                 </div>
                             @endif
 
-                            @if($opcion['is_reexpedition'] ?? $opcion['extended_area'] ?? false)
+                            <div class="extended-area">
+                                {{ ($opcion['is_reexpedition'] ?? false) ? 'Área extendida / reexpedición' : 'Área regular' }}
+                            </div>
+
+                            @if($opcion['restriction'] ?? false)
                                 <div class="extended-area">
-                                    Zona extendida · cargo incluido
+                                    Restricción: {{ $opcion['restriction_description'] }}
                                 </div>
                             @endif
                         </div>
