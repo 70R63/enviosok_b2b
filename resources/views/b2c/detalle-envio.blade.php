@@ -359,10 +359,10 @@
                 <div class="value">{{ $cotizacion->tracking_number ?? 'Sin tracking' }}</div>
 
                 <div class="label">Documento</div>
-                <div class="value">{{ $cotizacion->documento ?? 'Sin documento' }}</div>
+                <div class="value">{{ $cotizacion->documento ? 'Etiqueta disponible' : 'Sin documento' }}</div>
 
                 @if($cotizacion->documento)
-                    <a href="{{ asset('storage/' . basename($cotizacion->documento)) }}" target="_blank" class="btn success">
+                    <a href="{{ strtolower((string) $cotizacion->provider) === 'xperta' ? route('b2c.guia.etiqueta', $cotizacion) : asset('storage/' . basename($cotizacion->documento)) }}" target="_blank" rel="noopener noreferrer" class="btn success">
                         Descargar guía
                     </a>
                 @endif

@@ -423,12 +423,7 @@
 
                                             @if(!empty($envio->documento))
                                                 <a
-                                                    href="{{ asset(
-                                                        'storage/'
-                                                        . basename(
-                                                            $envio->documento
-                                                        )
-                                                    ) }}"
+                                                    href="{{ strtolower((string) $envio->provider) === 'xperta' ? route('b2c.guia.etiqueta', $envio) : asset('storage/' . basename($envio->documento)) }}"
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                 >

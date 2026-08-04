@@ -78,6 +78,11 @@ class B2cCotizacion extends Model
         'guia_last_error_message',
         'guia_request_snapshot',
         'guia_response_snapshot',
+        'guia_provider_shipment_id',
+        'guia_provider_status',
+        'guia_label_format',
+        'guia_request_fingerprint',
+        'guia_generated_by',
 
         'payment_id',
         'payment_status',
@@ -94,6 +99,7 @@ class B2cCotizacion extends Model
         'payment_verification_payload',
 
         'provider_base_price',
+        'provider','carrier','service_code','quote_source','provider_quote_reference','provider_extended_area_price','provider_subtotal','provider_total','quote_request_fingerprint','quote_correlation_id','quote_expires_at',
         'zigo_margin_percentage',
         'zigo_fixed_fee',
         'zigo_margin_amount',
@@ -127,6 +133,7 @@ class B2cCotizacion extends Model
         'precio_sin_seguro' => 'decimal:2',
 
         'provider_base_price' => 'decimal:2',
+        'provider_extended_area_price'=>'decimal:2','provider_subtotal'=>'decimal:2','provider_total'=>'decimal:2','quote_expires_at'=>'datetime',
         'zigo_margin_percentage' => 'decimal:2',
         'zigo_fixed_fee' => 'decimal:2',
         'zigo_margin_amount' => 'decimal:2',
@@ -149,6 +156,7 @@ class B2cCotizacion extends Model
         'guia_recovered_at' => 'datetime',
         'guia_request_snapshot' => 'array',
         'guia_response_snapshot' => 'array',
+        'guia_generated_by' => 'integer',
     ];
 
     public function user()

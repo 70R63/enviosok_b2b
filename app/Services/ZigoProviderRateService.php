@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\B2cCotizacion;
 use App\Negocio\Guias\EstafetaCreacion;
 use App\Services\Shipping\Xperta\XpertaQuoteService;
+use App\Services\Shipping\B2cXpertaQuoteFlowService;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
@@ -13,13 +14,15 @@ class ZigoProviderRateService
 {
     public function __construct(
         private XpertaQuoteService $xpertaQuoteService,
-        private ZigoProviderRateEngineService $rateEngine
+        private ZigoProviderRateEngineService $rateEngine,
+        private B2cXpertaQuoteFlowService $b2cXpertaFlow
     ) {
     }
 
     public function getOptionsForCotizacion(
         B2cCotizacion $cotizacion
     ): array {
+        if(config('zigo_b2c_xperta.full_flow_enabled',false))return $this->b2cXpertaFlow->options($cotizacion);
         if (
             config(
                 'zigo_provider_rates'

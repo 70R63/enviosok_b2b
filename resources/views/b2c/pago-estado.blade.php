@@ -249,7 +249,7 @@
 <div class="card">
     <div class="label">Guía PDF</div>
     <div class="value">
-        <a href="{{ asset('storage/' . basename($cotizacion->documento)) }}" target="_blank" class="btn-secondary">
+        <a href="{{ strtolower((string) $cotizacion->provider) === 'xperta' ? route('b2c.guia.etiqueta', $cotizacion) : asset('storage/' . basename($cotizacion->documento)) }}" target="_blank" rel="noopener noreferrer" class="btn-secondary">
             Descargar guía
         </a>
     </div>
@@ -273,7 +273,7 @@
         <div class="acciones">
 
         @if($cotizacion->documento)
-            <a href="{{ asset('storage/' . $cotizacion->documento) }}" target="_blank" class="btn-primary">
+            <a href="{{ strtolower((string) $cotizacion->provider) === 'xperta' ? route('b2c.guia.etiqueta', $cotizacion) : asset('storage/' . $cotizacion->documento) }}" target="_blank" rel="noopener noreferrer" class="btn-primary">
                 Descargar guía
             </a>
         @elseif($mostrarGuia && !$cotizacion->tracking_number)

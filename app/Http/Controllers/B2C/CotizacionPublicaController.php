@@ -1736,8 +1736,23 @@ private function verifyMercadoPagoCallback(
 public function generarGuia(
     B2cCotizacion $cotizacion,
     EstafetaGuideService $guideService,
-    IdentityGuideAccessService $identityGuideAccessService
+    IdentityGuideAccessService $identityGuideAccessService,
+    \App\Services\Shipping\B2cXpertaGuideFlowService $xpertaGuideFlow
 ) {
+    if (config('zigo_b2c_xperta.full_flow_enabled', false)) {
+        if ($cotizacion->user_id !== auth()->id()) {
+            abort(403);
+        }
+        try {
+            $cotizacion = $xpertaGuideFlow->generate($cotizacion, (int) auth()->id());
+        } catch (\RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+        return redirect()->route('b2c.pago.success', $cotizacion->id)
+            ->with('success', $cotizacion->documento
+                ? 'Guía disponible correctamente. Tracking: ' . $cotizacion->tracking_number
+                : 'La guía fue generada; la etiqueta requiere revisión operativa.');
+    }
     if ($cotizacion->user_id !== auth()->id()) {
         abort(403);
     }
@@ -1819,6 +1834,28 @@ public function generarGuia(
         )
         ->with('success', $message)
         ->with('pdf_url', $pdfUrl);
+}
+
+public function descargarEtiquetaB2c(B2cCotizacion $cotizacion)
+{
+    if ((int) $cotizacion->user_id !== (int) auth()->id()) {
+        abort(403);
+    }
+    $path = trim((string) $cotizacion->documento);
+    if ($path === '' || !str_starts_with($path, 'private/b2c/labels/')
+        || !\Illuminate\Support\Facades\Storage::disk('local')->exists($path)) {
+        return back()->with('error', 'La etiqueta no está disponible. Reporta una incidencia para revisión.');
+    }
+    $contents = \Illuminate\Support\Facades\Storage::disk('local')->get($path);
+    if (!is_string($contents) || !str_starts_with($contents, '%PDF-')) {
+        return back()->with('error', 'La etiqueta no superó la validación de integridad.');
+    }
+    return response($contents, 200, [
+        'Content-Type' => 'application/pdf',
+        'Content-Disposition' => 'attachment; filename="etiqueta-' . $cotizacion->id . '.pdf"',
+        'X-Content-Type-Options' => 'nosniff',
+        'Cache-Control' => 'private, no-store',
+    ]);
 }
 
 private function buildEstafetaPayload(B2cCotizacion $cotizacion): array
@@ -4336,6 +4373,18 @@ private function getAvailableOptions(B2cCotizacion $cotizacion): array
             */
             'provider_base_price' =>
                 $pricing['base_price'],
+
+            'provider' => $option['provider_source'] ?? null,
+            'carrier' => $option['carrier'] ?? strtolower((string)$option['logistico']),
+            'service_code' => $option['service_code'] ?? $option['servicio'],
+            'quote_source' => $option['quote_source'] ?? null,
+            'provider_quote_reference' => $option['provider_quote_id'] ?? null,
+            'provider_extended_area_price' => $option['provider_extended_area_price'] ?? ($option['extended_area_amount'] ?? 0),
+            'provider_subtotal' => $option['provider_subtotal'] ?? null,
+            'provider_total' => $option['provider_total'] ?? ($option['base_price'] ?? null),
+            'quote_request_fingerprint' => $option['request_fingerprint'] ?? null,
+            'quote_correlation_id' => $option['correlation_id'] ?? null,
+            'quote_expires_at' => $option['quote_expires_at'] ?? null,
 
             'zigo_margin_percentage' =>
                 $pricing['margin_percentage'],

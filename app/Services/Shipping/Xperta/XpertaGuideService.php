@@ -37,7 +37,7 @@ class XpertaGuideService
 
         return [
             'token' => $includeToken
-                ? $this->tokenService->encodedToken()
+                ? $this->tokenService->token()
                 : '***TOKEN_BASE64***',
 
             'labelResponseOptions' => 'URL_ONLY',
@@ -103,9 +103,16 @@ class XpertaGuideService
         B2cCotizacion $cotizacion,
         ?string $service = null
     ): array {
-        if (!config('services.xperta.guide_enabled', false)) {
+        return $this->createWithMeta($cotizacion, $service)['data'];
+    }
+
+    public function createWithMeta(
+        B2cCotizacion $cotizacion,
+        ?string $service = null
+    ): array {
+        if (!config('zigo_b2c_xperta.guide_enabled', false)) {
             throw new RuntimeException(
-                'La generaciÃ³n de guÃ­a Xperta estÃ¡ desactivada.'
+                'La generación de guía Xperta está desactivada.'
             );
         }
 
@@ -115,7 +122,7 @@ class XpertaGuideService
 
         $path = $this->resolvedPath($cotizacion, $service);
 
-        return $this->client->send(
+        return $this->client->sendWithMeta(
             'POST',
             $path,
             $this->buildPayload($cotizacion),
@@ -135,10 +142,11 @@ class XpertaGuideService
         return $this->client->resolvePath(
             (string) config(
                 'services.xperta.guide_path',
-                '/api/v1/empresas/{empresa}/ltds/{ltd}/servicios/{service}/guia'
+                '/api/v1/empresas/{corporativo}/ltds/{ltd}/servicios/{service}/guia'
             ),
             [
-                'empresa' => config('services.xperta.empresa'),
+                'corporativo' => config('services.xperta.corporativo'),
+                'empresa' => config('services.xperta.corporativo'),
                 'ltd' => config('services.xperta.ltd', 'estafeta'),
                 'service' => $service,
             ]
@@ -353,6 +361,8 @@ class XpertaGuideService
             'Corporativo' => (string) config(
                 'services.xperta.corporativo'
             ),
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
         ];
 
         if (
