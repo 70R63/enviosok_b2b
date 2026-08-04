@@ -89,12 +89,12 @@ class XpertaQuoteService
             $path = $this->client->resolvePath(
                 (string) config(
                     'services.xperta.quote_path',
-                    '/api/v1/empresas/{empresa}/ltds/'
+                    '/api/v1/empresas/{corporativo}/ltds/'
                     . '{ltd}/servicios/{service}/cotizaciones'
                 ),
                 [
-                    'empresa' =>
-                        config('services.xperta.empresa'),
+                    'corporativo' => config('services.xperta.corporativo'),
+                    'empresa' => config('services.xperta.corporativo'),
                     'ltd' =>
                         config(
                             'services.xperta.ltd',
@@ -123,7 +123,7 @@ class XpertaQuoteService
                 $path,
                 [
                     'token' =>
-                        $this->tokenService->encodedToken(),
+                        $this->tokenService->token(),
                     'peso' => (float) (
                         $cotizacion->peso_real
                         ?: $cotizacion->peso
@@ -332,6 +332,9 @@ class XpertaQuoteService
             'Corporativo' => (string) config(
                 'services.xperta.corporativo'
             ),
+            'x-api-key' => (string) config('services.xperta.api_key'),
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
         ];
     }
 }

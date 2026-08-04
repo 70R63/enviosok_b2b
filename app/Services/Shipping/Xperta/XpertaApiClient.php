@@ -8,6 +8,24 @@ use RuntimeException;
 
 class XpertaApiClient
 {
+    public function sendQueryWithMeta(
+        string $method,
+        string $path,
+        array $query,
+        array $headers = []
+    ): array {
+        $this->assertBaseConfiguration();
+        $startedAt = microtime(true);
+        $url = $this->resolveUrl($path);
+        $response = $this->request($headers)->send(
+            strtoupper($method),
+            $url,
+            ['query' => $query]
+        );
+
+        return $this->responseWithMeta($response, $url, $startedAt);
+    }
+
     public function send(
         string $method,
         string $path,
@@ -15,25 +33,20 @@ class XpertaApiClient
         array $headers = [],
         bool $preserveZeroFraction = false
     ): array {
-        $this->assertBaseConfiguration();
+        return $this->sendWithMeta($method, $path, $payload, $headers, $preserveZeroFraction)['data'];
+    }
 
-        $request = Http::acceptJson()
-            ->connectTimeout(
-                max(
-                    1,
-                    (int) config('services.xperta.connect_timeout', 5)
-                )
-            )
-            ->timeout(
-                max(
-                    1,
-                    (int) config('services.xperta.timeout', 20)
-                )
-            )
-            ->withHeaders($headers)
-            ->withOptions([
-                'allow_redirects' => false,
-            ]);
+    public function sendWithMeta(
+        string $method,
+        string $path,
+        array $payload = [],
+        array $headers = [],
+        bool $preserveZeroFraction = false
+    ): array {
+        $this->assertBaseConfiguration();
+        $startedAt = microtime(true);
+
+        $request = $this->request($headers);
 
         if ($preserveZeroFraction) {
             $json = json_encode(
@@ -61,7 +74,26 @@ class XpertaApiClient
                 );
         }
 
-        return $this->decode($response, $url);
+        return $this->responseWithMeta($response, $url, $startedAt);
+    }
+
+    private function request(array $headers)
+    {
+        return Http::acceptJson()
+            ->connectTimeout(max(1, (int) config('services.xperta.connect_timeout', 5)))
+            ->timeout(max(1, (int) config('services.xperta.timeout', 20)))
+            ->withHeaders($headers)
+            ->withOptions(['allow_redirects' => false]);
+    }
+
+    private function responseWithMeta(Response $response, string $url, float $startedAt): array
+    {
+        return [
+            'data' => $this->decode($response, $url),
+            'http_status' => $response->status(),
+            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            'correlation_id' => $this->correlationId($response),
+        ];
     }
 
     public function resolvePath(
@@ -178,7 +210,6 @@ class XpertaApiClient
         return [
             'host' => (string) parse_url($url, PHP_URL_HOST),
             'path' => $path,
-            'empresa' => (string) config('services.xperta.empresa'),
             'corporativo' => (string) config('services.xperta.corporativo'),
             'ltd' => (string) config('services.xperta.ltd'),
             'service' => isset($service[1]) ? rawurldecode($service[1]) : null,
@@ -223,7 +254,6 @@ class XpertaApiClient
     {
         $required = [
             'services.xperta.base_url' => 'XPERTA_BASE_URL',
-            'services.xperta.empresa' => 'XPERTA_EMPRESA',
             'services.xperta.corporativo' => 'XPERTA_CORPORATIVO',
             'services.xperta.email' => 'XPERTA_EMAIL',
             'services.xperta.password' => 'XPERTA_PASSWORD',

@@ -51,3 +51,19 @@ php artisan zigo:shipping-probe --environment=production --carrier=estafeta --op
 ```
 
 Antes de una ventana autorizada, habilitar temporalmente solo `ZIGO_SHIPPING_PRD_QUOTE_PROBE_ENABLED=true`, regenerar config cache y volver a `false` inmediatamente después. Nunca combinar con `--record-contract`.
+
+## EST-PRD-03.3 — validación aislada del token Xperta
+
+El chequeo de token está apagado con `ZIGO_XPERTA_PRD_TOKEN_CHECK_ENABLED=false`. Sin `--execute`, el comando solo valida y genera evidencia redactada; no abre tráfico. La ejecución activa llama exactamente una vez al endpoint configurado en `XPERTA_TOKEN_PATH`, con el mismo payload y headers del flujo Xperta vigente. Solicita un token nuevo sin consultar, borrar ni reemplazar la caché compartida.
+
+```bash
+php artisan zigo:xperta-token-check --environment=production --confirm=XPERTA-TOKEN-PRD --execute
+```
+
+Durante una ventana autorizada, habilite temporalmente la bandera, regenere la caché de configuración y vuelva a deshabilitarla al concluir. El reporte privado en `storage/app/private/xperta-token-checks/` conserva solo host, path, empresa, estado HTTP, duración, presencia/longitud/fingerprint del token y si se envió `x-api-key`; nunca conserva el token, email, password, API key, headers, request o response completos. Este comando no ejecuta cotización, cobertura, guía, tracking, cancelación ni fallback.
+
+### Contrato HTTP confirmado por Postman
+
+El login usa `POST /api/v1/{corporativo}/login`: `email`, `password` y `minutos` viajan exclusivamente como query parameters; los headers son `x-api-key`, `Corporativo`, `minutos` y `Accept: application/json`. No existe JSON body. La respuesta válida exige `success=true` y `message.token`; `message.expires_at`, cuando existe, determina el TTL de caché con margen preventivo.
+
+Frecuencia usa `POST /api/v1/empresas/{corporativo}/ltds/{ltd}/frecuencia/{origin}/{destination}` y body JSON con solo `token`. Cotización usa `POST /api/v1/empresas/{corporativo}/ltds/{ltd}/servicios/{service}/cotizaciones` y conserva exactamente `token`, `peso`, `largo`, `ancho`, `alto`, `cp`, `cp_d` y `valor_declarado`. Ambas operaciones envían `Corporativo`, `x-api-key`, `Content-Type: application/json` y `Accept: application/json`.

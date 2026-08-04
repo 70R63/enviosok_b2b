@@ -65,18 +65,19 @@ return [
         'token_minutes' => env('XPERTA_TOKEN_MINUTES', 1440),
         'connect_timeout' => env('XPERTA_CONNECT_TIMEOUT', 5),
         'timeout' => env('XPERTA_TIMEOUT', 20),
+        'prd_token_check_enabled' => env('ZIGO_XPERTA_PRD_TOKEN_CHECK_ENABLED', false),
 
         'token_path' => env(
             'XPERTA_TOKEN_PATH',
-            '/api/v1/{empresa}/login'
+            '/api/v1/{corporativo}/login'
         ),
         'frequency_path' => env(
             'XPERTA_FREQUENCY_PATH',
-            '/api/v1/empresas/{empresa}/ltds/{ltd}/frecuencia/{origin}/{destination}'
+            '/api/v1/empresas/{corporativo}/ltds/{ltd}/frecuencia/{origin}/{destination}'
         ),
         'quote_path' => env(
             'XPERTA_QUOTE_PATH',
-            '/api/v1/empresas/{empresa}/ltds/{ltd}/servicios/{service}/cotizaciones'
+            '/api/v1/empresas/{corporativo}/ltds/{ltd}/servicios/{service}/cotizaciones'
         ),
         'guide_path' => env(
             'XPERTA_GUIDE_PATH',
@@ -102,7 +103,7 @@ return [
 
         'frequency_method' => env(
             'XPERTA_FREQUENCY_METHOD',
-            'GET'
+            'POST'
         ),
         'quote_method' => env('XPERTA_QUOTE_METHOD', 'POST'),
         'frequency_empresa_id' => env(

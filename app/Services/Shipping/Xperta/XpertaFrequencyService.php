@@ -34,10 +34,11 @@ class XpertaFrequencyService
         $path = $this->client->resolvePath(
             (string) config(
                 'services.xperta.frequency_path',
-                '/api/v1/empresas/{empresa}/ltds/{ltd}/frecuencia/{origin}/{destination}'
+                '/api/v1/empresas/{corporativo}/ltds/{ltd}/frecuencia/{origin}/{destination}'
             ),
             [
-                'empresa' => config('services.xperta.empresa'),
+                'corporativo' => config('services.xperta.corporativo'),
+                'empresa' => config('services.xperta.corporativo'),
                 'ltd' => config('services.xperta.ltd', 'estafeta'),
                 'origin' => $originPostalCode,
                 'destination' => $destinationPostalCode,
@@ -47,15 +48,11 @@ class XpertaFrequencyService
         $response = $this->client->send(
             (string) config(
                 'services.xperta.frequency_method',
-                'GET'
+                'POST'
             ),
             $path,
             [
-                'empresa_id' => config(
-                    'services.xperta.frequency_empresa_id',
-                    config('services.xperta.empresa')
-                ),
-                'token' => $this->tokenService->encodedToken(),
+                'token' => $this->tokenService->token(),
             ],
             $this->providerHeaders()
         );
@@ -141,6 +138,8 @@ class XpertaFrequencyService
             'Corporativo' => (string) config(
                 'services.xperta.corporativo'
             ),
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
         ];
     }
 }
