@@ -1038,14 +1038,19 @@
                         <h2 style="margin-top:0;color:#111827;text-align:center;">Opciones disponibles</h2>
 
                         @foreach($opciones as $opcion)
+                            @php
+                                $deliveryDate = \Carbon\Carbon::parse($opcion['estimated_delivery_date'])->format('d/m/Y');
+                                $operatingDays = implode(', ', $opcion['operating_days']);
+                                $isReexpedition = (bool) $opcion['is_reexpedition'];
+                            @endphp
                             <form method="POST" action="{{ route('b2c.seleccionar', $cotizacion_id) }}"
-                                style="display:grid;grid-template-columns:1.5fr 1fr 1fr auto;gap:18px;align-items:center;border:1px solid #e5e7eb;border-radius:14px;padding:16px;margin-top:12px;">
+                                class="landing-quote-option">
                                 @csrf
 
                                 <input type="hidden" name="logistico" value="{{ $opcion['logistico'] }}">
                                 <input type="hidden" name="servicio" value="{{ $opcion['servicio'] }}">
 
-                                <div style="display:flex;align-items:center;gap:15px;">
+                                <div class="landing-quote-service">
                                     <img src="{{ asset($opcion['logo']) }}" alt="{{ $opcion['logistico'] }}" style="width:90px;height:auto;object-fit:contain;">
                                     <div>
                                         <strong>{{ $opcion['logistico'] }}</strong>
@@ -1053,19 +1058,91 @@
                                     </div>
                                 </div>
 
-                                <div>{{ $opcion['entrega'] }}</div>
-
-                                <div style="font-size:22px;font-weight:900;">
-                                    ${{ number_format($opcion['precio'], 2) }}
+                                <div class="landing-quote-metadata">
+                                    <div><strong>Entrega estimada:</strong> {{ $deliveryDate }}</div>
+                                    <div><strong>Frecuencia:</strong> {{ $opcion['periodicity_name'] }}</div>
+                                    <div><strong>Opera:</strong> {{ $operatingDays }}</div>
+                                    <div><strong>Zona:</strong> {{ $opcion['zone_code'] }}</div>
+                                    <div><strong>{{ $isReexpedition ? 'Área extendida / reexpedición' : 'Área regular' }}</strong></div>
+                                    @if($opcion['restriction'])
+                                        <div class="landing-quote-restriction">
+                                            <strong>Restricción:</strong> {{ $opcion['restriction_description'] }}
+                                        </div>
+                                    @endif
                                 </div>
 
-                                <button type="submit" style="background:#f97316;color:white;border:none;border-radius:10px;padding:12px 22px;font-weight:900;cursor:pointer;">
+                                <div class="landing-quote-price">
+                                    ${{ number_format($opcion['commercial_price'], 2) }} MXN
+                                </div>
+
+                                <button
+                                    type="button"
+                                    class="landing-quote-select"
+                                    data-service="{{ $opcion['logistico'] }} {{ $opcion['servicio'] }}"
+                                    data-origin="{{ $cotizacion_publica->cp_origen }}"
+                                    data-destination="{{ $cotizacion_publica->cp_destino }}"
+                                    data-weight="{{ $opcion['weight_billable'] }} kg"
+                                    data-dimensions="{{ $opcion['dimensions'] }}"
+                                    data-delivery="{{ $deliveryDate }}"
+                                    data-frequency="{{ $opcion['periodicity_name'] }}"
+                                    data-zone="{{ $opcion['zone_code'] }}"
+                                    data-area="{{ $isReexpedition ? 'Área extendida / reexpedición' : 'Área regular' }}"
+                                    data-insurance="{{ $opcion['insurance_enabled'] ? 'Incluido' : 'No incluido' }}"
+                                    data-price="${{ number_format($opcion['commercial_price'], 2) }} MXN"
+                                >
                                     Seleccionar
                                 </button>
                             </form>
                         @endforeach
                     </div>
                 </div>
+
+                <div class="landing-quote-modal" id="landing-quote-modal" role="dialog" aria-modal="true" aria-labelledby="landing-quote-modal-title">
+                    <div class="landing-quote-modal-card">
+                        <h2 id="landing-quote-modal-title">Resumen de tu cotización</h2>
+                        <div class="landing-quote-modal-grid" id="landing-quote-modal-details"></div>
+                        <div class="landing-quote-modal-price" id="landing-quote-modal-price"></div>
+                        <div class="landing-quote-modal-actions">
+                            <button type="button" id="landing-quote-cancel">Cancelar</button>
+                            <button type="button" id="landing-quote-continue">Continuar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <style>
+                    .landing-quote-option{display:grid;grid-template-columns:minmax(180px,.8fr) minmax(260px,1.5fr) minmax(150px,.6fr) auto;gap:18px;align-items:center;border:1px solid #e5e7eb;border-radius:14px;padding:18px;margin-top:12px}
+                    .landing-quote-service{display:flex;align-items:center;gap:15px}.landing-quote-metadata{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;font-size:14px;line-height:1.4}.landing-quote-restriction{color:#9a3412}.landing-quote-price{font-size:22px;font-weight:900}.landing-quote-select,.landing-quote-modal-actions button{background:#f97316;color:#fff;border:0;border-radius:10px;padding:12px 22px;font-weight:900;cursor:pointer}.landing-quote-modal{display:none;position:fixed;inset:0;z-index:10000;padding:20px;background:rgba(15,23,42,.65);align-items:center;justify-content:center}.landing-quote-modal.is-open{display:flex}.landing-quote-modal-card{width:min(620px,100%);max-height:calc(100vh - 40px);overflow:auto;background:#fff;color:#111827;border-radius:20px;padding:26px;box-shadow:0 24px 60px rgba(0,0,0,.3)}.landing-quote-modal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0}.landing-quote-modal-grid div{padding:12px;border-radius:12px;background:#f8fafc;color:#475569}.landing-quote-modal-grid strong{display:block;color:#111827;margin-top:4px}.landing-quote-modal-price{padding:16px;border-radius:14px;background:#fff7ed;color:#9a3412;text-align:center;font-size:24px;font-weight:900}.landing-quote-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.landing-quote-modal-actions #landing-quote-cancel{background:#e2e8f0;color:#334155}
+                    @media(max-width:850px){.landing-quote-option{grid-template-columns:1fr}.landing-quote-metadata{grid-template-columns:1fr}.landing-quote-price{text-align:center}.landing-quote-select{width:100%}}
+                    @media(max-width:520px){.landing-quote-service{flex-direction:column;text-align:center}.landing-quote-modal-grid{grid-template-columns:1fr}.landing-quote-modal-actions{flex-direction:column-reverse}.landing-quote-modal-actions button{width:100%}}
+                </style>
+
+                <script>
+                    (() => {
+                        const modal = document.getElementById('landing-quote-modal');
+                        const details = document.getElementById('landing-quote-modal-details');
+                        const price = document.getElementById('landing-quote-modal-price');
+                        const labels = {service:'Servicio',origin:'CP origen',destination:'CP destino',weight:'Peso facturable',dimensions:'Dimensiones',delivery:'Entrega estimada',frequency:'Frecuencia',zone:'Zona',area:'Área extendida / reexpedición',insurance:'Seguro'};
+                        let selectedForm = null;
+                        document.querySelectorAll('.landing-quote-select').forEach((button) => button.addEventListener('click', () => {
+                            selectedForm = button.closest('form');
+                            details.replaceChildren();
+                            Object.entries(labels).forEach(([key,label]) => {
+                                const item = document.createElement('div');
+                                item.append(document.createTextNode(label));
+                                const value = document.createElement('strong');
+                                value.textContent = button.dataset[key];
+                                item.append(value); details.append(item);
+                            });
+                            price.textContent = button.dataset.price;
+                            modal.classList.add('is-open');
+                        }));
+                        const close = () => modal.classList.remove('is-open');
+                        document.getElementById('landing-quote-cancel').addEventListener('click', close);
+                        modal.addEventListener('click', (event) => { if (event.target === modal) close(); });
+                        document.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
+                        document.getElementById('landing-quote-continue').addEventListener('click', () => { if (selectedForm) selectedForm.requestSubmit(); });
+                    })();
+                </script>
             @endif
         </div>
     </section>

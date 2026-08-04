@@ -862,6 +862,18 @@
 
                     <div class="summary-row"><span>Mensajería</span><strong>{{ $cotizacion->logistico }}</strong></div>
                     <div class="summary-row"><span>Servicio</span><strong>{{ $cotizacion->servicio }}</strong></div>
+                    @if(!empty($quoteMetadata))
+                        <div class="summary-row">
+                            <span>Entrega estimada</span>
+                            <strong>{{ \Carbon\Carbon::parse($quoteMetadata['estimated_delivery_date'])->format('d/m/Y') }}</strong>
+                        </div>
+                        <div class="summary-row"><span>Frecuencia</span><strong>{{ $quoteMetadata['periodicity_name'] }}</strong></div>
+                        <div class="summary-row"><span>Zona</span><strong>{{ $quoteMetadata['zone_code'] }}</strong></div>
+                        <div class="summary-row">
+                            <span>Área</span>
+                            <strong>{{ $quoteMetadata['is_reexpedition'] ? 'Extendida / reexpedición' : 'Regular' }}</strong>
+                        </div>
+                    @endif
                     <div class="summary-row"><span>Origen</span><strong>{{ $cotizacion->cp_origen }}</strong></div>
                     <div class="summary-row"><span>Destino </span><strong>{{ $cotizacion->cp_destino }}</strong></div>
                     <div class="summary-row"><span>Peso</span><strong>{{ $cotizacion->peso }} kg</strong></div>

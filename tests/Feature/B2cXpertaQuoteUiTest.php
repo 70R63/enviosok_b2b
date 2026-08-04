@@ -8,6 +8,43 @@ use Tests\TestCase;
 
 final class B2cXpertaQuoteUiTest extends TestCase
 {
+    public function test_active_landing_view_renders_real_quote_metadata(): void
+    {
+        $quote = new B2cCotizacion([
+            'cp_origen' => '09800', 'cp_destino' => '57820',
+            'tipo_envio' => 'caja', 'peso' => 1, 'medidas' => null,
+        ]);
+        $quote->id = 88;
+        $option = [
+            'logistico'=>'Estafeta','logo'=>'img/estafeta.png','servicio'=>'Terrestre',
+            'estimated_delivery_date'=>'2026-08-06','periodicity_name'=>'Diaria',
+            'operating_days'=>['lunes','martes','miércoles','jueves','viernes','sábado'],
+            'zone_code'=>'1','is_reexpedition'=>false,'restriction'=>false,
+            'restriction_description'=>'','commercial_price'=>260.56,'precio'=>260.56,
+            'weight_billable'=>1.0,'dimensions'=>'No aplica','insurance_enabled'=>false,
+            'provider_total'=>116.00,'provider_base_price'=>116.00,'margen'=>144.56,
+        ];
+
+        $html = view('index', [
+            'cotizacion_publica' => $quote,
+            'cotizacion_id' => 88,
+            'opciones' => [$option],
+        ])->render();
+
+        $this->assertStringContainsString('Entrega estimada:', $html);
+        $this->assertStringContainsString('06/08/2026', $html);
+        $this->assertStringContainsString('Frecuencia:', $html);
+        $this->assertStringContainsString('Diaria', $html);
+        $this->assertStringContainsString('lunes, martes, miércoles, jueves, viernes, sábado', $html);
+        $this->assertStringContainsString('Área regular', $html);
+        $this->assertStringContainsString('$260.56 MXN', $html);
+        $this->assertStringContainsString('Resumen de tu cotización', $html);
+        $this->assertStringNotContainsString('provider_total', $html);
+        $this->assertStringNotContainsString('provider_base_price', $html);
+        $this->assertStringNotContainsString('144.56', $html);
+        $this->assertStringNotContainsString('$116.00', $html);
+    }
+
     public function test_quote_card_and_summary_only_render_public_commercial_data(): void
     {
         $quote = new B2cCotizacion([

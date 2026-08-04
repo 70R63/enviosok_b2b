@@ -1,0 +1,160 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Http\Controllers\B2C\CotizacionPublicaController;
+use App\Models\B2cCotizacion;
+use App\Models\User;
+use App\Services\ZigoCommercialQuoteService;
+use App\Services\ZigoProviderQuoteObservationService;
+use App\Services\ZigoProviderRateService;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
+use Mockery;
+use Tests\TestCase;
+
+final class B2cQuoteCheckoutAuthTest extends TestCase
+{
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config(['database.default' => 'sqlite', 'database.connections.sqlite' => [
+            'driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '',
+            'foreign_key_constraints' => false,
+        ]]);
+        DB::purge('sqlite');
+        DB::reconnect('sqlite');
+        Schema::create('users', function (Blueprint $table): void {
+            $table->id(); $table->string('name'); $table->string('email')->unique();
+            $table->string('password'); $table->rememberToken(); $table->timestamps();
+        });
+        Schema::create('roles', function (Blueprint $table): void {
+            $table->id(); $table->string('slug'); $table->timestamps();
+        });
+        Schema::create('users_roles', function (Blueprint $table): void {
+            $table->unsignedBigInteger('user_id'); $table->unsignedBigInteger('roles_id');
+        });
+        Schema::create('b2c_cotizaciones', function (Blueprint $table): void {
+            $table->id(); $table->unsignedBigInteger('user_id')->nullable();
+            $table->string('referencia')->nullable(); $table->string('service_code')->nullable();
+            $table->string('cp_origen')->nullable(); $table->string('cp_destino')->nullable();
+            $table->string('colonia_origen')->nullable(); $table->string('colonia_destino')->nullable();
+            $table->string('ciudad_origen')->nullable(); $table->string('ciudad_destino')->nullable();
+            $table->string('estado_origen')->nullable(); $table->string('estado_destino')->nullable();
+            $table->string('tipo_envio')->nullable(); $table->decimal('peso',10,2)->nullable();
+            $table->string('medidas')->nullable(); $table->string('logistico')->nullable();
+            $table->string('servicio')->nullable(); $table->decimal('precio',10,2)->nullable();
+            $table->decimal('precio_sin_seguro',10,2)->nullable();
+            $table->decimal('seguro_monto',10,2)->default(0); $table->boolean('requiere_seguro_envio')->default(false);
+            $table->timestamps();
+        });
+        Schema::create('sepomex', fn (Blueprint $table) => $table->string('d_codigo')->nullable());
+        Schema::create('b2c_saldos', function (Blueprint $table): void {
+            $table->id(); $table->unsignedBigInteger('user_id'); $table->decimal('saldo',10,2)->default(0); $table->timestamps();
+        });
+        Schema::create('b2c_direcciones', function (Blueprint $table): void {
+            $table->id(); $table->unsignedBigInteger('user_id'); $table->boolean('activo')->default(true);
+            $table->string('tipo'); $table->string('cp'); $table->boolean('favorita')->default(false);
+            $table->boolean('principal')->default(false); $table->timestamps();
+        });
+    }
+
+    public function test_checkout_routes_require_authentication(): void
+    {
+        $quote = B2cCotizacion::create(['referencia' => 'LANDING_PUBLICA']);
+        $this->get(route('b2c.checkout', $quote))->assertRedirect(route('login'));
+        $this->withSession(['_token' => 'test-csrf'])
+            ->post(route('b2c.checkout.procesar', $quote), ['_token' => 'test-csrf'])
+            ->assertRedirect(route('login'));
+    }
+
+    public function test_intended_checkout_claims_public_quote_after_login(): void
+    {
+        $quote = B2cCotizacion::create([
+            'referencia' => 'LANDING_PUBLICA', 'service_code' => 'terrestre',
+            'cp_origen' => '09800', 'cp_destino' => '57820', 'tipo_envio' => 'caja',
+            'peso' => 1, 'logistico' => 'Estafeta', 'servicio' => 'Terrestre', 'precio' => 260.56,
+        ]);
+        $user = User::create([
+            'name' => 'Cliente', 'email' => 'cliente@example.test',
+            'password' => Hash::make('password-test'),
+        ]);
+        $roleId = DB::table('roles')->insertGetId(['slug'=>'cliente','created_at'=>now(),'updated_at'=>now()]);
+        DB::table('users_roles')->insert(['user_id'=>$user->id,'roles_id'=>$roleId]);
+        $metadata = Mockery::mock(ZigoProviderQuoteObservationService::class);
+        $metadata->shouldReceive('selectionMetadata')->once()->andReturn([
+            'estimated_delivery_date' => '2026-08-06', 'periodicity_name' => 'Diaria',
+            'zone_code' => '1', 'is_reexpedition' => false,
+        ]);
+        $this->app->instance(ZigoProviderQuoteObservationService::class, $metadata);
+
+        $this->withSession(['b2c_pending_checkout_id' => $quote->id])
+            ->get(route('b2c.checkout', $quote))
+            ->assertRedirect(route('login'));
+        $csrf = session()->token();
+        $this->post('/login', [
+            'email' => 'cliente@example.test', 'password' => 'password-test',
+            '_token' => $csrf,
+        ])->assertRedirect(route('b2c.checkout', $quote));
+        $this->get(route('b2c.checkout', $quote))
+            ->assertOk()->assertSee('06/08/2026')->assertSee('Diaria')->assertSee('Regular');
+
+        $this->assertSame($user->id, (int) $quote->fresh()->user_id);
+        $this->assertSame(260.56, (float) $quote->fresh()->precio);
+    }
+
+    public function test_owner_can_open_checkout_and_other_user_is_forbidden(): void
+    {
+        $quote = B2cCotizacion::create(['user_id' => 10, 'referencia' => 'LANDING_PUBLICA']);
+        $owner = new User(); $owner->id = 10; $owner->exists = true;
+        $other = new User(); $other->id = 11; $other->exists = true;
+        $metadata = Mockery::mock(ZigoProviderQuoteObservationService::class);
+        $metadata->shouldReceive('selectionMetadata')->once()->andReturn([]);
+        $this->app->instance(ZigoProviderQuoteObservationService::class, $metadata);
+
+        $this->actingAs($owner)->get(route('b2c.checkout', $quote))->assertOk();
+        $this->actingAs($other)->get(route('b2c.checkout', $quote))->assertForbidden();
+    }
+
+    public function test_guest_selecting_box_is_sent_to_login_with_intended_checkout(): void
+    {
+        $quote = Mockery::mock(B2cCotizacion::class)->makePartial();
+        $quote->id = 88; $quote->tipo_envio = 'caja'; $quote->referencia = 'LANDING_PUBLICA';
+        $quote->requiere_seguro_envio = false; $quote->seguro_monto = 0;
+        $quote->shouldReceive('update')->once()->andReturnTrue();
+
+        $base = ['logistico'=>'Estafeta','servicio'=>'Terrestre','service_code'=>'terrestre','base_price'=>116,
+            'provider_total'=>116,'provider_source'=>'xperta','quote_source'=>'xperta_estafeta','request_fingerprint'=>'fp',
+            'quote_expires_at'=>now()->addMinutes(30),'estimated_delivery_date'=>'2026-08-06','zone_code'=>'1',
+            'periodicity_name'=>'Diaria','operating_days'=>['lunes'],'is_reexpedition'=>false,'is_ocurre'=>false,
+            'restriction'=>false,'restriction_description'=>''];
+        $provider = Mockery::mock(ZigoProviderRateService::class);
+        $provider->shouldReceive('getOptionsForCotizacion')->once()->andReturn([$base]);
+        $this->app->instance(ZigoProviderRateService::class, $provider);
+        $commercial = Mockery::mock(ZigoCommercialQuoteService::class);
+        $commercial->shouldReceive('calculate')->once()->andReturn(['pricing'=>$this->pricing(),'final_price'=>260.56]);
+        $this->app->instance(ZigoCommercialQuoteService::class, $commercial);
+        $snapshot = Mockery::mock(ZigoProviderQuoteObservationService::class);
+        $snapshot->shouldReceive('attachSelectionMetadata')->once();
+        $this->app->instance(ZigoProviderQuoteObservationService::class, $snapshot);
+
+        $response = (new CotizacionPublicaController())->seleccionar(
+            Request::create('/', 'POST', ['logistico'=>'Estafeta','servicio'=>'Terrestre']), $quote
+        );
+
+        $this->assertSame(route('login'), $response->getTargetUrl());
+        $this->assertSame(88, session('b2c_pending_checkout_id'));
+        $this->assertSame(route('b2c.checkout', 88), session('url.intended'));
+    }
+
+    private function pricing(): array
+    {
+        return ['base_price'=>116.0,'final_price'=>260.56,'margin_percentage'=>0,'fixed_fee'=>0,'margin_amount'=>0,
+            'adjustment_type'=>null,'adjustment_value'=>0,'adjustment_amount'=>0,'discount_type'=>null,
+            'discount_value'=>0,'discount_amount'=>0,'profit_amount'=>144.56,'customer_segment'=>'anonymous',
+            'pricing_rule_id'=>null,'adjustment_id'=>null,'client_pricing_rule_id'=>null];
+    }
+}

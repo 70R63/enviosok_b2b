@@ -289,13 +289,7 @@ class CotizacionPublicaController extends Controller
 
         $tipoEnvio = strtolower($cotizacion->tipo_envio ?? 'caja');
 
-        $requiereLogin = false;
-
         if ($cotizacion->referencia === 'LANDING_PUBLICA') {
-            if ($tipoEnvio === 'caja') {
-                $requiereLogin = true;
-            }
-
             if ($tipoEnvio === 'sobre') {
                 $cotizacion->update([
                     'peso' => 1.00,
@@ -306,15 +300,6 @@ class CotizacionPublicaController extends Controller
             }
         }
 
-        if ($requiereLogin) {
-            return redirect()
-                ->to(url('/') . '#cotizar')
-                ->with(
-                    'login_required',
-                    'Para continuar con envíos tipo caja necesitas iniciar sesión o crear una cuenta.'
-                );
-        }
-
         $option = $this->findSelectedOption($cotizacion, $data['logistico'], $data['servicio']);
 
         if (!$option) {
@@ -322,6 +307,22 @@ class CotizacionPublicaController extends Controller
         }
 
         $this->applyPricingToCotizacion($cotizacion, $option);
+
+        if (!auth()->check()) {
+            session([
+                'b2c_pending_checkout_id' => $cotizacion->id,
+                'url.intended' => route('b2c.checkout', $cotizacion->id),
+            ]);
+
+            return redirect()
+                ->route('login')
+                ->with(
+                    'login_required',
+                    'Inicia sesión o crea una cuenta para continuar con tu envío.'
+                );
+        }
+
+        $this->claimOrAuthorizeCheckout($cotizacion);
 
         return redirect()->route('b2c.checkout', $cotizacion->id);
     }
@@ -409,6 +410,8 @@ class CotizacionPublicaController extends Controller
 
 public function checkout(B2cCotizacion $cotizacion)
 {
+    $this->claimOrAuthorizeCheckout($cotizacion);
+
     $ubicacionOrigen = $this->resolverUbicacionPostal(
         $cotizacion->cp_origen,
         $cotizacion->colonia_origen
@@ -442,25 +445,16 @@ public function checkout(B2cCotizacion $cotizacion)
         $cotizacion->refresh();
     }
 
-    $isPublicCheckout =
-        $cotizacion->referencia === 'LANDING_PUBLICA'
-        && empty($cotizacion->user_id);
-
-    if (
-        !$isPublicCheckout
-        && $cotizacion->user_id
-        && (
-            !auth()->check()
-            || $cotizacion->user_id !== auth()->id()
-        )
-    ) {
-        abort(403);
-    }
+    $isPublicCheckout = false;
 
     $saldo = null;
 
     $direccionesOrigen = collect();
     $direccionesDestino = collect();
+
+    $quoteMetadata = app(
+        \App\Services\ZigoProviderQuoteObservationService::class
+    )->selectionMetadata($cotizacion);
 
     if (
         auth()->check()
@@ -533,7 +527,8 @@ public function checkout(B2cCotizacion $cotizacion)
             'saldo',
             'isPublicCheckout',
             'direccionesOrigen',
-            'direccionesDestino'
+            'direccionesDestino',
+            'quoteMetadata'
         )
     );
 }
@@ -744,21 +739,8 @@ public function procesarCheckout(
     Request $request,
     B2cCotizacion $cotizacion
 ) {
-    $isPublicCheckout =
-        $cotizacion->referencia === 'LANDING_PUBLICA'
-        && empty($cotizacion->user_id);
-
-    /*
-     * Una cotización autenticada solamente puede ser
-     * procesada por su propietario.
-     */
-    if (!$isPublicCheckout) {
-        if (
-            !auth()->check()
-            || $cotizacion->user_id !== auth()->id()
-        ) {
-            abort(403);
-        }
+    if ((int) $cotizacion->user_id !== (int) auth()->id()) {
+        abort(403);
     }
 
     $data = $request->validate([
@@ -4505,6 +4487,31 @@ private function getAvailableOptions(B2cCotizacion $cotizacion): array
     public function getPublicOptionsForLanding(B2cCotizacion $cotizacion): array
     {
         return $this->getAvailableOptions($cotizacion);
+    }
+
+    private function claimOrAuthorizeCheckout(B2cCotizacion $cotizacion): void
+    {
+        $userId = (int) auth()->id();
+
+        if ($cotizacion->user_id !== null) {
+            if ((int) $cotizacion->user_id !== $userId) {
+                abort(403);
+            }
+
+            return;
+        }
+
+        $pendingId = (int) session('b2c_pending_checkout_id');
+        $publicId = (int) session('cotizacion_publica_id');
+
+        if ($cotizacion->referencia !== 'LANDING_PUBLICA'
+            || !in_array((int) $cotizacion->id, [$pendingId, $publicId], true)) {
+            abort(403);
+        }
+
+        $cotizacion->update(['user_id' => $userId]);
+        $cotizacion->refresh();
+        session()->forget('b2c_pending_checkout_id');
     }
 
     private function resolverUbicacionPostal(?string $cp, ?string $colonia = null): array

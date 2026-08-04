@@ -10,6 +10,34 @@ use Throwable;
 
 class ZigoProviderQuoteObservationService
 {
+    public function selectionMetadata(B2cCotizacion $cotizacion): array
+    {
+        try {
+            $observation = ZigoProviderQuoteObservation::query()
+                ->where('b2c_cotizacion_id', $cotizacion->id)
+                ->where('service_code', $cotizacion->service_code)
+                ->where('success', true)
+                ->latest('id')
+                ->first();
+
+            return (array) data_get(
+                $observation?->response_payload,
+                '_zigo_selection',
+                []
+            );
+        } catch (Throwable $exception) {
+            Log::warning(
+                'ZIGO Xperta - No se pudo leer metadata de selección',
+                [
+                    'cotizacion_id' => $cotizacion->id,
+                    'exception' => get_class($exception),
+                ]
+            );
+
+            return [];
+        }
+    }
+
     public function attachSelectionMetadata(
         B2cCotizacion $cotizacion,
         array $option
