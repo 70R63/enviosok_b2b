@@ -285,6 +285,7 @@ class CotizacionPublicaController extends Controller
         $data = $request->validate([
             'logistico' => ['required', 'string', 'max:100'],
             'servicio' => ['required', 'string', 'max:100'],
+            'auth_action' => ['nullable', 'in:login,register'],
         ]);
 
         $tipoEnvio = strtolower($cotizacion->tipo_envio ?? 'caja');
@@ -308,18 +309,33 @@ class CotizacionPublicaController extends Controller
 
         $this->applyPricingToCotizacion($cotizacion, $option);
 
-        if (!auth()->check()) {
+        if (!auth()->check() && $tipoEnvio === 'caja') {
             session([
                 'b2c_pending_checkout_id' => $cotizacion->id,
                 'url.intended' => route('b2c.checkout', $cotizacion->id),
+                'tipo_envio' => 'caja',
             ]);
 
             return redirect()
-                ->route('login')
+                ->route(($data['auth_action'] ?? 'login') === 'register'
+                    ? 'b2c.register'
+                    : 'login')
                 ->with(
                     'login_required',
-                    'Inicia sesión o crea una cuenta para continuar con tu envío.'
+                    'Para continuar con un envío tipo caja necesitas iniciar sesión o crear una cuenta.'
                 );
+        }
+
+        if (!auth()->check()) {
+            session([
+                'b2c_public_checkout' => [
+                    'id' => (int) $cotizacion->id,
+                    'fingerprint' => (string) $cotizacion->quote_request_fingerprint,
+                    'tipo_envio' => 'sobre',
+                ],
+            ]);
+
+            return redirect()->route('b2c.checkout', $cotizacion->id);
         }
 
         $this->claimOrAuthorizeCheckout($cotizacion);
@@ -410,7 +426,9 @@ class CotizacionPublicaController extends Controller
 
 public function checkout(B2cCotizacion $cotizacion)
 {
-    $this->claimOrAuthorizeCheckout($cotizacion);
+    if ($redirect = $this->guardConditionalCheckout($cotizacion)) {
+        return $redirect;
+    }
 
     $ubicacionOrigen = $this->resolverUbicacionPostal(
         $cotizacion->cp_origen,
@@ -445,7 +463,7 @@ public function checkout(B2cCotizacion $cotizacion)
         $cotizacion->refresh();
     }
 
-    $isPublicCheckout = false;
+    $isPublicCheckout = !auth()->check();
 
     $saldo = null;
 
@@ -739,9 +757,11 @@ public function procesarCheckout(
     Request $request,
     B2cCotizacion $cotizacion
 ) {
-    if ((int) $cotizacion->user_id !== (int) auth()->id()) {
-        abort(403);
+    if ($redirect = $this->guardConditionalCheckout($cotizacion)) {
+        return $redirect;
     }
+
+    $isPublicCheckout = !auth()->check();
 
     $data = $request->validate([
         'remitente_nombre' => [
@@ -2021,7 +2041,7 @@ public function guardarRegistroB2c(Request $request)
     Auth::login($user);
 
     return redirect()
-        ->route('b2c.dashboard')
+        ->intended(route('b2c.dashboard'))
         ->with('success', 'Cuenta creada correctamente.');
 }
 
@@ -4512,6 +4532,64 @@ private function getAvailableOptions(B2cCotizacion $cotizacion): array
         $cotizacion->update(['user_id' => $userId]);
         $cotizacion->refresh();
         session()->forget('b2c_pending_checkout_id');
+    }
+
+    private function guardConditionalCheckout(B2cCotizacion $cotizacion)
+    {
+        $type = strtolower((string) $cotizacion->tipo_envio);
+
+        if ($cotizacion->user_id !== null) {
+            if (!auth()->check()
+                || (int) $cotizacion->user_id !== (int) auth()->id()) {
+                abort(403);
+            }
+
+            return null;
+        }
+
+        if ($type === 'caja') {
+            if (!auth()->check()) {
+                session([
+                    'b2c_pending_checkout_id' => $cotizacion->id,
+                    'url.intended' => route('b2c.checkout', $cotizacion->id),
+                    'tipo_envio' => 'caja',
+                ]);
+
+                return redirect()
+                    ->route('login')
+                    ->with(
+                        'login_required',
+                        'Para continuar con un envío tipo caja necesitas iniciar sesión o crear una cuenta.'
+                    );
+            }
+
+            $this->claimOrAuthorizeCheckout($cotizacion);
+            return null;
+        }
+
+        if ($type !== 'sobre') {
+            abort(403);
+        }
+
+        if (auth()->check()) {
+            $this->claimOrAuthorizeCheckout($cotizacion);
+            return null;
+        }
+
+        $public = (array) session('b2c_public_checkout', []);
+        $expectedFingerprint = (string) $cotizacion->quote_request_fingerprint;
+
+        if ((int) ($public['id'] ?? 0) !== (int) $cotizacion->id
+            || ($public['tipo_envio'] ?? null) !== 'sobre'
+            || $expectedFingerprint === ''
+            || !hash_equals(
+                $expectedFingerprint,
+                (string) ($public['fingerprint'] ?? '')
+            )) {
+            abort(403);
+        }
+
+        return null;
     }
 
     private function resolverUbicacionPostal(?string $cp, ?string $colonia = null): array

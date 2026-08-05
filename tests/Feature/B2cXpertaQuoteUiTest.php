@@ -39,10 +39,28 @@ final class B2cXpertaQuoteUiTest extends TestCase
         $this->assertStringContainsString('Área regular', $html);
         $this->assertStringContainsString('$260.56 MXN', $html);
         $this->assertStringContainsString('Resumen de tu cotización', $html);
+        $this->assertStringContainsString('Para continuar con un envío tipo caja necesitas iniciar sesión o crear una cuenta.', $html);
+        $this->assertStringContainsString('Iniciar sesión', $html);
+        $this->assertStringContainsString('Crear cuenta', $html);
         $this->assertStringNotContainsString('provider_total', $html);
         $this->assertStringNotContainsString('provider_base_price', $html);
         $this->assertStringNotContainsString('144.56', $html);
         $this->assertStringNotContainsString('$116.00', $html);
+    }
+
+    public function test_guest_envelope_modal_keeps_continue_without_auth_message(): void
+    {
+        $quote = new B2cCotizacion(['cp_origen'=>'09800','cp_destino'=>'57820','tipo_envio'=>'sobre','peso'=>1]);
+        $quote->id = 89;
+        $option = ['logistico'=>'Estafeta','logo'=>'img/estafeta.png','servicio'=>'Terrestre',
+            'estimated_delivery_date'=>'2026-08-06','periodicity_name'=>'Diaria','operating_days'=>['lunes'],
+            'zone_code'=>'1','is_reexpedition'=>false,'restriction'=>false,'restriction_description'=>'',
+            'commercial_price'=>260.56,'weight_billable'=>1.0,'dimensions'=>'No aplica','insurance_enabled'=>false];
+        $html=view('index',['cotizacion_publica'=>$quote,'cotizacion_id'=>89,'opciones'=>[$option]])->render();
+
+        $this->assertStringContainsString('id="landing-quote-continue"', $html);
+        $this->assertStringNotContainsString('Para continuar con un envío tipo caja', $html);
+        $this->assertStringNotContainsString('id="landing-quote-login"', $html);
     }
 
     public function test_quote_card_and_summary_only_render_public_commercial_data(): void

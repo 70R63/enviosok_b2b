@@ -29,6 +29,7 @@ final class B2cQuoteCheckoutAuthTest extends TestCase
         DB::reconnect('sqlite');
         Schema::create('users', function (Blueprint $table): void {
             $table->id(); $table->string('name'); $table->string('email')->unique();
+            $table->string('apellido_paterno')->nullable(); $table->unsignedBigInteger('empresa_id')->nullable();
             $table->string('password'); $table->rememberToken(); $table->timestamps();
         });
         Schema::create('roles', function (Blueprint $table): void {
@@ -40,6 +41,7 @@ final class B2cQuoteCheckoutAuthTest extends TestCase
         Schema::create('b2c_cotizaciones', function (Blueprint $table): void {
             $table->id(); $table->unsignedBigInteger('user_id')->nullable();
             $table->string('referencia')->nullable(); $table->string('service_code')->nullable();
+            $table->string('quote_request_fingerprint')->nullable();
             $table->string('cp_origen')->nullable(); $table->string('cp_destino')->nullable();
             $table->string('colonia_origen')->nullable(); $table->string('colonia_destino')->nullable();
             $table->string('ciudad_origen')->nullable(); $table->string('ciudad_destino')->nullable();
@@ -49,6 +51,12 @@ final class B2cQuoteCheckoutAuthTest extends TestCase
             $table->string('servicio')->nullable(); $table->decimal('precio',10,2)->nullable();
             $table->decimal('precio_sin_seguro',10,2)->nullable();
             $table->decimal('seguro_monto',10,2)->default(0); $table->boolean('requiere_seguro_envio')->default(false);
+            $table->decimal('valor_declarado',10,2)->default(0); $table->decimal('seguro_porcentaje',10,2)->default(0);
+            $table->decimal('seguro_iva_porcentaje',10,2)->default(0); $table->string('estatus')->nullable();
+            foreach (['remitente_nombre','remitente_telefono','remitente_email','remitente_direccion','remitente_num_ext','remitente_num_int',
+                'destinatario_nombre','destinatario_telefono','destinatario_email','destinatario_direccion','destinatario_num_ext','destinatario_num_int','contenido'] as $field) {
+                $table->string($field)->nullable();
+            }
             $table->timestamps();
         });
         Schema::create('sepomex', fn (Blueprint $table) => $table->string('d_codigo')->nullable());
@@ -62,9 +70,9 @@ final class B2cQuoteCheckoutAuthTest extends TestCase
         });
     }
 
-    public function test_checkout_routes_require_authentication(): void
+    public function test_box_checkout_requires_authentication_without_route_middleware(): void
     {
-        $quote = B2cCotizacion::create(['referencia' => 'LANDING_PUBLICA']);
+        $quote = B2cCotizacion::create(['referencia' => 'LANDING_PUBLICA','tipo_envio'=>'caja']);
         $this->get(route('b2c.checkout', $quote))->assertRedirect(route('login'));
         $this->withSession(['_token' => 'test-csrf'])
             ->post(route('b2c.checkout.procesar', $quote), ['_token' => 'test-csrf'])
@@ -106,17 +114,78 @@ final class B2cQuoteCheckoutAuthTest extends TestCase
         $this->assertSame(260.56, (float) $quote->fresh()->precio);
     }
 
-    public function test_owner_can_open_checkout_and_other_user_is_forbidden(): void
+    public function test_registration_returns_to_selected_box_checkout(): void
     {
-        $quote = B2cCotizacion::create(['user_id' => 10, 'referencia' => 'LANDING_PUBLICA']);
-        $owner = new User(); $owner->id = 10; $owner->exists = true;
-        $other = new User(); $other->id = 11; $other->exists = true;
+        $quote = B2cCotizacion::create([
+            'referencia'=>'LANDING_PUBLICA','tipo_envio'=>'caja','service_code'=>'terrestre',
+            'quote_request_fingerprint'=>'register-fp','cp_origen'=>'09800','cp_destino'=>'57820',
+        ]);
+        DB::table('roles')->insert(['slug'=>'cliente','created_at'=>now(),'updated_at'=>now()]);
         $metadata = Mockery::mock(ZigoProviderQuoteObservationService::class);
         $metadata->shouldReceive('selectionMetadata')->once()->andReturn([]);
         $this->app->instance(ZigoProviderQuoteObservationService::class, $metadata);
 
-        $this->actingAs($owner)->get(route('b2c.checkout', $quote))->assertOk();
-        $this->actingAs($other)->get(route('b2c.checkout', $quote))->assertForbidden();
+        $this->withSession([
+            'b2c_pending_checkout_id'=>$quote->id,
+            'url.intended'=>route('b2c.checkout',$quote),
+            'tipo_envio'=>'caja','_token'=>'register-csrf',
+        ])->post(route('b2c.register.store'), [
+            '_token'=>'register-csrf','name'=>'Nueva','apellido_paterno'=>'Cuenta',
+            'email'=>'nueva@example.test','password'=>'password-test','password_confirmation'=>'password-test',
+        ])->assertRedirect(route('b2c.checkout',$quote));
+
+        $this->get(route('b2c.checkout',$quote))->assertOk();
+        $this->assertNotNull($quote->fresh()->user_id);
+    }
+
+    public function test_guest_can_open_and_process_own_envelope_checkout(): void
+    {
+        $quote = B2cCotizacion::create([
+            'referencia'=>'LANDING_PUBLICA','tipo_envio'=>'sobre','service_code'=>'terrestre',
+            'quote_request_fingerprint'=>'envelope-fp','cp_origen'=>'09800','cp_destino'=>'57820',
+            'ciudad_origen'=>'CDMX','estado_origen'=>'CDMX','ciudad_destino'=>'Puebla','estado_destino'=>'Puebla',
+            'peso'=>1,'precio'=>260.56,'precio_sin_seguro'=>260.56,
+        ]);
+        $metadata = Mockery::mock(ZigoProviderQuoteObservationService::class);
+        $metadata->shouldReceive('selectionMetadata')->once()->andReturn([]);
+        $this->app->instance(ZigoProviderQuoteObservationService::class, $metadata);
+        $session = ['_token'=>'envelope-csrf','b2c_public_checkout'=>['id'=>$quote->id,'fingerprint'=>'envelope-fp','tipo_envio'=>'sobre']];
+
+        $this->withSession($session)->get(route('b2c.checkout',$quote))->assertOk();
+        $response = $this->withSession($session)->post(route('b2c.checkout.procesar',$quote), [
+            '_token'=>'envelope-csrf',
+            'remitente_nombre'=>'Origen','remitente_telefono'=>'5555555555','remitente_email'=>'origen@example.test',
+            'remitente_direccion'=>'Calle 1','remitente_num_ext'=>'1','ciudad_origen'=>'CDMX','estado_origen'=>'CDMX',
+            'destinatario_nombre'=>'Destino','destinatario_telefono'=>'5555555556','destinatario_email'=>'destino@example.test',
+            'destinatario_direccion'=>'Calle 2','destinatario_num_ext'=>'2','ciudad_destino'=>'Puebla','estado_destino'=>'Puebla',
+            'contenido'=>'Documentos','valor_declarado'=>0,
+        ]);
+        $response->assertRedirect(route('b2c.pago',$quote));
+        $this->assertSame(260.56,(float)$quote->fresh()->precio);
+        $this->assertNull($quote->fresh()->user_id);
+    }
+
+    public function test_guest_cannot_change_id_to_open_another_envelope(): void
+    {
+        $mine = B2cCotizacion::create(['referencia'=>'LANDING_PUBLICA','tipo_envio'=>'sobre','quote_request_fingerprint'=>'mine']);
+        $other = B2cCotizacion::create(['referencia'=>'LANDING_PUBLICA','tipo_envio'=>'sobre','quote_request_fingerprint'=>'other']);
+        $session = ['b2c_public_checkout'=>['id'=>$mine->id,'fingerprint'=>'mine','tipo_envio'=>'sobre']];
+        $this->withSession($session)->get(route('b2c.checkout',$other))->assertForbidden();
+    }
+
+    public function test_owner_can_open_checkout_and_other_user_is_forbidden(): void
+    {
+        $box = B2cCotizacion::create(['user_id'=>10,'referencia'=>'LANDING_PUBLICA','tipo_envio'=>'caja']);
+        $envelope = B2cCotizacion::create(['user_id'=>10,'referencia'=>'LANDING_PUBLICA','tipo_envio'=>'sobre']);
+        $owner = new User(); $owner->id = 10; $owner->exists = true;
+        $other = new User(); $other->id = 11; $other->exists = true;
+        $metadata = Mockery::mock(ZigoProviderQuoteObservationService::class);
+        $metadata->shouldReceive('selectionMetadata')->twice()->andReturn([]);
+        $this->app->instance(ZigoProviderQuoteObservationService::class, $metadata);
+
+        $this->actingAs($owner)->get(route('b2c.checkout',$box))->assertOk();
+        $this->actingAs($owner)->get(route('b2c.checkout',$envelope))->assertOk();
+        $this->actingAs($other)->get(route('b2c.checkout',$box))->assertForbidden();
     }
 
     public function test_guest_selecting_box_is_sent_to_login_with_intended_checkout(): void
@@ -148,6 +217,7 @@ final class B2cQuoteCheckoutAuthTest extends TestCase
         $this->assertSame(route('login'), $response->getTargetUrl());
         $this->assertSame(88, session('b2c_pending_checkout_id'));
         $this->assertSame(route('b2c.checkout', 88), session('url.intended'));
+        $this->assertSame('caja', session('tipo_envio'));
     }
 
     private function pricing(): array

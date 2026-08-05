@@ -901,11 +901,9 @@ Route::view('/api-hub', 'public.api-hub')->name('public.api-hub');
 Route::view('/soporte', 'public.soporte')->name('public.soporte');
 
 Route::get('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'checkout'])
-    ->middleware('auth')
     ->name('b2c.checkout');
 
 Route::post('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'procesarCheckout'])
-    ->middleware('auth')
     ->name('b2c.checkout.procesar');
 
 Route::get('/proximamente', [WaitlistController::class, 'index'])
