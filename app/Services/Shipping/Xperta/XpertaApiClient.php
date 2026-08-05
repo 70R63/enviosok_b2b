@@ -108,10 +108,22 @@ class XpertaApiClient
 
     private function responseWithMeta(Response $response, string $url, float $startedAt): array
     {
+        $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
+
+        try {
+            $data = $this->decode($response, $url);
+        } catch (XpertaProviderException $exception) {
+            throw new XpertaProviderException(
+                $exception->errorCode,
+                $exception->diagnosticMetadata + ['duration_ms' => $durationMs],
+                $exception
+            );
+        }
+
         return [
-            'data' => $this->decode($response, $url),
+            'data' => $data,
             'http_status' => $response->status(),
-            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            'duration_ms' => $durationMs,
             'correlation_id' => $this->correlationId($response),
         ];
     }
@@ -201,11 +213,10 @@ class XpertaApiClient
         }
 
         if (!$response->successful()) {
-            throw new RuntimeException(
-                'Xperta respondió HTTP '
-                . $response->status()
-                . ': '
-                . $this->safeMessage($json)
+            $status = $response->status();
+            throw new XpertaProviderException(
+                'XPERTA_HTTP_' . $status,
+                $this->diagnosticMetadata($url, $response, 'http_' . $status)
             );
         }
 
@@ -241,7 +252,7 @@ class XpertaApiClient
             'corporativo' => (string) config('services.xperta.corporativo'),
             'ltd' => (string) config('services.xperta.ltd'),
             'service' => isset($service[1]) ? rawurldecode($service[1]) : null,
-            'http_status' => 403,
+            'http_status' => $response->status(),
             'provider_message_code' => $messageCode,
             'correlation_id' => $this->correlationId($response),
         ];

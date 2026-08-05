@@ -137,12 +137,13 @@ final class XpertaTokenCheckCommand extends Command
     {
         if ($exception instanceof XpertaProviderException) {
             $metadata = $exception->diagnosticMetadata;
+            $status = (int) ($metadata['http_status'] ?? 0);
             $code = match ($exception->errorCode) {
                 'XPERTA_API_KEY_UNAUTHORIZED' => 'XPERTA_TOKEN_API_KEY_UNAUTHORIZED',
                 'XPERTA_CREDENTIALS_UNAUTHORIZED' => 'XPERTA_TOKEN_CREDENTIALS_UNAUTHORIZED',
-                default => 'XPERTA_TOKEN_HTTP_403',
+                default => 'XPERTA_TOKEN_HTTP_' . $status,
             };
-            return [$code, 403, $metadata['provider_message_code'] ?? 'http_403', $metadata];
+            return [$code, $status, $metadata['provider_message_code'] ?? 'http_' . $status, $metadata];
         }
 
         if ($exception instanceof ConnectionException) {
