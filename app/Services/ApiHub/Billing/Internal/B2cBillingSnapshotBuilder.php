@@ -3,6 +3,7 @@
 namespace App\Services\ApiHub\Billing\Internal;
 
 use App\Models\B2cInvoiceRequest;
+use App\Services\ZigoProviderQuoteObservationService;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -50,7 +51,28 @@ class B2cBillingSnapshotBuilder
             $paymentFormOverride
         );
 
-        $total = $this->money($invoiceRequest->monto);
+        $selection = app(
+            ZigoProviderQuoteObservationService::class
+        )->selectionMetadata($cotizacion);
+        $commercialBreakdown = (array) (
+            $selection['commercial_breakdown'] ?? []
+        );
+        $hasCommercialSnapshot = array_key_exists(
+            'base',
+            $commercialBreakdown
+        );
+        $total = $hasCommercialSnapshot
+            ? $this->money($selection['customer_total'] ?? null)
+            : $this->money($invoiceRequest->monto);
+
+        if (
+            $hasCommercialSnapshot
+            && abs($total - $this->money($invoiceRequest->monto)) > 0.01
+        ) {
+            throw new InvalidArgumentException(
+                'El total facturable no coincide con el snapshot comercial seleccionado.'
+            );
+        }
         $insurance = $cotizacion->requiere_seguro_envio
             ? $this->money($cotizacion->seguro_monto)
             : 0.0;
@@ -116,12 +138,19 @@ class B2cBillingSnapshotBuilder
                 'currency' => 'MXN',
             ],
             'amounts' => [
-                'subtotal' => $total,
+                'subtotal' => $hasCommercialSnapshot
+                    ? $this->money($selection['commercial_subtotal'] ?? null)
+                    : $total,
                 'discount' => 0.0,
-                'tax' => 0.0,
+                'tax' => $hasCommercialSnapshot
+                    ? $this->money($selection['vat'] ?? null)
+                    : 0.0,
                 'shipping' => $shipping,
                 'insurance' => $insurance,
                 'total' => $total,
+                'commercial_breakdown' => $hasCommercialSnapshot
+                    ? $commercialBreakdown
+                    : [],
             ],
             'items' => $items,
         ];
@@ -269,6 +298,9 @@ class B2cBillingSnapshotBuilder
         B2cInvoiceRequest $invoiceRequest
     ): array {
         $cotizacion = $invoiceRequest->cotizacion;
+        $selection = app(
+            ZigoProviderQuoteObservationService::class
+        )->selectionMetadata($cotizacion);
 
         return [
             'b2c_invoice_request_id' =>
@@ -279,15 +311,14 @@ class B2cBillingSnapshotBuilder
             'service' => $cotizacion->servicio,
             'content' => $cotizacion->contenido,
             'tracking_number' => $cotizacion->tracking_number,
-            'provider_base_price' =>
-                $cotizacion->provider_base_price,
-            'zigo_final_price' => $cotizacion->zigo_final_price,
-            'zigo_discount_amount' =>
-                $cotizacion->zigo_discount_amount,
-            'zigo_margin_amount' =>
-                $cotizacion->zigo_margin_amount,
-            'zigo_profit_amount' =>
-                $cotizacion->zigo_profit_amount,
+            'commercial_breakdown' => (array) (
+                $selection['commercial_breakdown'] ?? []
+            ),
+            'commercial_subtotal' =>
+                $selection['commercial_subtotal'] ?? null,
+            'vat' => $selection['vat'] ?? null,
+            'customer_total' =>
+                $selection['customer_total'] ?? null,
             'origin_postal_code' => $cotizacion->cp_origen,
             'destination_postal_code' => $cotizacion->cp_destino,
         ];

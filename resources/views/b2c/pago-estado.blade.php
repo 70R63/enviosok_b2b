@@ -133,6 +133,13 @@
             + $adeudoIncluido
         )
     );
+    $quoteMetadata = app(
+        \App\Services\ZigoProviderQuoteObservationService::class
+    )->selectionMetadata($cotizacion);
+    $hasCommercialSnapshot = array_key_exists(
+        'base',
+        (array) ($quoteMetadata['commercial_breakdown'] ?? [])
+    );
 @endphp
 <body>
 
@@ -195,12 +202,12 @@
             </div>
         </div>
 
-        <div class="card">
-            <div class="label">Total pagado</div>
-            <div class="value">
-               ${{ number_format($totalPagado, 2) }} MXN
+        @if(!$hasCommercialSnapshot)
+            <div class="card">
+                <div class="label">Total pagado</div>
+                <div class="value">${{ number_format($totalPagado, 2) }} MXN</div>
             </div>
-        </div>
+        @endif
 
         @if($adeudoIncluido > 0)
             <div class="card">
@@ -233,6 +240,13 @@
     <div class="label">Collection ID</div>
     <div class="value">{{ $cotizacion->payment_collection_id ?? 'No disponible' }}</div>
 </div>
+
+@if($hasCommercialSnapshot)
+    <div class="card">
+        <div class="label">Desglose comercial</div>
+        @include('b2c.partials.commercial-breakdown', ['commercialSnapshot' => $quoteMetadata])
+    </div>
+@endif
 
 @if($cotizacion->tracking_number)
 

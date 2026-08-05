@@ -620,6 +620,9 @@ public function confirmarEnvio(
         $checkoutDebtService->previewForCotizacion(
             $cotizacion
         );
+    $quoteMetadata = app(
+        \App\Services\ZigoProviderQuoteObservationService::class
+    )->selectionMetadata($cotizacion);
 
     return view(
         'b2c.confirmar-envio',
@@ -627,7 +630,8 @@ public function confirmarEnvio(
             'cotizacion',
             'saldo',
             'identityAccess',
-            'paymentSummary'
+            'paymentSummary',
+            'quoteMetadata'
         )
     );
 }
@@ -2224,6 +2228,9 @@ public function detalleEnvioB2c(
         'b2c_fiscal.usos_cfdi',
         []
     );
+    $quoteMetadata = app(
+        \App\Services\ZigoProviderQuoteObservationService::class
+    )->selectionMetadata($cotizacion);
 
     return view(
         'b2c.detalle-envio',
@@ -2233,7 +2240,8 @@ public function detalleEnvioB2c(
             'invoiceRequest',
             'canInvoice',
             'regimenesFiscales',
-            'usosCfdi'
+            'usosCfdi',
+            'quoteMetadata'
         )
     );
 }
@@ -4282,8 +4290,10 @@ public function opcionesB2c(B2cCotizacion $cotizacion)
                     data_get($commercialQuote, 'concept_pricing.commercial_breakdown', []),
                 'commercial_subtotal' =>
                     data_get($commercialQuote, 'concept_pricing.commercial_subtotal'),
-                'commercial_vat' =>
+                'vat' =>
                     data_get($commercialQuote, 'concept_pricing.vat'),
+                'customer_total' =>
+                    data_get($commercialQuote, 'concept_pricing.customer_total'),
 
                 'weight_billable' =>
                     round((float) (

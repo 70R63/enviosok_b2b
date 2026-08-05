@@ -710,29 +710,22 @@
             <aside class="card summary-card">
                 <h2>Resumen de pago</h2>
 
-                <div class="summary-line">
-                    <span>Envío</span>
-
-                    <strong>
-                        ${{ number_format($precioEnvio, 2) }} MXN
-                    </strong>
-                </div>
-
-                <div class="summary-line">
-                    <span>Protección 2%</span>
-
-                    <strong>
-                        ${{ number_format($seguroBase, 2) }} MXN
-                    </strong>
-                </div>
-
-                <div class="summary-line">
-                    <span>IVA protección</span>
-
-                    <strong>
-                        ${{ number_format($seguroIva, 2) }} MXN
-                    </strong>
-                </div>
+                @if(array_key_exists('base', (array) ($quoteMetadata['commercial_breakdown'] ?? [])))
+                    @include('b2c.partials.commercial-breakdown', ['commercialSnapshot' => $quoteMetadata])
+                @else
+                    <div class="summary-line">
+                        <span>Envío</span>
+                        <strong>${{ number_format($precioEnvio, 2) }} MXN</strong>
+                    </div>
+                    <div class="summary-line">
+                        <span>Protección 2%</span>
+                        <strong>${{ number_format($seguroBase, 2) }} MXN</strong>
+                    </div>
+                    <div class="summary-line">
+                        <span>IVA protección</span>
+                        <strong>${{ number_format($seguroIva, 2) }} MXN</strong>
+                    </div>
+                @endif
 
                 @if($adeudoPendiente > 0)
                     <div class="summary-line debt">
@@ -754,13 +747,12 @@
                     </a>
                 @endif
 
-                <div class="summary-total">
-                    <span>Total</span>
-
-                    <span>
-                        ${{ number_format($total, 2) }} MXN
-                    </span>
-                </div>
+                @if(!array_key_exists('base', (array) ($quoteMetadata['commercial_breakdown'] ?? [])) || $adeudoPendiente > 0)
+                    <div class="summary-total">
+                        <span>{{ $adeudoPendiente > 0 ? 'Total a pagar' : 'Total' }}</span>
+                        <span>${{ number_format($total, 2) }} MXN</span>
+                    </div>
+                @endif
 
                 <div class="balance-box">
                     <div class="summary-line">

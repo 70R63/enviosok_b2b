@@ -66,8 +66,8 @@ class ZigoProviderQuoteObservationService
                 'restriction_description' => $option['restriction_description'],
                 'commercial_breakdown' => $option['commercial_breakdown'] ?? [],
                 'commercial_subtotal' => $option['commercial_subtotal'] ?? null,
-                'commercial_vat' => $option['commercial_vat'] ?? null,
-                'commercial_total' => $option['commercial_price'] ?? null,
+                'vat' => $option['vat'] ?? null,
+                'customer_total' => $option['customer_total'] ?? $option['commercial_price'] ?? null,
             ];
             $payload['_zigo_internal_pricing'] = data_get(
                 $option,

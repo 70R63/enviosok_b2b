@@ -887,39 +887,17 @@
                         $totalResumen = $precioBaseResumen + $seguroMontoResumen;
                     @endphp
 
-                    @php($commercialBreakdown = (array) ($quoteMetadata['commercial_breakdown'] ?? []))
-                    @if($commercialBreakdown)
-                        @foreach([
-                            'base' => 'Envío', 'area_extendida' => 'Área extendida',
-                            'kg_extra' => 'Kg adicional', 'seguro' => 'Seguro', 'otros' => 'Otros cargos'
-                        ] as $concept => $label)
-                            @if((float) ($commercialBreakdown[$concept] ?? 0) > 0)
-                                <div class="summary-row"><span>{{ $label }}</span><strong>${{ number_format((float) $commercialBreakdown[$concept], 2) }} MXN</strong></div>
-                            @endif
-                        @endforeach
-                        <div class="summary-row"><span>Subtotal</span><strong>${{ number_format((float) $quoteMetadata['commercial_subtotal'], 2) }} MXN</strong></div>
-                        <div class="summary-row"><span>IVA</span><strong>${{ number_format((float) $quoteMetadata['commercial_vat'], 2) }} MXN</strong></div>
+                    @if(array_key_exists('base', (array) ($quoteMetadata['commercial_breakdown'] ?? [])))
+                        @include('b2c.partials.commercial-breakdown', ['commercialSnapshot' => $quoteMetadata])
                     @else
                         <div class="summary-row">
                             <span>Envío</span>
                             <strong id="resumen_envio">${{ number_format($precioBaseResumen, 2) }} MXN</strong>
                         </div>
+                        <div class="summary-row insurance-summary"><span>Protección 2%</span><strong id="resumen_seguro_base">$0.00 MXN</strong></div>
+                        <div class="summary-row insurance-summary"><span>IVA protección</span><strong id="resumen_seguro_iva">$0.00 MXN</strong></div>
+                        <div class="summary-row total"><span>Total</span><span id="resumen_total">${{ number_format($totalResumen, 2) }} MXN</span></div>
                     @endif
-
-                    <div class="summary-row insurance-summary">
-                        <span>Protección 2%</span>
-                        <strong id="resumen_seguro_base">$0.00 MXN</strong>
-                    </div>
-
-                    <div class="summary-row insurance-summary">
-                        <span>IVA protección</span>
-                        <strong id="resumen_seguro_iva">$0.00 MXN</strong>
-                    </div>
-
-                    <div class="summary-row total">
-                        <span>Total</span>
-                        <span id="resumen_total">${{ number_format($totalResumen, 2) }} MXN</span>
-                    </div>
 
                     <p class="muted">
                         El pago se realizará en línea. Una vez confirmado, se generará la guía correspondiente.

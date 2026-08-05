@@ -313,8 +313,12 @@
                 <div class="label">Servicio</div>
                 <div class="value">{{ $cotizacion->servicio ?? '-' }}</div>
 
-                <div class="label">Precio</div>
-                <div class="value">${{ number_format($cotizacion->precio ?? 0, 2) }} MXN</div>
+                @if(array_key_exists('base', (array) ($quoteMetadata['commercial_breakdown'] ?? [])))
+                    @include('b2c.partials.commercial-breakdown', ['commercialSnapshot' => $quoteMetadata])
+                @else
+                    <div class="label">Precio</div>
+                    <div class="value">${{ number_format($cotizacion->precio ?? 0, 2) }} MXN</div>
+                @endif
 
                 <div class="label">Estatus</div>
                 <div class="value">
