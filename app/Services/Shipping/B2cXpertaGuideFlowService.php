@@ -24,7 +24,7 @@ final class B2cXpertaGuideFlowService
     ) {
     }
 
-    public function generate(B2cCotizacion $cotizacion, int $userId): B2cCotizacion
+    public function generate(B2cCotizacion $cotizacion, ?int $userId): B2cCotizacion
     {
         return $this->generateAuthorized($cotizacion, $userId, false);
     }
@@ -32,6 +32,9 @@ final class B2cXpertaGuideFlowService
     public function generateAfterConfirmedPayment(
         B2cCotizacion $cotizacion
     ): B2cCotizacion {
+        Log::info('Inicio de generación automática de guía Xperta', $this->diagnosticContext($cotizacion) + [
+            'source' => 'confirmed_payment',
+        ]);
         return $this->generateAuthorized($cotizacion, null, true);
     }
 
@@ -40,52 +43,57 @@ final class B2cXpertaGuideFlowService
         ?int $userId,
         bool $systemTrigger
     ): B2cCotizacion {
-        $this->assertProductionEnabled();
+        $this->assertOperationalEnabled($cotizacion);
 
         $claimed = DB::transaction(function () use ($cotizacion, $userId, $systemTrigger) {
             $locked = B2cCotizacion::query()->whereKey($cotizacion->id)->lockForUpdate()->firstOrFail();
 
             if (!$systemTrigger && (int) $locked->user_id !== $userId) {
+                $this->reject($locked, 'OWNERSHIP_REJECTED', 'La cotización no pertenece al usuario autenticado.');
                 abort(403);
             }
             if ($locked->hasGeneratedGuide()) {
+                Log::info('Generación de guía Xperta omitida', $this->diagnosticContext($locked) + ['reason_code' => 'GUIDE_ALREADY_EXISTS']);
                 return $locked;
             }
             if ($locked->quote_expires_at && $locked->quote_expires_at->isPast()) {
-                throw new RuntimeException('La cotización venció. Vuelve a cotizar antes de generar la guía.');
+                $this->reject($locked, 'QUOTE_EXPIRED', 'La cotización venció. Vuelve a cotizar antes de generar la guía.');
             }
-            if (!$this->payments->isEligibleForGuide($locked) || !$locked->hasAccreditedPayment()) {
-                throw new RuntimeException('El pago todavía no está confirmado.');
+            if (!in_array((string) $locked->payment_status, ['approved', 'saldo_prepago'], true)) {
+                $this->reject($locked, 'PAYMENT_NOT_APPROVED', 'El pago todavía no está aprobado.');
+            }
+            if (!$locked->hasAccreditedPayment() || !$this->payments->isEligibleForGuide($locked)) {
+                $this->reject($locked, 'PAYMENT_NOT_VERIFIED', 'El pago todavía no está verificado.');
             }
             if (!in_array(strtolower(trim((string) $locked->service_code)), ['terrestre', 'diasig'], true)) {
-                throw new RuntimeException('El servicio seleccionado no permite generar una guía Xperta.');
+                $this->reject($locked, 'SERVICE_NOT_SUPPORTED', 'El servicio seleccionado no permite generar una guía Xperta.');
             }
             if (!$locked->hasCompleteShippingAddresses() || !$locked->hasCompletePackageData()) {
-                throw new RuntimeException('Completa los datos del remitente, destinatario y paquete.');
+                $this->reject($locked, 'MISSING_REQUIRED_DATA', 'Completa los datos del remitente, destinatario y paquete.');
             }
             if (!preg_match('/^\d{5}$/', (string) $locked->cp_origen)
                 || !preg_match('/^\d{5}$/', (string) $locked->cp_destino)) {
-                throw new RuntimeException('Los códigos postales deben tener cinco dígitos.');
+                $this->reject($locked, 'MISSING_REQUIRED_DATA', 'Los códigos postales deben tener cinco dígitos.');
             }
             if ((float) ($locked->peso_facturable ?: $locked->peso) <= 0) {
-                throw new RuntimeException('El peso facturable debe ser mayor que cero.');
+                $this->reject($locked, 'MISSING_REQUIRED_DATA', 'El peso facturable debe ser mayor que cero.');
             }
             if ((float) $locked->zigo_final_price <= 0
                 || (float) $locked->precio <= 0
                 || trim((string) $locked->quote_request_fingerprint) === '') {
-                throw new RuntimeException('El precio congelado de la cotización no es válido.');
+                $this->reject($locked, 'MISSING_REQUIRED_DATA', 'El precio congelado de la cotización no es válido.');
             }
             if (strtolower((string) $locked->carrier) !== 'estafeta' || strtolower((string) $locked->provider) !== 'xperta') {
-                throw new RuntimeException('El servicio seleccionado no corresponde a Xperta/Estafeta.');
+                $this->reject($locked, 'SERVICE_NOT_SUPPORTED', 'El servicio seleccionado no corresponde a Xperta/Estafeta.');
             }
 
             if (strtoupper((string) $locked->guia_estatus) === 'GENERANDO'
                 && $locked->guia_generation_started_at
                 && $locked->guia_generation_started_at->gt(now()->subMinutes(5))) {
-                throw new RuntimeException('La guía ya se está generando. Espera antes de reintentar.');
+                $this->reject($locked, 'GUIDE_ALREADY_EXISTS', 'La guía ya se está generando. Espera antes de reintentar.');
             }
             if ((int) $locked->guia_generation_attempts >= (int) config('zigo_b2c_xperta.guide_max_attempts', 3)) {
-                throw new RuntimeException('La guía alcanzó el máximo de intentos permitidos.');
+                $this->reject($locked, 'MAX_ATTEMPTS_REACHED', 'La guía alcanzó el máximo de intentos permitidos.');
             }
             if (in_array((string) $locked->guia_last_error_code, ['GUIDE_RESPONSE_INCOMPLETE', 'GUIDE_RESPONSE_REQUIRES_REVIEW', 'XPERTA_TIMEOUT'], true)) {
                 throw new RuntimeException('El intento anterior tuvo un resultado ambiguo y requiere conciliación operativa antes de reintentar.');
@@ -119,6 +127,10 @@ final class B2cXpertaGuideFlowService
             $result = $this->provider->createWithMeta($claimed, (string) ($claimed->service_code ?: $claimed->servicio));
             return $this->persistResponse($claimed, $result, $userId);
         } catch (Throwable $exception) {
+            Log::error('Llamada al proveedor Xperta fallida', $this->diagnosticContext($claimed) + [
+                'reason_code' => 'PROVIDER_CALL_FAILED',
+                'exception' => get_class($exception),
+            ]);
             $this->markFailure($claimed, $exception);
             throw new RuntimeException($this->safeMessage($exception), 0, $exception);
         }
@@ -292,15 +304,38 @@ final class B2cXpertaGuideFlowService
         return $walk($value);
     }
 
-    private function assertProductionEnabled(): void
+    private function assertOperationalEnabled(B2cCotizacion $cotizacion): void
     {
-        if (!config('services.xperta.enabled')
-            || !config('services.xperta.guide_enabled')
-            || !config('zigo_b2c_xperta.guide_enabled')) {
-            throw new RuntimeException('La generación de guía Xperta no está habilitada.');
+        if (!config('services.xperta.enabled') || !config('services.xperta.guide_enabled')) {
+            $this->reject($cotizacion, 'GUIDE_FLAG_DISABLED', 'La generación de guía Xperta no está habilitada.');
         }
-        if (strtolower((string) config('services.xperta.environment')) !== 'production') {
-            throw new RuntimeException('La generación Xperta B2C sólo está habilitada en producción.');
+        if (!config('zigo_b2c_xperta.guide_enabled')) {
+            $this->reject($cotizacion, 'B2C_GUIDE_FLAG_DISABLED', 'La generación B2C de guía Xperta no está habilitada.');
         }
+        if (!in_array(strtolower((string) config('services.xperta.environment')), ['production', 'stage', 'staging'], true)) {
+            $this->reject($cotizacion, 'INVALID_ENVIRONMENT', 'El ambiente no permite generar guías Xperta.');
+        }
+    }
+
+    private function reject(B2cCotizacion $cotizacion, string $reasonCode, string $message): never
+    {
+        Log::warning('Generación de guía Xperta rechazada', $this->diagnosticContext($cotizacion) + ['reason_code' => $reasonCode]);
+        throw new RuntimeException($reasonCode . ': ' . $message);
+    }
+
+    private function diagnosticContext(B2cCotizacion $cotizacion): array
+    {
+        return [
+            'cotizacion_id' => $cotizacion->id,
+            'app_environment' => app()->environment(),
+            'xperta_environment' => config('services.xperta.environment'),
+            'payment_status' => $cotizacion->payment_status,
+            'payment_verified_at_present' => $cotizacion->payment_verified_at !== null,
+            'estatus' => $cotizacion->estatus,
+            'service_code' => $cotizacion->service_code,
+            'guide_enabled' => (bool) config('services.xperta.guide_enabled'),
+            'b2c_guide_enabled' => (bool) config('zigo_b2c_xperta.guide_enabled'),
+            'attempts' => (int) $cotizacion->guia_generation_attempts,
+        ];
     }
 }

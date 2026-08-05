@@ -301,7 +301,15 @@
         @elseif($mostrarGuia && !$cotizacion->tracking_number)
             <div class="card">
                 <div class="label">Guía</div>
-                <div class="value">{{ $cotizacion->guia_last_error_message ?: 'Tu guía está siendo generada.' }}</div>
+                <div class="value">
+                    @if($cotizacion->hasGeneratedGuide())
+                        Guía generada.
+                    @elseif((int) $cotizacion->guia_generation_attempts === 0)
+                        Tu pago fue confirmado. La generación de la guía aún no ha iniciado.
+                    @else
+                        No fue posible generar la guía. El equipo puede reintentarla sin volver a cobrar.
+                    @endif
+                </div>
             </div>
         @endif
 

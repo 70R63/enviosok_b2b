@@ -3,8 +3,8 @@
     ? 'Pago con saldo confirmado'
     : 'Pago confirmado',
     'mensaje' => $cotizacion->payment_status === 'saldo_prepago'
-    ? 'Tu pago fue cubierto con saldo prepago. Tu guía está siendo generada.'
-    : 'Tu pago fue registrado correctamente. Tu guía está siendo generada.',
+    ? 'Tu pago fue cubierto con saldo prepago. La generación de tu guía será procesada.'
+    : 'Tu pago fue registrado correctamente. La generación de tu guía será procesada.',
     'color' => '#3ca344',
     'cotizacion' => $cotizacion,
     'mostrarGuia' => true

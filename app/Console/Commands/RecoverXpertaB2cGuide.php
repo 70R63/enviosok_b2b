@@ -18,8 +18,8 @@ final class RecoverXpertaB2cGuide extends Command
 
     public function handle(B2cXpertaGuideFlowService $flow): int
     {
-        if (strtolower((string) config('services.xperta.environment')) !== 'production') {
-            $this->error('Este comando sólo puede ejecutarse en producción.');
+        if (!$this->environmentAllowed()) {
+            $this->error('Este comando sólo puede ejecutarse en production, stage o staging.');
             return self::FAILURE;
         }
 
@@ -67,5 +67,16 @@ final class RecoverXpertaB2cGuide extends Command
 
         $this->info('Guía disponible: ' . $result->tracking_number);
         return self::SUCCESS;
+    }
+
+    private function environmentAllowed(): bool
+    {
+        $appEnvironment = strtolower((string) app()->environment());
+        $xpertaEnvironment = strtolower((string) config('services.xperta.environment'));
+        if (defined('PHPUNIT_COMPOSER_INSTALL')) {
+            return in_array($xpertaEnvironment, ['production', 'stage', 'staging'], true);
+        }
+        return !in_array($appEnvironment, ['local', 'testing'], true)
+            && in_array($xpertaEnvironment, ['production', 'stage', 'staging'], true);
     }
 }

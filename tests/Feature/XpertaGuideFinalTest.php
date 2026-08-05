@@ -3,12 +3,15 @@
 namespace Tests\Feature;
 
 use App\Models\B2cCotizacion;
+use App\Console\Commands\RecoverXpertaB2cGuide;
+use App\Http\Controllers\API\Payments\MercadoPagoWebhookController;
 use App\Services\Shipping\B2cXpertaGuideFlowService;
 use App\Services\Shipping\Xperta\XpertaGuideService;
 use App\Services\Shipping\Xperta\XpertaTokenService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use ReflectionMethod;
 use Tests\TestCase;
 
@@ -156,18 +159,51 @@ final class XpertaGuideFinalTest extends TestCase
         Storage::disk('local')->assertExists($path);
     }
 
-    public function test_recovery_command_is_blocked_outside_production_without_http(): void
+    /** @dataProvider recoverableEnvironments */
+    public function test_recovery_environment_is_allowed(string $environment): void
     {
-        config()->set('services.xperta.environment', 'stage');
-        Http::fake();
+        config()->set('services.xperta.environment', $environment);
+        $method = new ReflectionMethod(RecoverXpertaB2cGuide::class, 'environmentAllowed');
+        $method->setAccessible(true);
+        $this->assertTrue($method->invoke(new RecoverXpertaB2cGuide()));
+    }
 
-        $this->artisan('zigo:xperta-guide-recover', [
-            'cotizacion_id' => 88,
-            '--dry-run' => true,
-        ])->expectsOutput('Este comando sólo puede ejecutarse en producción.')
-            ->assertExitCode(1);
+    public function test_recovery_environment_blocks_local(): void
+    {
+        config()->set('services.xperta.environment', 'local');
+        $method = new ReflectionMethod(RecoverXpertaB2cGuide::class, 'environmentAllowed');
+        $method->setAccessible(true);
+        $this->assertFalse($method->invoke(new RecoverXpertaB2cGuide()));
+    }
 
-        Http::assertNothingSent();
+    public function test_approved_verified_payment_is_selected_for_automatic_guide(): void
+    {
+        $quote = $this->quote();
+        $quote->forceFill(['payment_status' => 'approved', 'payment_verified_at' => now(), 'provider' => 'xperta', 'carrier' => 'estafeta']);
+        $quote->shouldReceive('hasGeneratedGuide')->andReturnFalse();
+        $method = new ReflectionMethod(MercadoPagoWebhookController::class, 'shouldGenerateXpertaGuide');
+        $method->setAccessible(true);
+        $this->assertTrue($method->invoke(new MercadoPagoWebhookController(), $quote));
+        $quote->payment_verified_at = null;
+        $this->assertFalse($method->invoke(new MercadoPagoWebhookController(), $quote));
+    }
+
+    public function test_disabled_guide_flag_logs_specific_reason_without_secrets(): void
+    {
+        config()->set('services.xperta.guide_enabled', false);
+        Log::spy();
+        $quote = $this->quote();
+        $quote->id = 100;
+        try {
+            app(B2cXpertaGuideFlowService::class)->generateAfterConfirmedPayment($quote);
+            $this->fail('La bandera apagada debió rechazar la generación.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringStartsWith('GUIDE_FLAG_DISABLED:', $exception->getMessage());
+        }
+        Log::shouldHaveReceived('warning')->withArgs(function ($message, $context): bool {
+            return $context['reason_code'] === 'GUIDE_FLAG_DISABLED'
+                && !isset($context['token'], $context['password'], $context['api_key']);
+        })->once();
     }
 
     public function test_public_templates_do_not_expose_secrets_or_remote_label_url(): void
@@ -188,6 +224,11 @@ final class XpertaGuideFinalTest extends TestCase
     public static function services(): array
     {
         return [['terrestre'], ['diasig']];
+    }
+
+    public static function recoverableEnvironments(): array
+    {
+        return [['production'], ['stage'], ['staging']];
     }
 
     private function quote(): B2cCotizacion

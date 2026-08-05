@@ -1611,7 +1611,8 @@ public function pagoSuccess(
         try {
             $cotizacion = $xpertaGuideFlow
                 ->generateAfterConfirmedPayment($cotizacion);
-        } catch (\RuntimeException $exception) {
+        } catch (\Throwable $exception) {
+            $this->recordAutomaticGuideFailure($cotizacion, $exception, 'RETURN_SUCCESS');
             $cotizacion = $cotizacion->refresh();
         }
     }
@@ -1636,14 +1637,30 @@ public function pagoSuccess(
 private function shouldGenerateXpertaGuide(
     B2cCotizacion $cotizacion
 ): bool {
-    return $cotizacion->hasAccreditedPayment()
+    return $cotizacion->payment_status === 'approved'
+        && $cotizacion->payment_verified_at !== null
         && !$cotizacion->hasGeneratedGuide()
         && strtolower((string) $cotizacion->provider) === 'xperta'
-        && strtolower((string) $cotizacion->carrier) === 'estafeta'
-        && config('services.xperta.enabled', false)
-        && config('services.xperta.guide_enabled', false)
-        && config('zigo_b2c_xperta.guide_enabled', false)
-        && strtolower((string) config('services.xperta.environment')) === 'production';
+        && strtolower((string) $cotizacion->carrier) === 'estafeta';
+}
+
+private function recordAutomaticGuideFailure(B2cCotizacion $cotizacion, \Throwable $exception, string $source): void
+{
+    $message = preg_replace('/token|api.?key|password|secret/i', '[REDACTED]', $exception->getMessage());
+    $code = preg_match('/^([A-Z][A-Z0-9_]+):/', $exception->getMessage(), $matches)
+        ? $matches[1]
+        : 'PROVIDER_CALL_FAILED';
+    Log::error('Pago confirmado; generación automática de guía Xperta falló', [
+        'cotizacion_id' => $cotizacion->id, 'source' => $source,
+        'error_code' => $code, 'exception' => get_class($exception),
+    ]);
+    $fresh = $cotizacion->fresh();
+    if ($fresh && !$fresh->hasGeneratedGuide()) {
+        $fresh->forceFill([
+            'guia_last_error_code' => $fresh->guia_last_error_code ?: $code,
+            'guia_last_error_message' => mb_substr((string) $message, 0, 500),
+        ])->save();
+    }
 }
 
 public function pagoFailure(
