@@ -7,6 +7,7 @@
         name="viewport"
         content="width=device-width, initial-scale=1.0"
     >
+    <link rel="stylesheet" href="{{ asset('css/b2c-responsive.css') }}">
 
     <title>Confirmar envío - ZIGO</title>
 

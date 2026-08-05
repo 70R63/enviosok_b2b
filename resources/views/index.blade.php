@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ZIGO | Cotiza y genera tus guías</title>
+    <link rel="stylesheet" href="{{ asset('css/b2c-responsive.css') }}">
 
     <style>
         :root {
@@ -913,7 +914,7 @@
 
     </style>
 </head>
-<body>
+<body class="zigo-public-landing">
 <div class="page-wrap">
     <header class="top-header">
         <div class="nav">
@@ -1100,18 +1101,26 @@
                 <div class="landing-quote-modal" id="landing-quote-modal" role="dialog" aria-modal="true" aria-labelledby="landing-quote-modal-title">
                     <div class="landing-quote-modal-card">
                         <h2 id="landing-quote-modal-title">Resumen de tu cotización</h2>
+                        @if(!auth()->check() && strtolower((string) $cotizacion_publica->tipo_envio) === 'caja')
+                            <p class="landing-quote-auth-message">Para continuar con un envío tipo caja necesitas iniciar sesión o crear una cuenta.</p>
+                        @endif
                         <div class="landing-quote-modal-grid" id="landing-quote-modal-details"></div>
                         <div class="landing-quote-modal-price" id="landing-quote-modal-price"></div>
                         <div class="landing-quote-modal-actions">
                             <button type="button" id="landing-quote-cancel">Cancelar</button>
-                            <button type="button" id="landing-quote-continue">Continuar</button>
+                            @if(!auth()->check() && strtolower((string) $cotizacion_publica->tipo_envio) === 'caja')
+                                <button type="button" id="landing-quote-register">Crear cuenta</button>
+                                <button type="button" id="landing-quote-login">Iniciar sesión</button>
+                            @else
+                                <button type="button" id="landing-quote-continue">Continuar</button>
+                            @endif
                         </div>
                     </div>
                 </div>
 
                 <style>
                     .landing-quote-option{display:grid;grid-template-columns:minmax(180px,.8fr) minmax(260px,1.5fr) minmax(150px,.6fr) auto;gap:18px;align-items:center;border:1px solid #e5e7eb;border-radius:14px;padding:18px;margin-top:12px}
-                    .landing-quote-service{display:flex;align-items:center;gap:15px}.landing-quote-metadata{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;font-size:14px;line-height:1.4}.landing-quote-restriction{color:#9a3412}.landing-quote-price{font-size:22px;font-weight:900}.landing-quote-select,.landing-quote-modal-actions button{background:#f97316;color:#fff;border:0;border-radius:10px;padding:12px 22px;font-weight:900;cursor:pointer}.landing-quote-modal{display:none;position:fixed;inset:0;z-index:10000;padding:20px;background:rgba(15,23,42,.65);align-items:center;justify-content:center}.landing-quote-modal.is-open{display:flex}.landing-quote-modal-card{width:min(620px,100%);max-height:calc(100vh - 40px);overflow:auto;background:#fff;color:#111827;border-radius:20px;padding:26px;box-shadow:0 24px 60px rgba(0,0,0,.3)}.landing-quote-modal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0}.landing-quote-modal-grid div{padding:12px;border-radius:12px;background:#f8fafc;color:#475569}.landing-quote-modal-grid strong{display:block;color:#111827;margin-top:4px}.landing-quote-modal-price{padding:16px;border-radius:14px;background:#fff7ed;color:#9a3412;text-align:center;font-size:24px;font-weight:900}.landing-quote-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.landing-quote-modal-actions #landing-quote-cancel{background:#e2e8f0;color:#334155}
+                    .landing-quote-service{display:flex;align-items:center;gap:15px}.landing-quote-metadata{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;font-size:14px;line-height:1.4}.landing-quote-restriction{color:#9a3412}.landing-quote-price{font-size:22px;font-weight:900}.landing-quote-select,.landing-quote-modal-actions button{background:#f97316;color:#fff;border:0;border-radius:10px;padding:12px 22px;font-weight:900;cursor:pointer}.landing-quote-modal{display:none;position:fixed;inset:0;z-index:10000;padding:20px;background:rgba(15,23,42,.65);align-items:center;justify-content:center}.landing-quote-modal.is-open{display:flex}.landing-quote-modal-card{width:min(620px,100%);max-height:calc(100vh - 40px);overflow:auto;background:#fff;color:#111827;border-radius:20px;padding:26px;box-shadow:0 24px 60px rgba(0,0,0,.3)}.landing-quote-auth-message{padding:12px;border-radius:12px;background:#fff7ed;color:#9a3412;font-weight:800}.landing-quote-modal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0}.landing-quote-modal-grid div{padding:12px;border-radius:12px;background:#f8fafc;color:#475569}.landing-quote-modal-grid strong{display:block;color:#111827;margin-top:4px}.landing-quote-modal-price{padding:16px;border-radius:14px;background:#fff7ed;color:#9a3412;text-align:center;font-size:24px;font-weight:900}.landing-quote-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.landing-quote-modal-actions #landing-quote-cancel{background:#e2e8f0;color:#334155}
                     @media(max-width:850px){.landing-quote-option{grid-template-columns:1fr}.landing-quote-metadata{grid-template-columns:1fr}.landing-quote-price{text-align:center}.landing-quote-select{width:100%}}
                     @media(max-width:520px){.landing-quote-service{flex-direction:column;text-align:center}.landing-quote-modal-grid{grid-template-columns:1fr}.landing-quote-modal-actions{flex-direction:column-reverse}.landing-quote-modal-actions button{width:100%}}
                 </style>
@@ -1140,7 +1149,20 @@
                         document.getElementById('landing-quote-cancel').addEventListener('click', close);
                         modal.addEventListener('click', (event) => { if (event.target === modal) close(); });
                         document.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
-                        document.getElementById('landing-quote-continue').addEventListener('click', () => { if (selectedForm) selectedForm.requestSubmit(); });
+                        const submitWithAction = (action) => {
+                            if (!selectedForm) return;
+                            let input = selectedForm.querySelector('input[name="auth_action"]');
+                            if (!input) {
+                                input = document.createElement('input');
+                                input.type = 'hidden'; input.name = 'auth_action';
+                                selectedForm.append(input);
+                            }
+                            input.value = action;
+                            selectedForm.requestSubmit();
+                        };
+                        document.getElementById('landing-quote-continue')?.addEventListener('click', () => submitWithAction(''));
+                        document.getElementById('landing-quote-login')?.addEventListener('click', () => submitWithAction('login'));
+                        document.getElementById('landing-quote-register')?.addEventListener('click', () => submitWithAction('register'));
                     })();
                 </script>
             @endif

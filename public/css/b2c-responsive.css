@@ -1,0 +1,66 @@
+:root { --b2c-focus: #f97316; }
+html { max-width: 100%; overflow-x: hidden; }
+body { max-width: 100%; overflow-x: hidden; overflow-wrap: anywhere; }
+img, svg, video, iframe { max-width: 100%; }
+button, .btn, a[class*="btn"], input, select, textarea { min-height: 44px; }
+button, .btn, a[class*="btn"] { touch-action: manipulation; }
+:where(a, button, input, select, textarea):focus-visible { outline: 3px solid var(--b2c-focus) !important; outline-offset: 3px; }
+.content, .card, .grid, .form-grid, .summary-card, .landing-quote-option, .landing-quote-metadata { min-width: 0; }
+.summary-row strong, .summary-line strong, .value, .landing-quote-metadata strong { overflow-wrap: anywhere; }
+
+@media (min-width: 768px) and (max-width: 1023px) {
+    .zigo-public-landing .quote-form { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    .zigo-public-landing .landing-quote-option { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    .zigo-public-landing .landing-quote-select { width: 100%; }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+    .layout { grid-template-columns: 220px minmax(0, 1fr) !important; }
+    .sidebar { padding: 24px 18px !important; }
+    .content { padding: 28px 22px !important; }
+    .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
+@media (max-width: 767px) {
+    body { min-width: 320px; font-size: 14px; }
+    .content, body.guest .content { width: 100%; padding: 20px 14px 32px !important; }
+    .title { font-size: clamp(26px, 9vw, 32px) !important; line-height: 1.12; }
+    .subtitle { margin-bottom: 20px !important; line-height: 1.5; }
+    .grid, .form-grid, .detail-grid { grid-template-columns: minmax(0, 1fr) !important; }
+    .full, .package-card, .summary-card { grid-column: auto !important; grid-row: auto !important; }
+    .card { padding: 18px 16px !important; border-radius: 14px !important; }
+    label, input, select, textarea, button, .btn { font-size: 16px !important; }
+    .summary-card { position: sticky; bottom: 8px; z-index: 5; border: 1px solid #dbeafe; box-shadow: 0 12px 35px rgba(15,23,42,.18) !important; }
+    .summary-row, .summary-line, .summary-item { grid-template-columns: minmax(0, 1fr) auto !important; gap: 8px !important; }
+    .actions, .invoice-downloads, .invoice-modal-actions { display: grid !important; grid-template-columns: minmax(0, 1fr) !important; gap: 10px !important; }
+    .actions > *, .invoice-downloads > *, .invoice-modal-actions > *, .btn, .actions button, .actions a { width: 100%; margin: 0 !important; text-align: center; }
+    .invoice-modal, .landing-quote-modal { padding: 10px !important; align-items: flex-end !important; }
+    .invoice-modal-card, .landing-quote-modal-card { width: 100% !important; max-height: 90vh !important; padding: 18px 16px !important; overflow-y: auto !important; overscroll-behavior: contain; border-radius: 18px 18px 10px 10px !important; }
+    .invoice-modal-actions, .landing-quote-modal-actions { position: sticky; bottom: -18px; z-index: 2; padding: 12px 0 18px; background: #fff; }
+    .shipments-table, .shipments-table tbody, .shipments-table tr, .shipments-table td { display: block; width: 100%; }
+    .shipments-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .shipments-table tr { margin-bottom: 16px; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; box-shadow: 0 5px 14px rgba(15,23,42,.06); }
+    .shipments-table td { display: grid; grid-template-columns: minmax(105px,40%) minmax(0,1fr); gap: 10px; padding: 9px 0 !important; border: 0 !important; border-bottom: 1px solid #eef2f7 !important; text-align: right; }
+    .shipments-table td::before { content: attr(data-label); color: #475569; font-weight: 800; text-align: left; }
+    .shipments-table td:last-child { display: block; border-bottom: 0 !important; text-align: left; }
+    .shipments-table td:last-child::before { display: block; margin-bottom: 8px; }
+    .actions-wrap, .actions-btn { width: 100%; }
+    .actions-menu { position: static !important; width: 100%; margin-top: 8px; box-shadow: none !important; }
+    .actions-wrap:focus-within .actions-menu { display: block; }
+    .zigo-public-landing .nav { padding: 12px 14px !important; gap: 12px !important; flex-direction: column; }
+    .zigo-public-landing .brand { min-width: 0 !important; width: 100%; align-items: center !important; }
+    .zigo-public-landing .brand-logo-frame { min-height: 52px !important; justify-content: center !important; }
+    .zigo-public-landing .brand-logo { width: min(280px, 86vw) !important; }
+    .zigo-public-landing .brand-tagline { margin-top: -8px !important; white-space: normal !important; text-align: center; }
+    .zigo-public-landing .main-nav { width: 100%; justify-content: center !important; gap: 8px !important; }
+    .zigo-public-landing .main-nav a { min-height: 44px; display: inline-flex; align-items: center; font-size: 14px !important; padding: 10px 12px !important; }
+    .zigo-public-landing .quote-box { padding: 18px 12px !important; }
+    .zigo-public-landing .quote-card { padding: 18px 14px !important; }
+    .zigo-public-landing .quote-form { grid-template-columns: minmax(0, 1fr) !important; gap: 12px !important; }
+    .zigo-public-landing .field input, .zigo-public-landing .field select, .zigo-public-landing .btn-yellow { width: 100%; font-size: 16px !important; }
+    .zigo-public-landing .hero { grid-template-columns: minmax(0, 1fr) !important; padding: 24px 16px 48px !important; gap: 28px !important; }
+    .zigo-public-landing .hero h1 { font-size: clamp(34px, 12vw, 48px) !important; letter-spacing: -1px !important; }
+    .zigo-public-landing .landing-quote-option { grid-template-columns: minmax(0, 1fr) !important; padding: 16px !important; }
+    .zigo-public-landing .landing-quote-price { text-align: center; white-space: nowrap; }
+    .zigo-public-landing .landing-quote-select { width: 100%; min-height: 48px; }
+}

@@ -2,7 +2,9 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Detalle de envío - ZIGO</title>
+    <link rel="stylesheet" href="{{ asset('css/b2c-responsive.css') }}">
     <style>
         body{margin:0;font-family:Arial,sans-serif;background:#f4f7fb;color:#111827}
         .layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}

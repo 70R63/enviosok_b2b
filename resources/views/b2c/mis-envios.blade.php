@@ -2,7 +2,9 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mis envíos - ZIGO</title>
+    <link rel="stylesheet" href="{{ asset('css/b2c-responsive.css') }}">
     <style>
         body{margin:0;font-family:Arial,sans-serif;background:#f4f7fb;color:#111827}
         .layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
@@ -118,7 +120,7 @@
                     Aún no tienes envíos registrados.
                 </div>
             @else
-                <table>
+                <table class="shipments-table">
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -136,8 +138,8 @@
                     <tbody>
                         @foreach($envios as $envio)
                             <tr>
-                                <td>{{ $envio->id }}</td>
-                                <td>
+                                <td data-label="Cotización">{{ $envio->id }}</td>
+                                <td data-label="Mensajería">
                                     @php
                                         $logo = match($envio->logistico) {
                                             'FedEx' => 'img/fedex-logo.png',
@@ -153,25 +155,25 @@
                                         {{ $envio->logistico ?? '-' }}
                                     @endif
                                 </td>
-                                <td>{{ $envio->servicio ?? '-' }}</td>
-                                <td>
+                                <td data-label="Servicio">{{ $envio->servicio ?? '-' }}</td>
+                                <td data-label="Origen">
                                     {{ $envio->cp_origen ?? '-' }}
                                     @if($envio->colonia_origen) - {{ $envio->colonia_origen }} @endif
                                     @if($envio->ciudad_origen) - {{ $envio->ciudad_origen }} @endif
                                     @if($envio->estado_origen) - {{ $envio->estado_origen }} @endif
                                 </td>
 
-                                <td>
+                                <td data-label="Destino">
                                     {{ $envio->cp_destino ?? '-' }}
                                     @if($envio->colonia_destino) - {{ $envio->colonia_destino }} @endif
                                     @if($envio->ciudad_destino) - {{ $envio->ciudad_destino }} @endif
                                     @if($envio->estado_destino) - {{ $envio->estado_destino }} @endif
                                 </td>
-                                <td>${{ number_format($envio->precio ?? 0, 2) }}</td>
-                                <td>{{ $envio->payment_status_label }}</td>
-                                <td>{{ $envio->guia_estatus_label }}</td>
-                                <td>{{ $envio->tracking_number ?? '-' }}</td>
-                                <td>
+                                <td data-label="Precio">${{ number_format($envio->precio ?? 0, 2) }}</td>
+                                <td data-label="Estatus pago">{{ $envio->payment_status_label }}</td>
+                                <td data-label="Estado guía">{{ $envio->guia_estatus_label }}</td>
+                                <td data-label="Tracking">{{ $envio->tracking_number ?? '-' }}</td>
+                                <td data-label="Acciones">
                                     @php
                                         $estado = strtoupper(
                                             (string) ($envio->estatus ?? '')
