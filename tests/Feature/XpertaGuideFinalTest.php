@@ -7,11 +7,15 @@ use App\Console\Commands\RecoverXpertaB2cGuide;
 use App\Http\Controllers\API\Payments\MercadoPagoWebhookController;
 use App\Services\Shipping\B2cXpertaGuideFlowService;
 use App\Services\Shipping\Xperta\XpertaGuideService;
+use App\Services\Shipping\Xperta\XpertaGuideResponseNormalizer;
 use App\Services\Shipping\Xperta\XpertaTokenService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
 use ReflectionMethod;
 use Tests\TestCase;
 
@@ -256,6 +260,70 @@ final class XpertaGuideFinalTest extends TestCase
     {
         $pendingTemplate = (string) file_get_contents(resource_path('views/b2c/pago-pending.blade.php'));
         $this->assertStringContainsString("payment_status === 'approved' ? 'Pago confirmado'", $pendingTemplate);
+    }
+
+    public function test_real_label_petition_result_is_normalized(): void
+    {
+        $normalized = app(XpertaGuideResponseNormalizer::class)->normalize($this->realGuideSnapshot());
+        $this->assertTrue($normalized['success']);
+        $this->assertSame('GENERADA', $normalized['provider_status']);
+        $this->assertSame('8050000000112600113484', $normalized['waybill']);
+        $this->assertSame('0218429641', $normalized['tracking']);
+        $this->assertSame('8050000000112600113484', $normalized['provider_reference']);
+        $this->assertSame('112199', $normalized['provider_request_number']);
+        $this->assertSame(1, $normalized['elements_count']);
+        $this->assertSame('omitted', $normalized['document_type']);
+    }
+
+    public function test_pdf_in_real_data_field_is_detected(): void
+    {
+        $snapshot = $this->realGuideSnapshot();
+        $snapshot['data']['data']['data'] = base64_encode("%PDF-1.4\n%%EOF");
+        $normalized = app(XpertaGuideResponseNormalizer::class)->normalize($snapshot);
+        $this->assertSame('pdf_base64', $normalized['document_type']);
+    }
+
+    public function test_snapshot_command_recovers_without_http_or_attempt_increment_and_is_idempotent(): void
+    {
+        config()->set('database.default', 'guide_normalizer');
+        config()->set('database.connections.guide_normalizer', ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']);
+        DB::purge('guide_normalizer');
+        Schema::connection('guide_normalizer')->create('b2c_cotizaciones', function (Blueprint $table): void {
+            $table->id(); $table->string('payment_status')->nullable(); $table->json('guia_response_snapshot')->nullable();
+            $table->string('guia_id')->nullable(); $table->string('tracking_number')->nullable();
+            $table->string('guia_provider_reference')->nullable(); $table->unsignedBigInteger('guia_provider_request_number')->nullable();
+            $table->string('guia_provider_status')->nullable(); $table->string('guia_estatus')->nullable(); $table->string('estatus')->nullable();
+            $table->timestamp('guia_generated_at')->nullable(); $table->timestamp('guia_generation_started_at')->nullable();
+            $table->string('guia_last_error_code')->nullable(); $table->text('guia_last_error_message')->nullable();
+            $table->string('documento')->nullable(); $table->string('guia_label_format')->nullable();
+            $table->unsignedInteger('guia_generation_attempts')->default(0); $table->timestamps();
+        });
+        $quote = new B2cCotizacion();
+        $quote->forceFill(['id' => 107, 'payment_status' => 'approved', 'guia_response_snapshot' => $this->realGuideSnapshot(), 'guia_generation_attempts' => 1])->save();
+        Http::fake();
+        $this->artisan('zigo:xperta-guide-normalize', ['cotizacion_id' => 107, '--dry-run' => true])->assertSuccessful();
+        $this->assertNull($quote->fresh()->tracking_number);
+        $this->artisan('zigo:xperta-guide-normalize', ['cotizacion_id' => 107, '--confirm' => true])->assertSuccessful();
+        $recovered = $quote->fresh();
+        $this->assertSame('8050000000112600113484', $recovered->guia_id);
+        $this->assertSame('0218429641', $recovered->tracking_number);
+        $this->assertSame(1, $recovered->guia_generation_attempts);
+        $this->assertNull($recovered->documento);
+        $generatedAt = $recovered->guia_generated_at;
+        $this->artisan('zigo:xperta-guide-normalize', ['cotizacion_id' => 107, '--confirm' => true])->assertSuccessful();
+        $this->assertEquals($generatedAt, $quote->fresh()->guia_generated_at);
+        Http::assertNothingSent();
+    }
+
+    private function realGuideSnapshot(): array
+    {
+        return ['data' => ['success' => true, 'data' => [
+            'labelPetitionResult' => ['result' => ['code' => 0, 'description' => '8050000000112600113484'],
+                'elements' => [['wayBill' => '8050000000112600113484', 'trackingCode' => '0218429641']],
+                'destinationAddress' => 'Destino sanitizado', 'elementsCount' => 1],
+            'data' => '[CONTENT_OMITTED]'],
+            'message' => ['Exito', 'El registro de la solicitud se genero con exito con el ID 112199']],
+            'http_status' => 200];
     }
 
     private function quote(): B2cCotizacion

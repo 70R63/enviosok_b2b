@@ -250,6 +250,13 @@
 
 @if($cotizacion->tracking_number)
 
+@if($cotizacion->guia_id)
+<div class="card">
+    <div class="label">Guía / WayBill</div>
+    <div class="value">{{ $cotizacion->guia_id }}</div>
+</div>
+@endif
+
 <div class="card">
     <div class="label">Tracking</div>
     <div class="value">
@@ -270,6 +277,13 @@
     </div>
 </div>
 
+@endif
+
+@if($cotizacion->hasGeneratedGuide() && !$cotizacion->documento)
+<div class="card">
+    <div class="label">Etiqueta</div>
+    <div class="value">La guía fue generada. La etiqueta está pendiente de recuperación.</div>
+</div>
 @endif
 
 @if($cotizacion->guia_estatus)

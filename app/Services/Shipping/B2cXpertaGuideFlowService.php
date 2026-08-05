@@ -5,6 +5,7 @@ namespace App\Services\Shipping;
 use App\Models\B2cCotizacion;
 use App\Services\Payments\PaymentVerificationService;
 use App\Services\Shipping\Xperta\XpertaGuideService;
+use App\Services\Shipping\Xperta\XpertaGuideResponseNormalizer;
 use App\Services\Shipping\Xperta\XpertaProviderException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +21,8 @@ final class B2cXpertaGuideFlowService
 
     public function __construct(
         private XpertaGuideService $provider,
-        private PaymentVerificationService $payments
+        private PaymentVerificationService $payments,
+        private XpertaGuideResponseNormalizer $responseNormalizer
     ) {
     }
 
@@ -140,33 +142,38 @@ final class B2cXpertaGuideFlowService
     {
         $data = (array) ($result['data'] ?? []);
         $this->lastResponseSnapshot = $this->sanitizeSnapshot($result);
-        $tracking = $this->firstString($data, [
+        $normalized = $this->responseNormalizer->normalize($result);
+        $tracking = $normalized['tracking'] ?: $this->firstString($data, [
             'trackingNumber', 'tracking_number', 'trackingNo', 'tracking',
             'masterTrackingNumber', 'waybill', 'wayBill', 'guideNumber', 'numeroGuia', 'guia',
             'data.trackingNumber', 'data.tracking_number', 'data.waybill', 'data.guia', 'data.numeroGuia',
             'output.transactionShipments.0.masterTrackingNumber',
             'data.output.transactionShipments.0.masterTrackingNumber',
         ]);
-        $shipmentId = $this->firstString($data, [
+        $shipmentId = $normalized['waybill'] ?: $this->firstString($data, [
             'shipmentId', 'shipment_id', 'shipment', 'reference', 'id', 'data.shipmentId',
             'providerShipmentId', 'data.providerShipmentId', 'data.shipment', 'data.reference',
         ]);
-        $requestNumber = $this->firstString($data, [
+        $requestNumber = $normalized['provider_request_number'] ?: $this->firstString($data, [
             'requestNumber', 'request_number', 'data.requestNumber',
         ]);
-        [$labelPath, $labelFormat] = $this->storeLabel($cotizacion, $data);
+        [$labelPath, $labelFormat] = in_array($normalized['document_type'], ['url', 'omitted'], true)
+            ? [null, null]
+            : $this->storeLabel($cotizacion, $data);
         if ($tracking === null && $labelPath === null) {
             throw new RuntimeException('GUIDE_RESPONSE_INCOMPLETE: Xperta no devolvió guía ni documento válido.');
         }
 
-        return DB::transaction(function () use ($cotizacion, $result, $tracking, $shipmentId, $requestNumber, $labelPath, $labelFormat, $userId) {
+        return DB::transaction(function () use ($cotizacion, $result, $normalized, $tracking, $shipmentId, $requestNumber, $labelPath, $labelFormat, $userId) {
             $locked = B2cCotizacion::query()->whereKey($cotizacion->id)->lockForUpdate()->firstOrFail();
             if ($locked->hasGeneratedGuide()) {
                 return $locked;
             }
             $locked->forceFill([
+                'guia_id' => $normalized['waybill'],
                 'tracking_number' => $tracking,
                 'guia_provider_shipment_id' => $shipmentId,
+                'guia_provider_reference' => $normalized['provider_reference'] ?: $locked->guia_provider_reference,
                 'guia_provider_request_number' => ctype_digit((string) $requestNumber)
                     ? (int) $requestNumber
                     : null,
@@ -174,7 +181,7 @@ final class B2cXpertaGuideFlowService
                 'guia_label_format' => $labelFormat,
                 'guia_estatus' => 'GENERADA',
                 'estatus' => 'GUIA_GENERADA',
-                'guia_provider_status' => 'CREATED',
+                'guia_provider_status' => $normalized['provider_status'] === 'GENERADA' ? 'GENERADA' : 'CREATED',
                 'guia_generated_by' => $userId,
                 'guia_generated_at' => now(),
                 'guia_generation_started_at' => null,
@@ -188,7 +195,7 @@ final class B2cXpertaGuideFlowService
     private function storeLabel(B2cCotizacion $cotizacion, array $data): array
     {
         $encoded = $this->firstString($data, [
-            'document', 'document.content', 'document.base64', 'documento', 'pdf', 'pdfBase64', 'documentBase64',
+            'data.data', 'document', 'document.content', 'document.base64', 'documento', 'pdf', 'pdfBase64', 'documentBase64',
             'label', 'labelContent', 'label.content',
             'data.document', 'data.document.content', 'data.document.base64', 'data.documento', 'data.pdf', 'data.pdfBase64', 'data.documentBase64',
             'data.label', 'data.labelContent', 'data.label.content',
