@@ -78,7 +78,7 @@ final class XpertaGuideFinalTest extends TestCase
         });
     }
 
-    public function test_envelope_uses_existing_minimum_dimension_convention(): void
+    public function test_envelope_uses_provider_integer_dimension_convention(): void
     {
         $quote = $this->quote();
         $quote->tipo_envio = 'sobre';
@@ -87,10 +87,26 @@ final class XpertaGuideFinalTest extends TestCase
         $payload = app(XpertaGuideService::class)->buildPayload($quote, false);
 
         $this->assertSame(
-            ['parcelId' => 4, 'weight' => '3', 'height' => '0.1', 'length' => '0.1', 'width' => '0.1'],
+            ['parcelId' => 4, 'weight' => '3', 'height' => '1', 'length' => '1', 'width' => '1'],
             $payload['labelDefinition']['itemDescription']
         );
         $this->assertSame('***TOKEN_BASE64***', $payload['token']);
+    }
+
+    public function test_box_preserves_real_integer_dimensions(): void
+    {
+        $item = app(XpertaGuideService::class)->buildPayload($this->quote(), false)['labelDefinition']['itemDescription'];
+        $this->assertSame(['parcelId' => 4, 'weight' => '3', 'height' => '15', 'length' => '25', 'width' => '20'], $item);
+    }
+
+    /** @dataProvider invalidBoxDimensions */
+    public function test_box_rejects_non_integer_or_more_than_three_digit_dimensions(string $dimensions): void
+    {
+        $quote = $this->quote();
+        $quote->medidas = $dimensions;
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('enteros positivos de máximo tres dígitos');
+        app(XpertaGuideService::class)->buildPayload($quote, false);
     }
 
     public function test_empty_empresa_id_is_json_null(): void
@@ -229,6 +245,17 @@ final class XpertaGuideFinalTest extends TestCase
     public static function recoverableEnvironments(): array
     {
         return [['production'], ['stage'], ['staging']];
+    }
+
+    public static function invalidBoxDimensions(): array
+    {
+        return [['25.5x20x15'], ['1000x20x15'], ['0x20x15'], ['25x-2x15']];
+    }
+
+    public function test_approved_payment_views_never_label_it_pending(): void
+    {
+        $pendingTemplate = (string) file_get_contents(resource_path('views/b2c/pago-pending.blade.php'));
+        $this->assertStringContainsString("payment_status === 'approved' ? 'Pago confirmado'", $pendingTemplate);
     }
 
     private function quote(): B2cCotizacion

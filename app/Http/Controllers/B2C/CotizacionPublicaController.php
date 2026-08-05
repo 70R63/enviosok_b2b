@@ -1618,6 +1618,8 @@ public function pagoSuccess(
     }
 
     if (
+        $cotizacion->payment_status === 'approved'
+        ||
         in_array(
             $cotizacion->estatus,
             ['PAGADA', 'GUIA_GENERADA'],

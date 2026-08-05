@@ -43,9 +43,9 @@ class XpertaGuideService
                 'itemDescription' => [
                     'parcelId' => 4,
                     'weight' => $weight,
-                    'height' => $this->numericString($height),
-                    'length' => $this->numericString($length),
-                    'width' => $this->numericString($width),
+                    'height' => $height,
+                    'length' => $length,
+                    'width' => $width,
                 ],
                 'serviceConfiguration' => [
                     'quantityOfLabels' => 1,
@@ -182,10 +182,15 @@ class XpertaGuideService
 
     private function parseDimensions(B2cCotizacion $q): array
     {
-        if (strtolower((string) $q->tipo_envio) === 'sobre') return [0.1, 0.1, 0.1];
+        if (strtolower((string) $q->tipo_envio) === 'sobre') return ['1', '1', '1'];
         $parts = array_values(array_filter(preg_split('/x|\*|,|;|\s+/', strtolower((string) $q->medidas)), fn ($v) => $v !== ''));
-        if (count($parts) < 3) throw new RuntimeException('Las dimensiones no tienen formato largo x ancho x alto.');
-        return [(float) $parts[0], (float) $parts[1], (float) $parts[2]];
+        if (count($parts) !== 3) throw new RuntimeException('Las dimensiones no tienen formato largo x ancho x alto.');
+        foreach ($parts as $dimension) {
+            if (!preg_match('/^[1-9][0-9]{0,2}$/', $dimension)) {
+                throw new RuntimeException('Las dimensiones de caja deben ser enteros positivos de máximo tres dígitos.');
+            }
+        }
+        return $parts;
     }
 
     private function normalizeService(string $service): string

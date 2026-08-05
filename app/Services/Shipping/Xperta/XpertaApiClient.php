@@ -216,7 +216,9 @@ class XpertaApiClient
             $status = $response->status();
             throw new XpertaProviderException(
                 'XPERTA_HTTP_' . $status,
-                $this->diagnosticMetadata($url, $response, 'http_' . $status)
+                $this->diagnosticMetadata($url, $response, 'http_' . $status) + [
+                    'provider_message' => $this->safeMessage($json),
+                ]
             );
         }
 

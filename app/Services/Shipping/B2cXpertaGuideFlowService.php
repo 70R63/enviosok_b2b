@@ -248,6 +248,15 @@ final class B2cXpertaGuideFlowService
     private function safeMessage(Throwable $exception): string
     {
         $code = $exception instanceof XpertaProviderException ? $exception->errorCode : '';
+        if ($exception instanceof XpertaProviderException
+            && isset($exception->diagnosticMetadata['provider_message'])
+            && is_string($exception->diagnosticMetadata['provider_message'])) {
+            return mb_substr(preg_replace(
+                '/(token|api.?key|password|secret)\s*[:=]\s*[^\s,;]+/i',
+                '$1=[REDACTED]',
+                $exception->diagnosticMetadata['provider_message']
+            ), 0, 500);
+        }
         return match ($code) {
             'XPERTA_CORPORATE_UNAUTHORIZED' => 'El corporativo no está autorizado para generar esta guía.',
             'XPERTA_API_KEY_UNAUTHORIZED', 'XPERTA_CREDENTIALS_UNAUTHORIZED' => 'Las credenciales del proveedor no fueron aceptadas.',
