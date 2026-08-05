@@ -63,4 +63,9 @@ button, .btn, a[class*="btn"] { touch-action: manipulation; }
     .zigo-public-landing .landing-quote-option { grid-template-columns: minmax(0, 1fr) !important; padding: 16px !important; }
     .zigo-public-landing .landing-quote-price { text-align: center; white-space: nowrap; }
     .zigo-public-landing .landing-quote-select { width: 100%; min-height: 48px; }
+    .zigo-public-landing .quote-reset-wrap, .zigo-public-landing .quote-reset-link { width: 100% !important; }
+    .zigo-public-landing .quote-reset-link { min-height: 44px; display: flex !important; align-items: center; justify-content: center; }
+    .zigo-public-landing .box-dimensions { display: flex !important; flex-direction: column !important; width: 100%; }
+    .zigo-public-landing .box-dimensions input { width: 100% !important; min-width: 0 !important; }
+    .zigo-public-landing .landing-quote-modal-card { width: 94vw !important; max-width: 94vw !important; }
 }

@@ -250,6 +250,7 @@ class XpertaQuoteService
                         ),
                         2
                     ),
+                    'otros' => round((float) ($data['otros'] ?? 0), 2),
                     'costo_ae' =>
                         $extendedAreaAmount,
                     'sub_total' => round(

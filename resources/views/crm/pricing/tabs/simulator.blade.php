@@ -91,6 +91,12 @@
                        min="1"
                        required>
             </div>
+            <div><label>Servicio</label><select name="service"><option value="terrestre">Terrestre</option><option value="diasig">Día siguiente</option></select></div>
+            <div><label>Área extendida operativa</label><input type="number" step="0.01" min="0" name="extended_area" value="{{ old('extended_area', 0) }}"></div>
+            <div><label>Kg extra operativo</label><input type="number" step="0.01" min="0" name="extra_kg" value="{{ old('extra_kg', 0) }}"></div>
+            <div><label>Seguro operativo</label><input type="number" step="0.01" min="0" name="insurance" value="{{ old('insurance', 0) }}"></div>
+            <div><label>Otros operativos</label><input type="number" step="0.01" min="0" name="others" value="{{ old('others', 0) }}"></div>
+            <div><label>Tasa IVA</label><input type="number" step="0.01" min="0" max="1" name="vat_rate" value="{{ old('vat_rate', 0.16) }}" required></div>
 
             <div>
                 <label>CRM Client ID</label>
@@ -128,70 +134,26 @@
     <section class="card">
         <h2>Resultado de la simulación</h2>
 
-        <div class="grid-3">
-            <div>
-                <strong>Tarifa proveedor</strong>
-                <div style="font-size:26px;font-weight:900;margin-top:6px;">
-                    ${{ number_format((float) $simulation['base_price'], 2) }}
-                </div>
+        <div class="grid-2">
+            <div><h3>INTERNO</h3>
+                @foreach($simulation['operational_breakdown'] as $concept => $amount)<div class="summary-line"><span>{{ $concept }}</span><strong>${{ number_format($amount, 2) }}</strong></div>@endforeach
+                <h4>Reglas aplicadas</h4>
+                @forelse($simulation['applied_rules'] as $concept => $rule)<div>{{ $concept }}: {{ $rule['name'] }}</div>@empty<div>Sin reglas por concepto.</div>@endforelse
             </div>
-
-            <div>
-                <strong>Precio final</strong>
-                <div style="font-size:26px;font-weight:900;margin-top:6px;">
-                    ${{ number_format((float) $simulation['final_price'], 2) }}
-                </div>
-            </div>
-
-            <div>
-                <strong>Utilidad estimada ZIGO</strong>
-                <div style="font-size:26px;font-weight:900;margin-top:6px;">
-                    ${{ number_format((float) $simulation['profit_amount'], 2) }}
-                </div>
+            <div><h3>CLIENTE</h3>
+                @foreach(['base'=>'Envío','area_extendida'=>'Área extendida','kg_extra'=>'Kg adicional','seguro'=>'Seguro','otros'=>'Otros'] as $concept => $label)
+                    <div class="summary-line"><span>{{ $label }}</span><strong>${{ number_format($simulation['commercial_breakdown'][$concept], 2) }}</strong></div>
+                @endforeach
+                <div class="summary-line"><span>Subtotal</span><strong>${{ number_format($simulation['commercial_subtotal'], 2) }}</strong></div>
+                <div class="summary-line"><span>IVA</span><strong>${{ number_format($simulation['vat'], 2) }}</strong></div>
+                <div class="summary-line"><span>Total</span><strong>${{ number_format($simulation['customer_total'], 2) }}</strong></div>
             </div>
         </div>
 
         <div class="table-wrap" style="margin-top:18px;">
             <table>
                 <tbody>
-                    <tr>
-                        <th>Regla base</th>
-                        <td>{{ $simulation['pricing_rule_name'] }}</td>
-                    </tr>
-                    <tr>
-                        <th>Margen</th>
-                        <td>
-                            {{ $simulation['margin_percentage'] }}%
-                            /
-                            ${{ number_format((float) $simulation['margin_amount'], 2) }}
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Cargo fijo</th>
-                        <td>
-                            ${{ number_format((float) $simulation['fixed_fee'], 2) }}
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Ajuste</th>
-                        <td>
-                            {{ $simulation['adjustment_name'] ?? 'Sin ajuste' }}
-                            @if(!empty($simulation['adjustment_name']))
-                                /
-                                ${{ number_format((float) $simulation['adjustment_amount'], 2) }}
-                            @endif
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Promoción cliente</th>
-                        <td>
-                            {{ $simulation['client_pricing_rule_name'] ?? 'Sin promoción' }}
-                            @if(!empty($simulation['client_pricing_rule_name']))
-                                /
-                                -${{ number_format((float) $simulation['discount_amount'], 2) }}
-                            @endif
-                        </td>
-                    </tr>
+                    <tr><th>Total proveedor (control)</th><td>${{ number_format($simulation['provider_control_total'], 2) }}</td></tr>
                 </tbody>
             </table>
         </div>

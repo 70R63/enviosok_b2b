@@ -887,10 +887,24 @@
                         $totalResumen = $precioBaseResumen + $seguroMontoResumen;
                     @endphp
 
-                    <div class="summary-row">
-                        <span>Envío</span>
-                        <strong id="resumen_envio">${{ number_format($precioBaseResumen, 2) }} MXN</strong>
-                    </div>
+                    @php($commercialBreakdown = (array) ($quoteMetadata['commercial_breakdown'] ?? []))
+                    @if($commercialBreakdown)
+                        @foreach([
+                            'base' => 'Envío', 'area_extendida' => 'Área extendida',
+                            'kg_extra' => 'Kg adicional', 'seguro' => 'Seguro', 'otros' => 'Otros cargos'
+                        ] as $concept => $label)
+                            @if((float) ($commercialBreakdown[$concept] ?? 0) > 0)
+                                <div class="summary-row"><span>{{ $label }}</span><strong>${{ number_format((float) $commercialBreakdown[$concept], 2) }} MXN</strong></div>
+                            @endif
+                        @endforeach
+                        <div class="summary-row"><span>Subtotal</span><strong>${{ number_format((float) $quoteMetadata['commercial_subtotal'], 2) }} MXN</strong></div>
+                        <div class="summary-row"><span>IVA</span><strong>${{ number_format((float) $quoteMetadata['commercial_vat'], 2) }} MXN</strong></div>
+                    @else
+                        <div class="summary-row">
+                            <span>Envío</span>
+                            <strong id="resumen_envio">${{ number_format($precioBaseResumen, 2) }} MXN</strong>
+                        </div>
+                    @endif
 
                     <div class="summary-row insurance-summary">
                         <span>Protección 2%</span>

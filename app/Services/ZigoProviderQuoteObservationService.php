@@ -64,7 +64,15 @@ class ZigoProviderQuoteObservationService
                 'is_ocurre' => $option['is_ocurre'],
                 'restriction' => $option['restriction'],
                 'restriction_description' => $option['restriction_description'],
+                'commercial_breakdown' => $option['commercial_breakdown'] ?? [],
+                'commercial_subtotal' => $option['commercial_subtotal'] ?? null,
+                'commercial_vat' => $option['commercial_vat'] ?? null,
+                'commercial_total' => $option['commercial_price'] ?? null,
             ];
+            $payload['_zigo_internal_pricing'] = data_get(
+                $option,
+                'commercial_quote.concept_pricing'
+            );
 
             $observation->update(['response_payload' => $payload]);
         } catch (Throwable $exception) {

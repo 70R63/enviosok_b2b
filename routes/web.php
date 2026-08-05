@@ -772,6 +772,10 @@ Route::middleware(['zigo.portal:crm', 'auth', 'roles:sysadmin,admin'])
 
         Route::post('/pricing/rules', [CrmPricingController::class, 'storeRule'])
             ->name('pricing.rules.store');
+        Route::post('/pricing/concept-rules', [CrmPricingController::class, 'storeConceptRule'])
+            ->name('pricing.concept-rules.store');
+        Route::post('/pricing/concept-rules/{conceptRule}/toggle', [CrmPricingController::class, 'toggleConceptRule'])
+            ->name('pricing.concept-rules.toggle');
 
         Route::post('/pricing/adjustments', [CrmPricingController::class, 'storeAdjustment'])
             ->name('pricing.adjustments.store');

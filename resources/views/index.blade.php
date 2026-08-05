@@ -1064,7 +1064,12 @@
                                     <div><strong>Frecuencia:</strong> {{ $opcion['periodicity_name'] }}</div>
                                     <div><strong>Opera:</strong> {{ $operatingDays }}</div>
                                     <div><strong>Zona:</strong> {{ $opcion['zone_code'] }}</div>
-                                    <div><strong>{{ $isReexpedition ? 'Área extendida / reexpedición' : 'Área regular' }}</strong></div>
+                                    <div>
+                                        <strong>{{ $isReexpedition ? 'Área extendida' : 'Área regular' }}</strong>
+                                        @if($isReexpedition)
+                                            <br>Cargo incluido en el precio
+                                        @endif
+                                    </div>
                                     @if($opcion['restriction'])
                                         <div class="landing-quote-restriction">
                                             <strong>Restricción:</strong> {{ $opcion['restriction_description'] }}

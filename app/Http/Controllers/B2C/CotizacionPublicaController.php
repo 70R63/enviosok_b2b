@@ -4278,6 +4278,13 @@ public function opcionesB2c(B2cCotizacion $cotizacion)
                 'commercial_price' =>
                     $pricing['final_price'],
 
+                'commercial_breakdown' =>
+                    data_get($commercialQuote, 'concept_pricing.commercial_breakdown', []),
+                'commercial_subtotal' =>
+                    data_get($commercialQuote, 'concept_pricing.commercial_subtotal'),
+                'commercial_vat' =>
+                    data_get($commercialQuote, 'concept_pricing.vat'),
+
                 'weight_billable' =>
                     round((float) (
                         $cotizacion->peso_facturable

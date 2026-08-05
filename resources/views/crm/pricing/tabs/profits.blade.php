@@ -3,6 +3,33 @@
     No sustituyen ni modifican los tarifarios por LTD.
 </div>
 
+<details class="card compact-panel" open>
+    <summary><div class="summary-main"><div class="summary-title">Reglas comerciales por concepto</div><div class="summary-subtitle">Utilidad antes de IVA para cada componente operativo.</div></div></summary>
+    <div class="panel-body">
+        <form method="POST" action="{{ route('crm.pricing.concept-rules.store') }}">@csrf
+            <div class="form-grid">
+                <div><label>Nombre</label><input name="name" required></div>
+                <div><label>Carrier</label><input name="carrier" value="ESTAFETA" required></div>
+                <div><label>Servicio</label><select name="service"><option value="all">Todos</option><option value="terrestre">Terrestre</option><option value="diasig">Día siguiente</option></select></div>
+                <div><label>Segmento</label><select name="segment"><option value="all">Todos</option><option value="anonymous">Anónimo</option><option value="b2c">B2C</option><option value="b2b">B2B</option><option value="api">API</option></select></div>
+                <div><label>Plan</label><input name="plan" placeholder="Opcional"></div>
+                <div><label>Tipo de paquete</label><select name="package_type"><option value="all">Todos</option><option value="caja">Caja</option><option value="sobre">Sobre</option></select></div>
+                <div><label>Concepto</label><select name="concept"><option value="base">Base</option><option value="area_extendida">Área extendida</option><option value="kg_extra">Kg extra</option><option value="seguro">Seguro</option><option value="otros">Otros</option></select></div>
+                <div><label>Tipo de ajuste</label><select name="adjustment_type"><option value="porcentaje">Porcentaje</option><option value="monto_fijo">Monto fijo</option><option value="sin_margen">Sin margen</option></select></div>
+                <div><label>Valor</label><input type="number" step="0.0001" min="0" name="value" value="0" required></div>
+                <div><label>Prioridad</label><input type="number" min="0" name="priority" value="100" required></div>
+                <div><label>Vigencia desde</label><input type="datetime-local" name="starts_at"></div>
+                <div><label>Vigencia hasta</label><input type="datetime-local" name="ends_at"></div>
+            </div>
+            <button class="btn" type="submit" style="margin-top:14px">Crear regla por concepto</button>
+        </form>
+        <div class="table-wrap" style="margin-top:20px"><table><thead><tr><th>Nombre</th><th>Carrier</th><th>Servicio</th><th>Segmento</th><th>Plan</th><th>Paquete</th><th>Concepto</th><th>Ajuste</th><th>Valor</th><th>Prioridad</th><th>Vigencia</th><th>Estatus</th><th>Acción</th></tr></thead><tbody>
+        @forelse($conceptRules as $rule)<tr><td>{{ $rule->name }}</td><td>{{ $rule->carrier }}</td><td>{{ $rule->service }}</td><td>{{ $rule->segment }}</td><td>{{ $rule->plan ?: '-' }}</td><td>{{ $rule->package_type }}</td><td>{{ $rule->concept }}</td><td>{{ $rule->adjustment_type }}</td><td>{{ $rule->value }}</td><td>{{ $rule->priority }}</td><td>{{ $rule->starts_at?->format('d/m/Y') ?? '-' }} / {{ $rule->ends_at?->format('d/m/Y') ?? '-' }}</td><td>{{ $rule->active ? 'Activa' : 'Inactiva' }}</td><td><form method="POST" action="{{ route('crm.pricing.concept-rules.toggle', $rule) }}">@csrf<button class="btn btn-sm" type="submit">{{ $rule->active ? 'Desactivar' : 'Activar' }}</button></form></td></tr>
+        @empty<tr><td colspan="13">No hay reglas comerciales por concepto.</td></tr>@endforelse
+        </tbody></table></div>
+    </div>
+</details>
+
 <div class="compact-actions">
     <details class="card compact-panel">
         <summary>

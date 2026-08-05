@@ -7,6 +7,7 @@ use App\Models\Ltd;
 use App\Models\Servicio;
 use App\Models\ZigoAgreementService;
 use App\Models\ZigoClientPricingRule;
+use App\Models\ZigoCommercialConceptRule;
 use App\Models\ZigoPricingAdjustment;
 use App\Models\ZigoPricingRule;
 use App\Models\ZigoProviderRateCard;
@@ -15,6 +16,7 @@ use App\Models\ZigoProviderRateReference;
 use App\Models\ZigoProviderSource;
 use App\Models\ZigoShippingAgreement;
 use App\Services\ZigoPricingService;
+use App\Services\Pricing\ZigoCommercialPricingEngine;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -112,6 +114,8 @@ class CrmPricingController extends Controller
         $clientRules = ZigoClientPricingRule::query()
             ->latest()
             ->get();
+        $conceptRules = ZigoCommercialConceptRule::query()
+            ->orderBy('priority')->orderBy('id')->get();
 
         $pricingCarriers = ZigoPricingRule::query()
             ->select('carrier')
@@ -138,6 +142,7 @@ class CrmPricingController extends Controller
                 'pricingRules',
                 'adjustments',
                 'clientRules',
+                'conceptRules',
                 'pricingCarriers'
             )
         );
@@ -1081,6 +1086,12 @@ class CrmPricingController extends Controller
                 'numeric',
                 'min:1',
             ],
+            'service' => ['required', Rule::in(['terrestre', 'diasig'])],
+            'extended_area' => ['nullable', 'numeric', 'min:0'],
+            'extra_kg' => ['nullable', 'numeric', 'min:0'],
+            'insurance' => ['nullable', 'numeric', 'min:0'],
+            'others' => ['nullable', 'numeric', 'min:0'],
+            'vat_rate' => ['required', 'numeric', 'min:0', 'max:1'],
             'crm_client_id' => [
                 'nullable',
                 'integer',
@@ -1095,9 +1106,13 @@ class CrmPricingController extends Controller
             ],
         ]);
 
-        $result = app(
-            ZigoPricingService::class
-        )->calculate($data);
+        $result = app(ZigoCommercialPricingEngine::class)->calculate([
+            'costo' => $data['base_price'],
+            'costo_ae' => $data['extended_area'] ?? 0,
+            'costo_kgs_extras' => $data['extra_kg'] ?? 0,
+            'costo_seguro' => $data['insurance'] ?? 0,
+            'otros' => $data['others'] ?? 0,
+        ], $data, $data['service'], $data['customer_segment'], $data['package_type'], (float) $data['vat_rate']);
 
         return redirect()
             ->route(
@@ -1121,6 +1136,34 @@ class CrmPricingController extends Controller
             'profits',
             'Regla base actualizada.'
         );
+    }
+
+    public function storeConceptRule(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:191'],
+            'carrier' => ['required', 'string', 'max:50'],
+            'service' => ['required', Rule::in(['all', 'terrestre', 'diasig'])],
+            'segment' => ['required', Rule::in(['all', 'anonymous', 'b2c', 'b2b', 'api'])],
+            'plan' => ['nullable', 'string', 'max:50'],
+            'package_type' => ['required', Rule::in(['all', 'caja', 'sobre'])],
+            'concept' => ['required', Rule::in(['base', 'area_extendida', 'kg_extra', 'seguro', 'otros'])],
+            'adjustment_type' => ['required', Rule::in(['porcentaje', 'monto_fijo', 'sin_margen'])],
+            'value' => ['required', 'numeric', 'min:0'],
+            'priority' => ['required', 'integer', 'min:0'],
+            'starts_at' => ['nullable', 'date'], 'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
+        ]);
+        ZigoCommercialConceptRule::query()->create([
+            ...$data, 'carrier' => Str::upper($data['carrier']),
+            'plan' => $data['plan'] ?: null, 'active' => true,
+        ]);
+        return $this->redirectToTab('profits', 'Regla comercial por concepto creada.');
+    }
+
+    public function toggleConceptRule(ZigoCommercialConceptRule $conceptRule): RedirectResponse
+    {
+        $conceptRule->update(['active' => !$conceptRule->active]);
+        return $this->redirectToTab('profits', 'Regla comercial por concepto actualizada.');
     }
 
     public function toggleAdjustment(

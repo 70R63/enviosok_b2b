@@ -1,6 +1,8 @@
 <?php
 
 return [
+    'vat_rate' => 0.16,
+
     /*
      * provider:
      * Conserva el costo regresado por el proveedor actual.
