@@ -93,7 +93,7 @@ Route::post('/b2c/guia/{cotizacion}/generar', [CotizacionPublicaController::clas
     ->name('b2c.guia.generar');
 
 Route::get('/b2c/guia/{cotizacion}/etiqueta', [CotizacionPublicaController::class, 'descargarEtiquetaB2c'])
-    ->middleware(['auth', 'throttle:12,1'])
+    ->middleware(['throttle:12,1'])
     ->name('b2c.guia.etiqueta');
 
 //Opciones de Rastreo

@@ -17,6 +17,8 @@ use Throwable;
 
 final class B2cXpertaGuideFlowService
 {
+    private array $lastResponseSnapshot = [];
+
     public function __construct(
         private XpertaGuideService $provider,
         private PaymentVerificationService $payments
@@ -25,12 +27,26 @@ final class B2cXpertaGuideFlowService
 
     public function generate(B2cCotizacion $cotizacion, int $userId): B2cCotizacion
     {
-        $this->assertStageEnabled();
+        return $this->generateAuthorized($cotizacion, $userId, false);
+    }
 
-        $claimed = DB::transaction(function () use ($cotizacion, $userId) {
+    public function generateAfterConfirmedPayment(
+        B2cCotizacion $cotizacion
+    ): B2cCotizacion {
+        return $this->generateAuthorized($cotizacion, null, true);
+    }
+
+    private function generateAuthorized(
+        B2cCotizacion $cotizacion,
+        ?int $userId,
+        bool $systemTrigger
+    ): B2cCotizacion {
+        $this->assertProductionEnabled();
+
+        $claimed = DB::transaction(function () use ($cotizacion, $userId, $systemTrigger) {
             $locked = B2cCotizacion::query()->whereKey($cotizacion->id)->lockForUpdate()->firstOrFail();
 
-            if ((int) $locked->user_id !== $userId) {
+            if (!$systemTrigger && (int) $locked->user_id !== $userId) {
                 abort(403);
             }
             if ($locked->hasGeneratedGuide()) {
@@ -42,8 +58,23 @@ final class B2cXpertaGuideFlowService
             if (!$this->payments->isEligibleForGuide($locked) || !$locked->hasAccreditedPayment()) {
                 throw new RuntimeException('El pago todavía no está confirmado.');
             }
+            if (!in_array(strtolower(trim((string) $locked->service_code)), ['terrestre', 'diasig'], true)) {
+                throw new RuntimeException('El servicio seleccionado no permite generar una guía Xperta.');
+            }
             if (!$locked->hasCompleteShippingAddresses() || !$locked->hasCompletePackageData()) {
                 throw new RuntimeException('Completa los datos del remitente, destinatario y paquete.');
+            }
+            if (!preg_match('/^\d{5}$/', (string) $locked->cp_origen)
+                || !preg_match('/^\d{5}$/', (string) $locked->cp_destino)) {
+                throw new RuntimeException('Los códigos postales deben tener cinco dígitos.');
+            }
+            if ((float) ($locked->peso_facturable ?: $locked->peso) <= 0) {
+                throw new RuntimeException('El peso facturable debe ser mayor que cero.');
+            }
+            if ((float) $locked->zigo_final_price <= 0
+                || (float) $locked->precio <= 0
+                || trim((string) $locked->quote_request_fingerprint) === '') {
+                throw new RuntimeException('El precio congelado de la cotización no es válido.');
             }
             if (strtolower((string) $locked->carrier) !== 'estafeta' || strtolower((string) $locked->provider) !== 'xperta') {
                 throw new RuntimeException('El servicio seleccionado no corresponde a Xperta/Estafeta.');
@@ -53,6 +84,12 @@ final class B2cXpertaGuideFlowService
                 && $locked->guia_generation_started_at
                 && $locked->guia_generation_started_at->gt(now()->subMinutes(5))) {
                 throw new RuntimeException('La guía ya se está generando. Espera antes de reintentar.');
+            }
+            if ((int) $locked->guia_generation_attempts >= (int) config('zigo_b2c_xperta.guide_max_attempts', 3)) {
+                throw new RuntimeException('La guía alcanzó el máximo de intentos permitidos.');
+            }
+            if (in_array((string) $locked->guia_last_error_code, ['GUIDE_RESPONSE_INCOMPLETE', 'XPERTA_TIMEOUT'], true)) {
+                throw new RuntimeException('El intento anterior tuvo un resultado ambiguo y requiere conciliación operativa antes de reintentar.');
             }
 
             $fingerprint = hash('sha256', implode('|', [
@@ -67,6 +104,7 @@ final class B2cXpertaGuideFlowService
                 'guia_generation_started_at' => now(),
                 'guia_last_attempt_at' => now(),
                 'guia_estatus' => 'GENERANDO',
+                'guia_request_snapshot' => $this->provider->buildPayload($locked, false),
                 'guia_last_error_code' => null,
                 'guia_last_error_message' => null,
             ])->save();
@@ -87,18 +125,34 @@ final class B2cXpertaGuideFlowService
         }
     }
 
-    private function persistResponse(B2cCotizacion $cotizacion, array $result, int $userId): B2cCotizacion
+    private function persistResponse(B2cCotizacion $cotizacion, array $result, ?int $userId): B2cCotizacion
     {
         $data = (array) ($result['data'] ?? []);
-        $tracking = $this->firstString($data, ['trackingNumber', 'tracking_number', 'waybill', 'guia', 'data.trackingNumber', 'data.waybill']);
-        $shipmentId = $this->firstString($data, ['shipmentId', 'shipment_id', 'id', 'data.shipmentId']);
+        $this->lastResponseSnapshot = $this->sanitizeSnapshot($result);
+        $tracking = $this->firstString($data, [
+            'trackingNumber', 'tracking_number', 'trackingNo', 'tracking',
+            'masterTrackingNumber', 'waybill', 'guia',
+            'data.trackingNumber', 'data.tracking_number', 'data.waybill',
+            'output.transactionShipments.0.masterTrackingNumber',
+            'data.output.transactionShipments.0.masterTrackingNumber',
+        ]);
+        $shipmentId = $this->firstString($data, [
+            'shipmentId', 'shipment_id', 'id', 'data.shipmentId',
+            'providerShipmentId', 'data.providerShipmentId',
+        ]);
+        $requestNumber = $this->firstString($data, [
+            'requestNumber', 'request_number', 'data.requestNumber',
+        ]);
         if ($tracking === null) {
-            throw new RuntimeException('Xperta no devolvió un número de guía válido.');
+            throw new RuntimeException('GUIDE_RESPONSE_INCOMPLETE: Xperta no devolvió un número de guía válido.');
         }
 
         [$labelPath, $labelFormat] = $this->storeLabel($cotizacion, $data);
+        if ($labelPath === null) {
+            throw new RuntimeException('GUIDE_RESPONSE_INCOMPLETE: Xperta no devolvió una etiqueta válida.');
+        }
 
-        return DB::transaction(function () use ($cotizacion, $result, $tracking, $shipmentId, $labelPath, $labelFormat, $userId) {
+        return DB::transaction(function () use ($cotizacion, $result, $tracking, $shipmentId, $requestNumber, $labelPath, $labelFormat, $userId) {
             $locked = B2cCotizacion::query()->whereKey($cotizacion->id)->lockForUpdate()->firstOrFail();
             if ($locked->hasGeneratedGuide()) {
                 return $locked;
@@ -106,20 +160,19 @@ final class B2cXpertaGuideFlowService
             $locked->forceFill([
                 'tracking_number' => $tracking,
                 'guia_provider_shipment_id' => $shipmentId,
+                'guia_provider_request_number' => ctype_digit((string) $requestNumber)
+                    ? (int) $requestNumber
+                    : null,
                 'documento' => $labelPath,
                 'guia_label_format' => $labelFormat,
-                'guia_estatus' => $labelPath ? 'GENERADA' : 'GENERADA_SIN_DOCUMENTO',
+                'guia_estatus' => 'GENERADA',
                 'estatus' => 'GUIA_GENERADA',
                 'guia_provider_status' => 'CREATED',
                 'guia_generated_by' => $userId,
                 'guia_generated_at' => now(),
                 'guia_generation_started_at' => null,
                 'quote_correlation_id' => $this->sanitizeCorrelation($result['correlation_id'] ?? null),
-                'guia_response_snapshot' => [
-                    'provider' => 'xperta', 'carrier' => 'estafeta',
-                    'tracking_number' => $tracking, 'shipment_id' => $shipmentId,
-                    'label_available' => $labelPath !== null,
-                ],
+                'guia_response_snapshot' => $this->sanitizeSnapshot($result),
             ])->save();
             return $locked->refresh();
         });
@@ -127,8 +180,13 @@ final class B2cXpertaGuideFlowService
 
     private function storeLabel(B2cCotizacion $cotizacion, array $data): array
     {
-        $encoded = $this->firstString($data, ['label', 'labelContent', 'label.content', 'data.label', 'data.labelContent']);
-        $labelUrl = $this->firstString($data, ['labelUrl', 'labelURL', 'url', 'label.url', 'data.labelUrl', 'data.url']);
+        $encoded = $this->firstString($data, ['label', 'labelContent', 'label.content', 'data.label', 'data.labelContent', 'data.label.content']);
+        $labelUrl = $this->firstString($data, [
+            'labelUrl', 'labelURL', 'url', 'label.url', 'data.labelUrl',
+            'data.labelURL', 'data.url', 'data.label.url',
+            'output.transactionShipments.0.pieceResponses.0.packageDocuments.0.url',
+            'data.output.transactionShipments.0.pieceResponses.0.packageDocuments.0.url',
+        ]);
         if ($encoded !== null && filter_var($encoded, FILTER_VALIDATE_URL)) {
             $labelUrl = $encoded;
             $encoded = null;
@@ -168,13 +226,27 @@ final class B2cXpertaGuideFlowService
         if ($scheme !== 'https' || $host === '' || !in_array($host, $allowed, true)) {
             throw new RuntimeException('Xperta devolvió una ubicación de etiqueta no autorizada.');
         }
+        if ($host === 'localhost' || str_ends_with($host, '.localhost')) {
+            throw new RuntimeException('Xperta devolvió una ubicación de etiqueta no autorizada.');
+        }
+        if (filter_var($host, FILTER_VALIDATE_IP)
+            && !filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            throw new RuntimeException('Xperta devolvió una ubicación de etiqueta no autorizada.');
+        }
+        foreach ((array) gethostbynamel($host) as $address) {
+            if (!filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                throw new RuntimeException('Xperta devolvió una ubicación de etiqueta no autorizada.');
+            }
+        }
     }
 
     private function markFailure(B2cCotizacion $cotizacion, Throwable $exception): void
     {
-        $code = $exception instanceof XpertaProviderException
+        $code = str_starts_with($exception->getMessage(), 'GUIDE_RESPONSE_INCOMPLETE')
+            ? 'GUIDE_RESPONSE_INCOMPLETE'
+            : ($exception instanceof XpertaProviderException
             ? $exception->errorCode
-            : ($exception instanceof ConnectionException ? 'XPERTA_TIMEOUT' : 'XPERTA_PROVIDER_ERROR');
+            : ($exception instanceof ConnectionException ? 'XPERTA_TIMEOUT' : 'XPERTA_PROVIDER_ERROR'));
         Log::warning('Fallo funcional al generar guía B2C Xperta', [
             'cotizacion_id' => $cotizacion->id, 'error_code' => $code,
             'exception' => get_class($exception),
@@ -183,7 +255,9 @@ final class B2cXpertaGuideFlowService
             'guia_estatus' => 'ERROR_PROVEEDOR', 'estatus' => 'ERROR_GENERACION_GUIA',
             'guia_generation_started_at' => null, 'guia_last_error_code' => $code,
             'guia_last_error_message' => $this->safeMessage($exception),
-            'guia_response_snapshot' => ['provider' => 'xperta', 'success' => false, 'error_code' => $code],
+            'guia_response_snapshot' => $this->lastResponseSnapshot !== []
+                ? $this->lastResponseSnapshot
+                : ['provider' => 'xperta', 'success' => false, 'error_code' => $code],
         ])->save();
     }
 
@@ -195,7 +269,8 @@ final class B2cXpertaGuideFlowService
             'XPERTA_API_KEY_UNAUTHORIZED', 'XPERTA_CREDENTIALS_UNAUTHORIZED' => 'Las credenciales del proveedor no fueron aceptadas.',
             default => $exception instanceof ConnectionException
                 ? 'Xperta no respondió a tiempo. El pago permanece registrado y puedes reintentar.'
-                : (str_starts_with($exception->getMessage(), 'Xperta no devolvió') ? $exception->getMessage()
+                : (str_starts_with($exception->getMessage(), 'GUIDE_RESPONSE_INCOMPLETE')
+                    ? 'Xperta devolvió una guía incompleta. Puedes reintentar sin generar un duplicado.'
                     : 'No fue posible generar la guía. El pago permanece registrado y puedes reintentar.'),
         };
     }
@@ -216,13 +291,42 @@ final class B2cXpertaGuideFlowService
         return $value === '' ? null : mb_substr($value, 0, 100);
     }
 
-    private function assertStageEnabled(): void
+    private function sanitizeSnapshot(array $value): array
     {
-        if (!config('zigo_b2c_xperta.full_flow_enabled') || !config('zigo_b2c_xperta.guide_enabled')) {
+        $walk = function (mixed $item, ?string $key = null) use (&$walk): mixed {
+            if ($key !== null && preg_match('/token|api.?key|password|secret/i', $key)) {
+                return '[REDACTED]';
+            }
+            if ($key !== null && preg_match('/label(content)?|base64/i', $key)
+                && is_string($item)
+                && !filter_var($item, FILTER_VALIDATE_URL)) {
+                return '[CONTENT_OMITTED]';
+            }
+            if (is_array($item)) {
+                $clean = [];
+                foreach ($item as $childKey => $child) {
+                    $clean[$childKey] = $walk($child, (string) $childKey);
+                }
+                return $clean;
+            }
+            if (is_string($item) && strlen($item) > 4000) {
+                return '[CONTENT_OMITTED]';
+            }
+            return $item;
+        };
+
+        return $walk($value);
+    }
+
+    private function assertProductionEnabled(): void
+    {
+        if (!config('services.xperta.enabled')
+            || !config('services.xperta.guide_enabled')
+            || !config('zigo_b2c_xperta.guide_enabled')) {
             throw new RuntimeException('La generación de guía Xperta no está habilitada.');
         }
-        if (strtolower((string) config('services.xperta.environment')) !== 'stage') {
-            throw new RuntimeException('La generación Xperta B2C está bloqueada fuera de Stage.');
+        if (strtolower((string) config('services.xperta.environment')) !== 'production') {
+            throw new RuntimeException('La generación Xperta B2C sólo está habilitada en producción.');
         }
     }
 }

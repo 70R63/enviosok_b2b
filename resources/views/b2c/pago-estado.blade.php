@@ -291,13 +291,18 @@
             <a href="{{ strtolower((string) $cotizacion->provider) === 'xperta' ? route('b2c.guia.etiqueta', $cotizacion) : asset('storage/' . $cotizacion->documento) }}" target="_blank" rel="noopener noreferrer" class="btn-primary">
                 Descargar guía
             </a>
-        @elseif($mostrarGuia && !$cotizacion->tracking_number)
+        @elseif($mostrarGuia && !$cotizacion->tracking_number && strtolower((string) $cotizacion->provider) !== 'xperta')
             <form method="POST" action="{{ route('b2c.guia.generar', $cotizacion->id) }}">
                 @csrf
                 <button type="submit" class="btn-primary">
                     Generar guía
                 </button>
             </form>
+        @elseif($mostrarGuia && !$cotizacion->tracking_number)
+            <div class="card">
+                <div class="label">Guía</div>
+                <div class="value">{{ $cotizacion->guia_last_error_message ?: 'Tu guía está siendo generada.' }}</div>
+            </div>
         @endif
 
         @if($isPublicCheckout)

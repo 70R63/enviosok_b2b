@@ -1587,8 +1587,14 @@ public function pago(
 public function pagoSuccess(
     Request $request,
     B2cCotizacion $cotizacion,
-    PaymentVerificationService $verificationService
+    PaymentVerificationService $verificationService,
+    \App\Services\Shipping\B2cXpertaGuideFlowService $xpertaGuideFlow
 ) {
+    $guard = $this->guardConditionalCheckout($cotizacion);
+    if ($guard) {
+        return $guard;
+    }
+
     $cotizacion = $this->verifyMercadoPagoCallback(
         $request,
         $cotizacion,
@@ -1600,6 +1606,15 @@ public function pagoSuccess(
         'cotizacion_publica_id',
         'login_required',
     ]);
+
+    if ($this->shouldGenerateXpertaGuide($cotizacion)) {
+        try {
+            $cotizacion = $xpertaGuideFlow
+                ->generateAfterConfirmedPayment($cotizacion);
+        } catch (\RuntimeException $exception) {
+            $cotizacion = $cotizacion->refresh();
+        }
+    }
 
     if (
         in_array(
@@ -1616,6 +1631,19 @@ public function pagoSuccess(
     }
 
     return view('b2c.pago-pending', compact('cotizacion'));
+}
+
+private function shouldGenerateXpertaGuide(
+    B2cCotizacion $cotizacion
+): bool {
+    return $cotizacion->hasAccreditedPayment()
+        && !$cotizacion->hasGeneratedGuide()
+        && strtolower((string) $cotizacion->provider) === 'xperta'
+        && strtolower((string) $cotizacion->carrier) === 'estafeta'
+        && config('services.xperta.enabled', false)
+        && config('services.xperta.guide_enabled', false)
+        && config('zigo_b2c_xperta.guide_enabled', false)
+        && strtolower((string) config('services.xperta.environment')) === 'production';
 }
 
 public function pagoFailure(
@@ -1747,7 +1775,12 @@ public function generarGuia(
     IdentityGuideAccessService $identityGuideAccessService,
     \App\Services\Shipping\B2cXpertaGuideFlowService $xpertaGuideFlow
 ) {
-    if (config('zigo_b2c_xperta.full_flow_enabled', false)) {
+    if (
+        strtolower((string) $cotizacion->provider) === 'xperta'
+        && config('services.xperta.enabled', false)
+        && config('services.xperta.guide_enabled', false)
+        && config('zigo_b2c_xperta.guide_enabled', false)
+    ) {
         if ($cotizacion->user_id !== auth()->id()) {
             abort(403);
         }
@@ -1846,8 +1879,9 @@ public function generarGuia(
 
 public function descargarEtiquetaB2c(B2cCotizacion $cotizacion)
 {
-    if ((int) $cotizacion->user_id !== (int) auth()->id()) {
-        abort(403);
+    $guard = $this->guardConditionalCheckout($cotizacion);
+    if ($guard) {
+        return $guard;
     }
     $path = trim((string) $cotizacion->documento);
     if ($path === '' || !str_starts_with($path, 'private/b2c/labels/')

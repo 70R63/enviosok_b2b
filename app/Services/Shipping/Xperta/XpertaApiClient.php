@@ -222,7 +222,11 @@ class XpertaApiClient
 
         if (
             array_key_exists('success', $json)
-            && $json['success'] !== true
+            && filter_var(
+                $json['success'],
+                FILTER_VALIDATE_BOOLEAN,
+                FILTER_NULL_ON_FAILURE
+            ) !== true
         ) {
             throw new RuntimeException(
                 'Xperta rechazó la operación: '

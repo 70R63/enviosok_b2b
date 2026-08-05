@@ -3,6 +3,7 @@
 namespace App\Services\Shipping\Xperta;
 
 use App\Models\B2cCotizacion;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 class XpertaGuideService
@@ -31,7 +32,7 @@ class XpertaGuideService
             2
         );
 
-        $declaredValue = $cotizacion->requiere_seguro_envio
+        $declaredValue = (float) $cotizacion->valor_declarado > 0
             ? round((float) $cotizacion->valor_declarado, 2)
             : null;
 
@@ -46,6 +47,7 @@ class XpertaGuideService
                 'shipper' => $this->party(
                     (string) $cotizacion->remitente_nombre,
                     (string) $cotizacion->remitente_telefono,
+                    (string) ($cotizacion->remitente_email ?? ''),
                     (string) $cotizacion->remitente_direccion,
                     (string) $cotizacion->remitente_num_ext,
                     (string) ($cotizacion->remitente_num_int ?? ''),
@@ -59,6 +61,7 @@ class XpertaGuideService
                     $this->party(
                         (string) $cotizacion->destinatario_nombre,
                         (string) $cotizacion->destinatario_telefono,
+                        (string) ($cotizacion->destinatario_email ?? ''),
                         (string) $cotizacion->destinatario_direccion,
                         (string) $cotizacion->destinatario_num_ext,
                         (string) ($cotizacion->destinatario_num_int ?? ''),
@@ -110,7 +113,11 @@ class XpertaGuideService
         B2cCotizacion $cotizacion,
         ?string $service = null
     ): array {
-        if (!config('zigo_b2c_xperta.guide_enabled', false)) {
+        if (
+            !config('services.xperta.enabled', false)
+            || !config('services.xperta.guide_enabled', false)
+            || !config('zigo_b2c_xperta.guide_enabled', false)
+        ) {
             throw new RuntimeException(
                 'La generación de guía Xperta está desactivada.'
             );
@@ -142,11 +149,11 @@ class XpertaGuideService
         return $this->client->resolvePath(
             (string) config(
                 'services.xperta.guide_path',
-                '/api/v1/empresas/{corporativo}/ltds/{ltd}/servicios/{service}/guia'
+                '/api/v1/empresas/{empresa}/ltds/{ltd}/servicios/{service}/guia'
             ),
             [
-                'corporativo' => config('services.xperta.corporativo'),
-                'empresa' => config('services.xperta.corporativo'),
+                'corporativo' => config('services.xperta.empresa'),
+                'empresa' => config('services.xperta.empresa'),
                 'ltd' => config('services.xperta.ltd', 'estafeta'),
                 'service' => $service,
             ]
@@ -158,13 +165,13 @@ class XpertaGuideService
     ): void {
         if (!$cotizacion->hasCompleteShippingAddresses()) {
             throw new RuntimeException(
-                'La cotizaciÃ³n no tiene direcciones completas.'
+                'La cotización no tiene direcciones completas.'
             );
         }
 
         if (!$cotizacion->hasCompletePackageData()) {
             throw new RuntimeException(
-                'La cotizaciÃ³n no tiene datos completos del paquete.'
+                'La cotización no tiene datos completos del paquete.'
             );
         }
 
@@ -187,6 +194,7 @@ class XpertaGuideService
     private function party(
         string $name,
         string $phone,
+        string $email,
         string $street,
         string $externalNumber,
         string $internalNumber,
@@ -208,16 +216,26 @@ class XpertaGuideService
             ]))
         );
 
+        $contact = [
+            'personName' => mb_substr(trim($name), 0, 70),
+            'phoneNumber' => mb_substr(
+                preg_replace('/\D/', '', $phone),
+                0,
+                15
+            ),
+            'companyName' => mb_substr(trim($name), 0, 70),
+        ];
+
+        if (trim($email) !== '') {
+            $contact['emailAddress'] = mb_substr(
+                trim($email),
+                0,
+                254
+            );
+        }
+
         return [
-            'contact' => [
-                'personName' => mb_substr(trim($name), 0, 70),
-                'phoneNumber' => mb_substr(
-                    preg_replace('/\D/', '', $phone),
-                    0,
-                    15
-                ),
-                'companyName' => mb_substr(trim($name), 0, 70),
-            ],
+            'contact' => $contact,
             'address' => [
                 'streetLines' => [
                     mb_substr($streetLine, 0, 150),
@@ -237,14 +255,8 @@ class XpertaGuideService
 
     private function stateCode(string $state): string
     {
-        $source = iconv(
-            'UTF-8',
-            'ASCII//TRANSLIT//IGNORE',
-            $state
-        ) ?: $state;
-
         $normalized = mb_strtoupper(
-            trim(str_replace('.', '', $source))
+            trim(str_replace('.', '', Str::ascii($state)))
         );
 
         $codes = [
@@ -296,7 +308,7 @@ class XpertaGuideService
         }
 
         throw new RuntimeException(
-            'No existe cÃ³digo de estado Xperta para: ' . $state
+            'No existe código de estado Xperta para: ' . $state
         );
     }
 
@@ -337,11 +349,10 @@ class XpertaGuideService
 
     private function normalizeService(string $service): string
     {
-        $normalized = mb_strtolower(trim($service));
+        $normalized = mb_strtolower(trim(Str::ascii($service)));
 
         return match (true) {
             str_contains($normalized, 'dia sig'),
-            str_contains($normalized, 'dÃ­a sig'),
             str_contains($normalized, 'siguiente') => 'diasig',
 
             str_contains($normalized, 'terrestre') => 'terrestre',

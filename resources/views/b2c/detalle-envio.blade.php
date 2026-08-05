@@ -364,6 +364,9 @@
                 <div class="label">Tracking</div>
                 <div class="value">{{ $cotizacion->tracking_number ?? 'Sin tracking' }}</div>
 
+                <div class="label">Fecha de generación</div>
+                <div class="value">{{ $cotizacion->guia_generated_at ? $cotizacion->guia_generated_at->format('d/m/Y H:i') : 'Pendiente' }}</div>
+
                 <div class="label">Documento</div>
                 <div class="value">{{ $cotizacion->documento ? 'Etiqueta disponible' : 'Sin documento' }}</div>
 
@@ -408,6 +411,11 @@
                     <div class="value">
                         {{ $cotizacion->guia_generation_attempts }}
                     </div>
+                @endif
+
+                @if($cotizacion->guia_last_error_message && !$cotizacion->hasGeneratedGuide())
+                    <div class="label">Último resultado</div>
+                    <div class="value">{{ $cotizacion->guia_last_error_message }}</div>
                 @endif
             </div>
 

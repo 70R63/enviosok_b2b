@@ -410,7 +410,7 @@
                                             </form>
 
                                             {{-- Acciones de una guía generada --}}
-                                            @if(!empty($envio->tracking_number))
+                                            @if(!empty($envio->tracking_number) && strtolower((string) $envio->provider) !== 'xperta')
                                                 <a
                                                     href="{{ url(
                                                         '/rastreo?tracking_number='
@@ -421,6 +421,10 @@
                                                 >
                                                     Rastrear
                                                 </a>
+                                            @endif
+
+                                            @if($envio->guia_last_error_message && !$envio->hasGeneratedGuide())
+                                                <span>{{ $envio->guia_last_error_message }}</span>
                                             @endif
 
                                             @if(!empty($envio->documento))

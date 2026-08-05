@@ -205,9 +205,10 @@ class B2cCotizacion extends Model
             trim((string) $this->guia_estatus)
         );
 
-        return !empty($this->guia_id)
-            || !empty($this->tracking_number)
-            || !empty($this->documento)
+          return !empty($this->guia_id)
+              || !empty($this->tracking_number)
+              || !empty($this->guia_provider_shipment_id)
+              || !empty($this->documento)
             || in_array($guideStatus, [
                 'GENERADA',
                 'GENERADA_SIN_DOCUMENTO',

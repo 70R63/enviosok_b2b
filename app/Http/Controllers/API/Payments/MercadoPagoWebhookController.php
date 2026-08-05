@@ -7,6 +7,7 @@ use App\Models\B2cCotizacion;
 use App\Services\Payments\MercadoPagoPaymentClient;
 use App\Services\Payments\MercadoPagoWebhookSignatureValidator;
 use App\Services\Payments\PaymentVerificationService;
+use App\Services\Shipping\B2cXpertaGuideFlowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -17,7 +18,8 @@ class MercadoPagoWebhookController extends Controller
         Request $request,
         MercadoPagoWebhookSignatureValidator $signatureValidator,
         MercadoPagoPaymentClient $paymentClient,
-        PaymentVerificationService $verificationService
+        PaymentVerificationService $verificationService,
+        B2cXpertaGuideFlowService $xpertaGuideFlow
     ): JsonResponse {
         $paymentId = trim((string) (
             $request->query('data.id')
@@ -74,6 +76,18 @@ class MercadoPagoWebhookController extends Controller
                 'WEBHOOK'
             );
 
+            if ($this->shouldGenerateXpertaGuide($verified)) {
+                try {
+                    $verified = $xpertaGuideFlow
+                        ->generateAfterConfirmedPayment($verified);
+                } catch (\RuntimeException $exception) {
+                    Log::warning('Pago confirmado; guía Xperta pendiente de recuperación', [
+                        'cotizacion_id' => $verified->id,
+                        'guide_error_code' => $verified->fresh()->guia_last_error_code,
+                    ]);
+                }
+            }
+
             return response()->json([
                 'received' => true,
                 'processed' => true,
@@ -92,5 +106,18 @@ class MercadoPagoWebhookController extends Controller
                 'message' => 'No fue posible procesar la notificación.',
             ], 500);
         }
+    }
+
+    private function shouldGenerateXpertaGuide(
+        B2cCotizacion $cotizacion
+    ): bool {
+        return $cotizacion->hasAccreditedPayment()
+            && !$cotizacion->hasGeneratedGuide()
+            && strtolower((string) $cotizacion->provider) === 'xperta'
+            && strtolower((string) $cotizacion->carrier) === 'estafeta'
+            && config('services.xperta.enabled', false)
+            && config('services.xperta.guide_enabled', false)
+            && config('zigo_b2c_xperta.guide_enabled', false)
+            && strtolower((string) config('services.xperta.environment')) === 'production';
     }
 }
