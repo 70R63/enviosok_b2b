@@ -9,7 +9,6 @@ use App\Services\Shipping\Xperta\XpertaProviderException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -88,7 +87,7 @@ final class B2cXpertaGuideFlowService
             if ((int) $locked->guia_generation_attempts >= (int) config('zigo_b2c_xperta.guide_max_attempts', 3)) {
                 throw new RuntimeException('La guía alcanzó el máximo de intentos permitidos.');
             }
-            if (in_array((string) $locked->guia_last_error_code, ['GUIDE_RESPONSE_INCOMPLETE', 'XPERTA_TIMEOUT'], true)) {
+            if (in_array((string) $locked->guia_last_error_code, ['GUIDE_RESPONSE_INCOMPLETE', 'GUIDE_RESPONSE_REQUIRES_REVIEW', 'XPERTA_TIMEOUT'], true)) {
                 throw new RuntimeException('El intento anterior tuvo un resultado ambiguo y requiere conciliación operativa antes de reintentar.');
             }
 
@@ -131,25 +130,21 @@ final class B2cXpertaGuideFlowService
         $this->lastResponseSnapshot = $this->sanitizeSnapshot($result);
         $tracking = $this->firstString($data, [
             'trackingNumber', 'tracking_number', 'trackingNo', 'tracking',
-            'masterTrackingNumber', 'waybill', 'guia',
-            'data.trackingNumber', 'data.tracking_number', 'data.waybill',
+            'masterTrackingNumber', 'waybill', 'wayBill', 'guideNumber', 'numeroGuia', 'guia',
+            'data.trackingNumber', 'data.tracking_number', 'data.waybill', 'data.guia', 'data.numeroGuia',
             'output.transactionShipments.0.masterTrackingNumber',
             'data.output.transactionShipments.0.masterTrackingNumber',
         ]);
         $shipmentId = $this->firstString($data, [
-            'shipmentId', 'shipment_id', 'id', 'data.shipmentId',
-            'providerShipmentId', 'data.providerShipmentId',
+            'shipmentId', 'shipment_id', 'shipment', 'reference', 'id', 'data.shipmentId',
+            'providerShipmentId', 'data.providerShipmentId', 'data.shipment', 'data.reference',
         ]);
         $requestNumber = $this->firstString($data, [
             'requestNumber', 'request_number', 'data.requestNumber',
         ]);
-        if ($tracking === null) {
-            throw new RuntimeException('GUIDE_RESPONSE_INCOMPLETE: Xperta no devolvió un número de guía válido.');
-        }
-
         [$labelPath, $labelFormat] = $this->storeLabel($cotizacion, $data);
-        if ($labelPath === null) {
-            throw new RuntimeException('GUIDE_RESPONSE_INCOMPLETE: Xperta no devolvió una etiqueta válida.');
+        if ($tracking === null && $labelPath === null) {
+            throw new RuntimeException('GUIDE_RESPONSE_INCOMPLETE: Xperta no devolvió guía ni documento válido.');
         }
 
         return DB::transaction(function () use ($cotizacion, $result, $tracking, $shipmentId, $requestNumber, $labelPath, $labelFormat, $userId) {
@@ -180,10 +175,15 @@ final class B2cXpertaGuideFlowService
 
     private function storeLabel(B2cCotizacion $cotizacion, array $data): array
     {
-        $encoded = $this->firstString($data, ['label', 'labelContent', 'label.content', 'data.label', 'data.labelContent', 'data.label.content']);
+        $encoded = $this->firstString($data, [
+            'document', 'document.content', 'document.base64', 'documento', 'pdf', 'pdfBase64', 'documentBase64',
+            'label', 'labelContent', 'label.content',
+            'data.document', 'data.document.content', 'data.document.base64', 'data.documento', 'data.pdf', 'data.pdfBase64', 'data.documentBase64',
+            'data.label', 'data.labelContent', 'data.label.content',
+        ]);
         $labelUrl = $this->firstString($data, [
-            'labelUrl', 'labelURL', 'url', 'label.url', 'data.labelUrl',
-            'data.labelURL', 'data.url', 'data.label.url',
+            'documentUrl', 'documentURL', 'pdfUrl', 'labelUrl', 'labelURL', 'url', 'label.url',
+            'data.documentUrl', 'data.documentURL', 'data.pdfUrl', 'data.labelUrl', 'data.labelURL', 'data.url', 'data.label.url',
             'output.transactionShipments.0.pieceResponses.0.packageDocuments.0.url',
             'data.output.transactionShipments.0.pieceResponses.0.packageDocuments.0.url',
         ]);
@@ -191,16 +191,10 @@ final class B2cXpertaGuideFlowService
             $labelUrl = $encoded;
             $encoded = null;
         }
-        if ($encoded === null && $labelUrl !== null) {
-            $this->assertAllowedLabelUrl($labelUrl);
-            $response = Http::accept('application/pdf')
-                ->connectTimeout(5)->timeout(20)->withOptions(['allow_redirects' => false])
-                ->get($labelUrl);
-            if (!$response->successful()) {
-                throw new RuntimeException('La etiqueta no pudo recuperarse del proveedor.');
-            }
-            $binary = $response->body();
-        } elseif ($encoded !== null) {
+        if ($labelUrl !== null) {
+            throw new RuntimeException('GUIDE_RESPONSE_REQUIRES_REVIEW: Xperta devolvió una URL de documento.');
+        }
+        if ($encoded !== null) {
             $encoded = preg_replace('#^data:application/pdf;base64,#i', '', $encoded);
             $binary = base64_decode($encoded, true);
         } else {
@@ -216,37 +210,15 @@ final class B2cXpertaGuideFlowService
         return [$path, 'PDF'];
     }
 
-    private function assertAllowedLabelUrl(string $url): void
-    {
-        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
-        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
-        $configured = array_filter(array_map('trim', (array) config('zigo_b2c_xperta.allowed_label_hosts', [])));
-        $baseHost = strtolower((string) parse_url((string) config('services.xperta.base_url'), PHP_URL_HOST));
-        $allowed = array_unique(array_filter(array_map('strtolower', [...$configured, $baseHost])));
-        if ($scheme !== 'https' || $host === '' || !in_array($host, $allowed, true)) {
-            throw new RuntimeException('Xperta devolvió una ubicación de etiqueta no autorizada.');
-        }
-        if ($host === 'localhost' || str_ends_with($host, '.localhost')) {
-            throw new RuntimeException('Xperta devolvió una ubicación de etiqueta no autorizada.');
-        }
-        if (filter_var($host, FILTER_VALIDATE_IP)
-            && !filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-            throw new RuntimeException('Xperta devolvió una ubicación de etiqueta no autorizada.');
-        }
-        foreach ((array) gethostbynamel($host) as $address) {
-            if (!filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                throw new RuntimeException('Xperta devolvió una ubicación de etiqueta no autorizada.');
-            }
-        }
-    }
-
     private function markFailure(B2cCotizacion $cotizacion, Throwable $exception): void
     {
         $code = str_starts_with($exception->getMessage(), 'GUIDE_RESPONSE_INCOMPLETE')
             ? 'GUIDE_RESPONSE_INCOMPLETE'
+            : (str_starts_with($exception->getMessage(), 'GUIDE_RESPONSE_REQUIRES_REVIEW')
+            ? 'GUIDE_RESPONSE_REQUIRES_REVIEW'
             : ($exception instanceof XpertaProviderException
             ? $exception->errorCode
-            : ($exception instanceof ConnectionException ? 'XPERTA_TIMEOUT' : 'XPERTA_PROVIDER_ERROR'));
+            : ($exception instanceof ConnectionException ? 'XPERTA_TIMEOUT' : 'XPERTA_PROVIDER_ERROR')));
         Log::warning('Fallo funcional al generar guía B2C Xperta', [
             'cotizacion_id' => $cotizacion->id, 'error_code' => $code,
             'exception' => get_class($exception),
@@ -271,7 +243,9 @@ final class B2cXpertaGuideFlowService
                 ? 'Xperta no respondió a tiempo. El pago permanece registrado y puedes reintentar.'
                 : (str_starts_with($exception->getMessage(), 'GUIDE_RESPONSE_INCOMPLETE')
                     ? 'Xperta devolvió una guía incompleta. Puedes reintentar sin generar un duplicado.'
-                    : 'No fue posible generar la guía. El pago permanece registrado y puedes reintentar.'),
+                    : (str_starts_with($exception->getMessage(), 'GUIDE_RESPONSE_REQUIRES_REVIEW')
+                    ? 'Xperta devolvió una URL de documento cuyo tratamiento requiere revisión.'
+                    : 'No fue posible generar la guía. El pago permanece registrado y puedes reintentar.')),
         };
     }
 

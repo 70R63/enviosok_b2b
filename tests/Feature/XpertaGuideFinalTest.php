@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use ReflectionMethod;
-use RuntimeException;
 use Tests\TestCase;
 
 final class XpertaGuideFinalTest extends TestCase
@@ -32,7 +31,7 @@ final class XpertaGuideFinalTest extends TestCase
                 'password' => 'secret-password',
                 'api_key' => 'secret-api-key',
                 'guide_path' => '/api/v1/empresas/{empresa}/ltds/{ltd}/servicios/{service}/guia',
-                'currency' => 'NMP',
+                'guide_empresa_id' => '42',
             ]
         ));
         config()->set('zigo_b2c_xperta.guide_enabled', true);
@@ -46,7 +45,7 @@ final class XpertaGuideFinalTest extends TestCase
             '*' => Http::response([
                 'success' => true,
                 'trackingNumber' => 'TRACK-123',
-                'labelUrl' => 'https://labels.xperta.test/label.pdf',
+                'pdfBase64' => base64_encode("%PDF-1.4\n%%EOF"),
             ]),
         ]);
 
@@ -63,13 +62,16 @@ final class XpertaGuideFinalTest extends TestCase
                 && $request->header('x-api-key')[0] === 'secret-api-key'
                 && $body['token'] === base64_encode('99|GUIDE-TOKEN')
                 && base64_decode($body['token'], true) === '99|GUIDE-TOKEN'
-                && $body['labelResponseOptions'] === 'URL_ONLY'
-                && $body['requestedShipment']['shipper']['contact']['emailAddress'] === 'remitente@example.test'
-                && $body['requestedShipment']['recipients'][0]['contact']['emailAddress'] === 'destino@example.test'
-                && $body['requestedShipment']['requestedPackageLineItems'][0]['declaredValue'] === [
-                    'amount' => 500.0,
-                    'currency' => 'NMP',
-                ];
+                && $body['empresa_id'] === 42
+                && $body['name'] === 'remitente@example.test'
+                && !isset($body['email'], $body['password'], $body['requestedShipment'], $body['labelResponseOptions'])
+                && $body['labelDefinition']['itemDescription'] === [
+                    'parcelId' => 4, 'weight' => '3', 'height' => '15', 'length' => '25', 'width' => '20',
+                ]
+                && $body['labelDefinition']['serviceConfiguration']['isInsurance'] === true
+                && $body['labelDefinition']['serviceConfiguration']['insurance'] === 500.0
+                && preg_match('/^\d{8}$/', $body['labelDefinition']['serviceConfiguration']['effectiveDate']) === 1
+                && $body['labelDefinition']['location']['notified']['residence']['contact']['email'] === 'destino@example.test';
         });
     }
 
@@ -82,20 +84,57 @@ final class XpertaGuideFinalTest extends TestCase
         $payload = app(XpertaGuideService::class)->buildPayload($quote, false);
 
         $this->assertSame(
-            ['alto' => 0.1, 'ancho' => 0.1, 'largo' => 0.1],
-            $payload['requestedShipment']['requestedPackageLineItems'][0]['dimensiones']
+            ['parcelId' => 4, 'weight' => '3', 'height' => '0.1', 'length' => '0.1', 'width' => '0.1'],
+            $payload['labelDefinition']['itemDescription']
         );
         $this->assertSame('***TOKEN_BASE64***', $payload['token']);
     }
 
-    public function test_label_ssrf_blocks_local_and_private_addresses(): void
+    public function test_empty_empresa_id_is_json_null(): void
     {
-        config()->set('zigo_b2c_xperta.allowed_label_hosts', ['127.0.0.1']);
-        $method = new ReflectionMethod(B2cXpertaGuideFlowService::class, 'assertAllowedLabelUrl');
-        $method->setAccessible(true);
+        config()->set('services.xperta.guide_empresa_id', '');
+        $payload = app(XpertaGuideService::class)->buildPayload($this->quote(), false);
+        $this->assertNull($payload['empresa_id']);
+        $this->assertJson(json_encode($payload, JSON_THROW_ON_ERROR));
+    }
 
-        $this->expectException(RuntimeException::class);
-        $method->invoke(app(B2cXpertaGuideFlowService::class), 'https://127.0.0.1/label.pdf');
+    public function test_without_insurance_sends_false_and_null(): void
+    {
+        $quote = $this->quote();
+        $quote->requiere_seguro_envio = false;
+        $payload = app(XpertaGuideService::class)->buildPayload($quote, false);
+        $configuration = $payload['labelDefinition']['serviceConfiguration'];
+        $this->assertFalse($configuration['isInsurance']);
+        $this->assertNull($configuration['insurance']);
+        $this->assertNull($payload['labelDefinition']['location']['notified']['residence']['address']['addressReference']);
+    }
+
+    public function test_document_url_is_not_downloaded_and_requires_review(): void
+    {
+        Http::fake();
+        $method = new ReflectionMethod(B2cXpertaGuideFlowService::class, 'storeLabel');
+        $method->setAccessible(true);
+        try {
+            $method->invoke(app(B2cXpertaGuideFlowService::class), $this->quote(), [
+                'documentUrl' => 'https://unknown.example.test/guide.pdf',
+            ]);
+            $this->fail('La URL debió requerir revisión.');
+        } catch (\ReflectionException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            $cause = $exception->getPrevious() ?: $exception;
+            $this->assertStringStartsWith('GUIDE_RESPONSE_REQUIRES_REVIEW', $cause->getMessage());
+        }
+        Http::assertNothingSent();
+    }
+
+    public function test_invalid_base64_document_is_rejected(): void
+    {
+        $method = new ReflectionMethod(B2cXpertaGuideFlowService::class, 'storeLabel');
+        $method->setAccessible(true);
+        $this->assertSame([null, null], $method->invoke(
+            app(B2cXpertaGuideFlowService::class), $this->quote(), ['pdfBase64' => base64_encode('not a pdf')]
+        ));
     }
 
     public function test_base64_label_is_validated_and_stored_privately(): void
@@ -109,7 +148,7 @@ final class XpertaGuideFinalTest extends TestCase
         [$path, $format] = $method->invoke(
             app(B2cXpertaGuideFlowService::class),
             $quote,
-            ['labelContent' => base64_encode("%PDF-1.4\n%%EOF")]
+            ['pdfBase64' => base64_encode("%PDF-1.4\n%%EOF")]
         );
 
         $this->assertSame('PDF', $format);

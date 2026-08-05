@@ -88,6 +88,7 @@ return [
             'XPERTA_GUIDE_ENABLED',
             false
         ),
+        'guide_empresa_id' => env('XPERTA_GUIDE_EMPRESA_ID'),
         'guide_probe_enabled' => env(
             'XPERTA_GUIDE_PROBE_ENABLED',
             false
