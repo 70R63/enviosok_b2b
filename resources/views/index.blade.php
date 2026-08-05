@@ -912,6 +912,49 @@
             pointer-events: none;
         }
 
+        .mobile-nav-toggle { display: none; }
+
+        /* B2C_RC05_MOBILE_START: intentionally last in the landing cascade. */
+        @media (max-width: 767px) {
+            html, body, .page-wrap, .top-header, .nav, .quote-box, .quote-card,
+            .quote-form, .quote-form > *, .field, .field-dimensions,
+            .box-dimensions, .landing-quote-option {
+                width: 100% !important; max-width: 100% !important;
+                min-width: 0 !important; box-sizing: border-box !important;
+            }
+            html, body { margin: 0 !important; overflow-x: clip !important; }
+            .page-wrap { overflow: visible !important; }
+            .nav { display: grid !important; grid-template-columns: minmax(0,1fr) auto !important; padding: 10px 14px !important; gap: 8px 12px !important; }
+            .brand { min-width: 0 !important; width: 100% !important; overflow: hidden; }
+            .brand-logo-frame { width: 100% !important; min-height: 48px !important; overflow: visible !important; }
+            .brand-logo { width: min(250px,72vw) !important; max-width: 100% !important; transform: none !important; }
+            .brand:hover .brand-logo { transform: none !important; }
+            .brand-tagline { margin-top: -6px !important; max-width: 100%; white-space: normal !important; letter-spacing: 1.5px !important; }
+            .mobile-nav-toggle { display: inline-flex; width: 48px; height: 48px; align-items: center; justify-content: center; border: 1px solid #dbeafe; border-radius: 12px; background: #fff; color: #1d4ed8; font-size: 24px; cursor: pointer; }
+            .main-nav { display: none !important; grid-column: 1 / -1; width: 100% !important; max-width: 100% !important; min-width: 0 !important; grid-template-columns: minmax(0,1fr) !important; gap: 8px !important; }
+            .main-nav.is-open { display: grid !important; }
+            .main-nav a { display: flex !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; min-height: 44px; align-items: center; justify-content: center; padding: 10px 12px !important; white-space: normal !important; text-align: center; }
+            .quote-box { padding: 16px 12px !important; margin: 0 !important; }
+            .quote-card { padding: 16px 14px !important; margin: 0 !important; }
+            .quote-form { display: grid !important; grid-template-columns: minmax(0,1fr) !important; gap: 12px !important; align-items: stretch !important; }
+            .quote-form > *, .field, .field input, .field select, .btn-yellow { position: static !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; }
+            .box-dimensions { display: grid !important; grid-template-columns: minmax(0,1fr) !important; gap: 8px !important; }
+            .box-dimensions input { width: 100% !important; min-width: 0 !important; border: 1px solid #d1d5db !important; border-radius: 10px !important; }
+            .suggestions { left: 0 !important; right: auto !important; width: 100% !important; max-width: 100% !important; }
+            .btn-yellow, .quote-reset-link { display: flex !important; width: 100% !important; min-height: 46px; align-items: center; justify-content: center; }
+            .quote-reset-wrap { width: 100% !important; margin: 12px 0 0 !important; }
+            .landing-quote-option { display: grid !important; grid-template-columns: minmax(0,1fr) !important; gap: 14px !important; padding: 16px !important; overflow: visible !important; }
+            .landing-quote-service, .landing-quote-metadata, .landing-quote-price { min-width: 0 !important; max-width: 100% !important; overflow-wrap: anywhere !important; white-space: normal !important; }
+            .landing-quote-metadata { grid-template-columns: minmax(0,1fr) !important; }
+            .landing-quote-price { width: 100%; text-align: center; }
+            .landing-quote-select { width: 100% !important; min-height: 46px; }
+            .landing-quote-modal { padding: 3vw !important; }
+            .landing-quote-modal-card { width: min(94vw,620px) !important; max-width: min(94vw,620px) !important; max-height: 90vh !important; overflow-y: auto !important; overflow-x: hidden !important; }
+            .landing-quote-modal-actions { display: flex !important; flex-direction: column-reverse !important; }
+            .landing-quote-modal-actions button { width: 100% !important; min-height: 44px; }
+        }
+        /* B2C_RC05_MOBILE_END */
+
     </style>
 </head>
 <body class="zigo-public-landing">
@@ -926,7 +969,8 @@
                     Tecnología • Logística • Conexión
                 </div>
             </a>
-            <nav class="main-nav"><a href="{{ route('public.nosotros') }}">Nosotros</a><a href="{{ route('public.paqueteria') }}">Paquetería</a><a href="{{ route('public.faqs') }}">FAQ'S</a><a href="{{ url('/login') }}" class="nav-login">Iniciar sesión</a><a href="{{ route('b2c.register') }}" class="nav-register">Registro</a></nav>
+            <button type="button" class="mobile-nav-toggle" aria-label="Abrir menú" aria-controls="main-navigation" aria-expanded="false">☰</button>
+            <nav class="main-nav" id="main-navigation"><a href="{{ route('public.nosotros') }}">Nosotros</a><a href="{{ route('public.paqueteria') }}">Paquetería</a><a href="{{ route('public.faqs') }}">FAQ'S</a><a href="{{ url('/login') }}" class="nav-login">Iniciar sesión</a><a href="{{ route('b2c.register') }}" class="nav-register">Registro</a></nav>
         </div>
     </header>
 
@@ -1667,6 +1711,14 @@
                 }
             });
         }
+
+        const mobileNavToggle = document.querySelector('.mobile-nav-toggle');
+        const mainNavigation = document.getElementById('main-navigation');
+        mobileNavToggle?.addEventListener('click', function () {
+            const open = mainNavigation.classList.toggle('is-open');
+            mobileNavToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            mobileNavToggle.setAttribute('aria-label', open ? 'Cerrar menú' : 'Abrir menú');
+        });
 
         configurarTipoEnvioLanding();
 

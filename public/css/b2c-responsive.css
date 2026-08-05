@@ -22,7 +22,7 @@ button, .btn, a[class*="btn"] { touch-action: manipulation; }
 }
 
 @media (max-width: 767px) {
-    body { min-width: 320px; font-size: 14px; }
+    body { min-width: 0; font-size: 14px; }
     .content, body.guest .content { width: 100%; padding: 20px 14px 32px !important; }
     .title { font-size: clamp(26px, 9vw, 32px) !important; line-height: 1.12; }
     .subtitle { margin-bottom: 20px !important; line-height: 1.5; }
