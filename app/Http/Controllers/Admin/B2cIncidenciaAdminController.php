@@ -10,6 +10,9 @@ use DomainException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
+use App\Services\IncidentWorkflowService;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class B2cIncidenciaAdminController extends Controller
 {
@@ -160,12 +163,10 @@ class B2cIncidenciaAdminController extends Controller
 
     public function dashboard()
     {
-        $total = \App\Models\B2cIncidencia::count();
-        $abiertas = \App\Models\B2cIncidencia::whereIn('estatus', ['NUEVA', 'ABIERTA', 'PENDIENTE'])->count();
-        $proceso = \App\Models\B2cIncidencia::where('estatus', 'EN_PROCESO')->count();
-        $cerradas = \App\Models\B2cIncidencia::whereIn('estatus', ['RESUELTA', 'CERRADA'])->count();
-
-        $incidencias = \App\Models\B2cIncidencia::latest()->limit(10)->get();
+        $base=$this->supportScope();
+        $total=(clone $base)->count();$abiertas=(clone $base)->whereIn('estatus',['ABIERTA','EN_REVISION','ASIGNADA'])->count();
+        $proceso=(clone $base)->where('estatus','EN_PROCESO')->count();$cerradas=(clone $base)->whereIn('estatus',['RESUELTA','CERRADA'])->count();
+        $incidencias=(clone $base)->latest()->limit(10)->get();
 
         return view('soporte.dashboard', compact('total', 'abiertas', 'proceso', 'cerradas', 'incidencias'));
     }
@@ -193,7 +194,7 @@ public function loginPost(Request $request)
         $user = Auth::user();
         $role = optional($user->roles->first())->slug;
 
-        if (!in_array($role, ['sysadmin', 'admin', 'adminops', 'operaciones'])) {
+        if (!in_array($role, ['sysadmin', 'admin', 'adminops', 'operaciones', 'soporte'])) {
             Auth::logout();
             return back()->withErrors([
                 'email' => 'No tienes permiso para acceder al portal de soporte.',
@@ -208,7 +209,7 @@ public function loginPost(Request $request)
         $q = $request->get('q');
         $estatus = $request->get('estatus');
 
-        $incidencias = B2cIncidencia::with('user')
+        $incidencias = $this->supportScope()->with(['user:id,name,email','assignee:id,name,email'])
             ->when($q, function ($query) use ($q) {
                 $query->where(function ($sub) use ($q) {
                     $sub->where('folio', 'like', "%{$q}%")
@@ -222,8 +223,8 @@ public function loginPost(Request $request)
                 });
             })
             ->when($estatus, fn($query) => $query->where('estatus', $estatus))
-            ->latest()
-            ->get();
+            ->when($request->filled('prioridad'),fn($query)=>$query->where('prioridad',$request->prioridad))
+            ->latest()->paginate(25)->withQueryString();
 
         $cotizaciones = collect();
 
@@ -232,7 +233,45 @@ public function loginPost(Request $request)
 
     public function showSoporte(B2cIncidencia $incidencia)
     {
+        $this->authorizeSupportIncident($incidencia);
+        $incidencia->load(['user:id,name,email','cotizacion','events.user:id,name,email']);
         return view('soporte.incidencias.show', compact('incidencia'));
+    }
+
+    public function statusSoporte(Request $request,B2cIncidencia $incidencia,IncidentWorkflowService $flow)
+    {
+        $this->authorizeSupportIncident($incidencia);
+        $data=$request->validate(['status'=>['required',Rule::in(['EN_PROCESO','RESUELTA'])]]);
+        try{$flow->status($incidencia,$data['status'],auth()->id(),'SOPORTE');}catch(\DomainException $e){return back()->withErrors(['status'=>$e->getMessage()]);}
+        return back()->with('success','Estatus actualizado.');
+    }
+
+    public function followUpSoporte(Request $request,B2cIncidencia $incidencia,IncidentWorkflowService $flow)
+    {
+        $this->authorizeSupportIncident($incidencia);
+        $data=$request->validate(['public_response'=>['nullable','string','max:5000'],'internal_note'=>['nullable','string','max:5000'],'solution'=>['nullable','boolean']]);
+        if(empty($data['public_response'])&&empty($data['internal_note']))return back()->withErrors(['public_response'=>'Captura una respuesta o nota.']);
+        try{$flow->message($incidencia,auth()->id(),'SOPORTE',$data['public_response']??null,$data['internal_note']??null,$request->boolean('solution'));}catch(\DomainException $e){return back()->withErrors(['public_response'=>$e->getMessage()]);}
+        return back()->with('success','Seguimiento registrado.');
+    }
+
+    public function evidenceSoporte(B2cIncidencia $incidencia)
+    {
+        $this->authorizeSupportIncident($incidencia);
+        abort_unless($incidencia->evidencia&&Storage::disk('public')->exists($incidencia->evidencia),404);
+        return Storage::disk('public')->download($incidencia->evidencia,basename($incidencia->evidencia));
+    }
+
+    private function supportScope()
+    {
+        $query=B2cIncidencia::query();
+        if(!auth()->user()->hasRol('sysadmin,admin'))$query->where('assigned_to',auth()->id());
+        return $query;
+    }
+
+    private function authorizeSupportIncident(B2cIncidencia $incidencia): void
+    {
+        if(!auth()->user()->hasRol('sysadmin,admin')&&(int)$incidencia->assigned_to!==(int)auth()->id())abort(403);
     }
 
     public function logoutSoporte(Request $request)

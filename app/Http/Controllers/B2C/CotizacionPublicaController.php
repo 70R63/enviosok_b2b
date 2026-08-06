@@ -21,6 +21,7 @@ use App\Exceptions\Payments\PaymentVerificationException;
 use App\Services\Identity\IdentityGuideAccessService;
 use App\Services\Payments\PaymentVerificationService;
 use App\Services\Billing\B2cCheckoutDebtService;
+use App\Services\IncidentWorkflowService;
 use App\Services\Shipping\EstafetaGuideService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -29,6 +30,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use MercadoPago\SDK;
 use MercadoPago\Preference;
 use MercadoPago\Item;
@@ -3958,6 +3960,28 @@ public function incidenciasB2c()
     return view('b2c.incidencias', compact('incidencias'));
 }
 
+public function showIncidenciaB2c(B2cIncidencia $incidencia)
+{
+    abort_unless((int)$incidencia->user_id===(int)auth()->id(),403);
+    $incidencia->load(['cotizacion','events'=>fn($q)=>$q->whereNull('internal_note')->with('user:id,name')]);
+    return view('b2c.incidencia-show',compact('incidencia'));
+}
+
+public function commentIncidenciaB2c(Request $request,B2cIncidencia $incidencia,IncidentWorkflowService $flow)
+{
+    abort_unless((int)$incidencia->user_id===(int)auth()->id(),403);
+    $data=$request->validate(['message'=>['required','string','max:3000']]);
+    try{$flow->customerComment($incidencia,auth()->id(),$data['message']);}catch(\DomainException $e){return back()->withErrors(['message'=>$e->getMessage()]);}
+    return back()->with('success','Comentario agregado.');
+}
+
+public function evidenceIncidenciaB2c(B2cIncidencia $incidencia)
+{
+    abort_unless((int)$incidencia->user_id===(int)auth()->id(),403);
+    abort_unless($incidencia->evidencia&&Storage::disk('public')->exists($incidencia->evidencia),404);
+    return Storage::disk('public')->download($incidencia->evidencia,basename($incidencia->evidencia));
+}
+
 public function guardarIncidenciaB2c(Request $request)
 {
     $data = $request->validate([
@@ -3966,7 +3990,7 @@ public function guardarIncidenciaB2c(Request $request)
         'tipo' => ['required', 'string', 'max:100'],
         'asunto' => ['required', 'string', 'max:150'],
         'descripcion' => ['required', 'string', 'max:2000'],
-        'evidencia' => ['nullable', 'file', 'max:5120'],
+        'evidencia' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
     ]);
 
     $folio = 'INC-' . str_pad((B2cIncidencia::max('id') ?? 0) + 1, 5, '0', STR_PAD_LEFT);
@@ -3977,18 +4001,23 @@ public function guardarIncidenciaB2c(Request $request)
         $evidencia = $request->file('evidencia')->store('b2c/incidencias', 'public');
     }
 
-    B2cIncidencia::create([
+      if(!empty($data['cotizacion_id'])){
+          abort_unless(B2cCotizacion::whereKey($data['cotizacion_id'])->where('user_id',auth()->id())->exists(),403);
+      }
+      $incidencia=B2cIncidencia::create([
         'folio' => $folio,
         'user_id' => auth()->id(),
         'cotizacion_id' => $data['cotizacion_id'] ?? null,
         'tracking_number' => $data['tracking_number'] ?? null,
         'tipo' => $data['tipo'],
         'asunto' => $data['asunto'],
-        'descripcion' => $data['descripcion'],
+          'descripcion' => $data['descripcion'],
+          'customer_message' => $data['descripcion'],
         'evidencia' => $evidencia,
         'estatus' => 'ABIERTA',
         'prioridad' => 'MEDIA',
-    ]);
+      ]);
+      \App\Models\B2cIncidenciaEvent::create(['incidencia_id'=>$incidencia->id,'user_id'=>auth()->id(),'origin'=>'B2C','event_type'=>'CREATED','new_status'=>'ABIERTA','priority'=>'MEDIA','public_message'=>$data['descripcion']]);
 
     return redirect()
         ->route('b2c.incidencias')

@@ -23,7 +23,11 @@ class B2cIncidencia extends Model
         'respuesta_admin',
         'respondida_at',
         'respondida_por',
+        'assigned_to', 'assigned_at', 'customer_message', 'public_response',
+        'internal_notes', 'resolved_at', 'closed_at',
     ];
+
+    protected $casts=['assigned_at'=>'datetime','respondida_at'=>'datetime','resolved_at'=>'datetime','closed_at'=>'datetime'];
 
     public function cotizacion()
     {
@@ -34,4 +38,7 @@ class B2cIncidencia extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
+
+    public function assignee(){return $this->belongsTo(User::class,'assigned_to');}
+    public function events(){return $this->hasMany(B2cIncidenciaEvent::class,'incidencia_id')->oldest();}
 }

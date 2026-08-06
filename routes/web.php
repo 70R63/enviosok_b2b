@@ -22,6 +22,8 @@ use App\Http\Controllers\CRM\CrmShippingProviderController;
 use App\Http\Controllers\CRM\CrmIdentityVerificationController;
 use App\Http\Controllers\CRM\CrmPublicChannelController;
 use App\Http\Controllers\CRM\CrmPaymentController;
+use App\Http\Controllers\CRM\CrmIncidentController;
+use App\Http\Controllers\CRM\CrmCompanyController;
 use App\Http\Controllers\CRM\CrmDevOpsController;
 use App\Http\Controllers\DevOps\DevOpsAuthController;
 use App\Http\Controllers\DevOps\XpertaIntegrationController;
@@ -255,6 +257,9 @@ Route::get('/b2c/incidencias', [CotizacionPublicaController::class, 'incidencias
 
 Route::post('/b2c/incidencias', [CotizacionPublicaController::class, 'guardarIncidenciaB2c'])
     ->name('b2c.incidencias.guardar');
+Route::get('/b2c/incidencias/{incidencia}', [CotizacionPublicaController::class, 'showIncidenciaB2c'])->name('b2c.incidencias.show');
+Route::post('/b2c/incidencias/{incidencia}/comentarios', [CotizacionPublicaController::class, 'commentIncidenciaB2c'])->name('b2c.incidencias.comment');
+Route::get('/b2c/incidencias/{incidencia}/evidencia', [CotizacionPublicaController::class, 'evidenceIncidenciaB2c'])->name('b2c.incidencias.evidence');
 
 //nuevo envio -- paquete
 Route::post('/b2c/paquete/{cotizacion}', [CotizacionPublicaController::class, 'guardarPaqueteB2c'])
@@ -302,7 +307,7 @@ Route::post('/soporte/logout', [B2cIncidenciaAdminController::class, 'logoutSopo
     ->name('soporte.logout');
 
 // Portal Soporte
-Route::middleware(['zigo.portal:support', 'auth', 'roles:sysadmin,admin,adminops,operaciones'])
+Route::middleware(['zigo.portal:support', 'auth', 'roles:sysadmin,admin,adminops,operaciones,soporte'])
     ->prefix('soporte')
     ->name('soporte.')
     ->group(function () {
@@ -316,8 +321,9 @@ Route::middleware(['zigo.portal:support', 'auth', 'roles:sysadmin,admin,adminops
         Route::get('/incidencias/{incidencia}', [B2cIncidenciaAdminController::class, 'showSoporte'])
             ->name('incidencias.show');
 
-        Route::post('/incidencias/{incidencia}/responder', [B2cIncidenciaAdminController::class, 'responder'])
-            ->name('incidencias.responder');
+        Route::patch('/incidencias/{incidencia}/estado', [B2cIncidenciaAdminController::class, 'statusSoporte'])->name('incidencias.status');
+        Route::post('/incidencias/{incidencia}/seguimiento', [B2cIncidenciaAdminController::class, 'followUpSoporte'])->name('incidencias.follow-up');
+        Route::get('/incidencias/{incidencia}/evidencia', [B2cIncidenciaAdminController::class, 'evidenceSoporte'])->name('incidencias.evidence');
 
     });
 
@@ -343,6 +349,7 @@ Route::middleware(['zigo.portal:b2b', 'auth', 'roles:sysadmin,admin,adminops,ope
         Route::get('/dashboard', function () {
             return view('negocios.dashboard');
         })->name('dashboard');
+
     });
 
 Route::domain(config('zigo_domains.portals.devops.host'))
@@ -423,6 +430,15 @@ Route::middleware(['ensure.zigo.portal:crm', 'auth', 'roles:sysadmin,admin'])
         Route::get('/dashboard', function () {
             return view('crm.dashboard');
         })->name('dashboard');
+
+        Route::get('/empresas', [CrmCompanyController::class, 'index'])->name('empresas.index');
+        Route::get('/empresas/{empresa}', [CrmCompanyController::class, 'show'])->whereNumber('empresa')->name('empresas.show');
+        Route::get('/incidencias', [CrmIncidentController::class, 'index'])->name('incidencias.index');
+        Route::get('/incidencias/{incidencia}', [CrmIncidentController::class, 'show'])->whereNumber('incidencia')->name('incidencias.show');
+        Route::patch('/incidencias/{incidencia}/asignar', [CrmIncidentController::class, 'assign'])->name('incidencias.assign');
+        Route::patch('/incidencias/{incidencia}/estado', [CrmIncidentController::class, 'status'])->name('incidencias.status');
+        Route::post('/incidencias/{incidencia}/respuesta', [CrmIncidentController::class, 'response'])->name('incidencias.response');
+        Route::get('/incidencias/{incidencia}/evidencia', [CrmIncidentController::class, 'evidence'])->name('incidencias.evidence');
 
         Route::get('/marketing/canales-publicos', [CrmPublicChannelController::class, 'index'])
             ->name('marketing.public-channels.index');

@@ -140,14 +140,14 @@ textarea{min-height:140px}
 
         @if($incidencia->evidencia)
             <br>
-            <a href="{{ asset('storage/' . $incidencia->evidencia) }}" target="_blank" class="btn">
+            <a href="{{ route('soporte.incidencias.evidence', $incidencia) }}" class="btn">
                 Ver evidencia
             </a>
         @endif
     </div>
 
     <div class="card">
-        <form method="POST" action="{{ route('soporte.incidencias.responder', $incidencia->id) }}">
+        <form method="POST" action="{{ route('soporte.incidencias.follow-up', $incidencia) }}">
             @csrf
 
             <label class="label">Cambiar estatus</label>
@@ -171,7 +171,10 @@ textarea{min-height:140px}
             <br><br>
 
             <label class="label">Respuesta al usuario</label>
-            <textarea name="respuesta_admin" required>{{ old('respuesta_admin', $incidencia->respuesta_admin) }}</textarea>
+            <textarea name="public_response">{{ old('public_response') }}</textarea>
+            <label class="label">Nota interna (no visible al cliente)</label>
+            <textarea name="internal_note">{{ old('internal_note') }}</textarea>
+            <label><input type="checkbox" name="solution" value="1"> Marcar como solución</label>
 
             <button type="submit" class="btn success" style="margin-top:18px">
                 Guardar respuesta
@@ -179,6 +182,8 @@ textarea{min-height:140px}
         </form>
     </div>
 
+    <div class="card"><form method="POST" action="{{ route('soporte.incidencias.status',$incidencia) }}">@csrf @method('PATCH')<label class="label">Estatus permitido</label><select name="status"><option value="EN_PROCESO">EN_PROCESO</option><option value="RESUELTA">RESUELTA</option></select><button class="btn">Actualizar</button></form></div>
+    <div class="card"><h2>Historial</h2>@forelse($incidencia->events as $evento)<p><b>{{ $evento->created_at?->format('d/m/Y H:i') }} · {{ $evento->origin }}</b><br>{{ $evento->event_type }} · {{ $evento->previous_status ?: '—' }} → {{ $evento->new_status ?: '—' }}@if($evento->public_message)<br>Respuesta pública: {{ $evento->public_message }}@endif @if($evento->internal_note)<br><strong>Nota interna:</strong> {{ $evento->internal_note }}@endif</p>@empty — @endforelse</div>
 </div>
 
 </body>

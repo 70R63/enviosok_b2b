@@ -45,7 +45,7 @@
             @endif
         </a>
 
-        <a href="#">Empresas</a>
+        <a href="{{ route('crm.empresas.index') }}" class="{{ request()->routeIs('crm.empresas.*') ? 'active' : '' }}">Empresas</a>
 
         <a href="{{ route('crm.clientes.index', ['commercial_status' => 'prospecto']) }}"
         class="{{ request()->routeIs('crm.clientes.*') && request('commercial_status') === 'prospecto' ? 'active' : '' }}">
@@ -63,7 +63,7 @@
             Guías
         </a>
 
-        <a href="#">Incidencias</a>
+        <a href="{{ route('crm.incidencias.index') }}" class="{{ request()->routeIs('crm.incidencias.*') ? 'active' : '' }}">Incidencias</a>
 
         <a href="{{ route('crm.adeudos.index') }}"
            class="{{ request()->routeIs('crm.adeudos.*') ? 'active' : '' }}">

@@ -163,7 +163,7 @@ th,td{
     <div class="header">
         <div>
             <div class="title">
-                Bandeja de tickets
+                Mis incidencias asignadas
             </div>
 
             <div class="subtitle">
@@ -333,6 +333,7 @@ th,td{
             </tbody>
 
         </table>
+        <div style="margin-top:18px">{{ $incidencias->links() }}</div>
 
     </div>
 

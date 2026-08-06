@@ -121,13 +121,14 @@
                                 <td>{{ $incidencia->respuesta_admin ?? 'Pendiente de revisión' }}</td>
                                 <td>
                                     @if($incidencia->evidencia)
-                                        <a href="{{ asset('storage/' . $incidencia->evidencia) }}" target="_blank" class="btn info">
+                                        <a href="{{ route('b2c.incidencias.evidence', $incidencia) }}" class="btn info">
                                             Ver evidencia
                                         </a>
                                     @else
                                         -
                                     @endif
                                 </td>
+                                <td><a class="btn primary" href="{{ route('b2c.incidencias.show',$incidencia) }}">Detalle</a></td>
                             </tr>
                         @endforeach
                     </tbody>
