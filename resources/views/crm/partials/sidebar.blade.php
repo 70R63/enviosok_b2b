@@ -82,7 +82,10 @@
             @endif
         </a>
 
-        <a href="#">Pagos</a>
+        <a href="{{ route('crm.pagos.index') }}"
+           class="{{ request()->routeIs('crm.pagos.*') ? 'active' : '' }}">
+            Pagos
+        </a>
 
         <a href="{{ route('crm.facturacion.index') }}"
            class="{{ request()->routeIs('crm.facturacion.*') ? 'active' : '' }}">

@@ -21,6 +21,7 @@ use App\Http\Controllers\CRM\CrmDebtController;
 use App\Http\Controllers\CRM\CrmShippingProviderController;
 use App\Http\Controllers\CRM\CrmIdentityVerificationController;
 use App\Http\Controllers\CRM\CrmPublicChannelController;
+use App\Http\Controllers\CRM\CrmPaymentController;
 use App\Http\Controllers\CRM\CrmDevOpsController;
 use App\Http\Controllers\DevOps\DevOpsAuthController;
 use App\Http\Controllers\DevOps\XpertaIntegrationController;
@@ -415,7 +416,7 @@ Route::post('/crm/logout', [B2cIncidenciaAdminController::class, 'logoutCrm'])
     ->middleware('zigo.portal:crm')
     ->name('crm.logout');
 
-Route::middleware(['zigo.portal:crm', 'auth', 'roles:sysadmin,admin'])
+Route::middleware(['ensure.zigo.portal:crm', 'auth', 'roles:sysadmin,admin'])
     ->prefix('crm')
     ->name('crm.')
     ->group(function () {
@@ -504,6 +505,17 @@ Route::middleware(['zigo.portal:crm', 'auth', 'roles:sysadmin,admin'])
         Route::get('/guias/{cotizacion}', [CrmGuideController::class, 'show'])
             ->whereNumber('cotizacion')
             ->name('guias.show');
+
+        Route::get('/pagos', [CrmPaymentController::class, 'index'])
+            ->name('pagos.index');
+
+        Route::get('/pagos/envios/{cotizacion}', [CrmPaymentController::class, 'showShipment'])
+            ->whereNumber('cotizacion')
+            ->name('pagos.envios.show');
+
+        Route::get('/pagos/recargas/{recarga}', [CrmPaymentController::class, 'showRecharge'])
+            ->whereNumber('recarga')
+            ->name('pagos.recargas.show');
 
         Route::post('/guias/{cotizacion}/adeudos', [CrmGuideController::class, 'storeDebt'])
             ->whereNumber('cotizacion')

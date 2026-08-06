@@ -4,7 +4,6 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use App\Providers\RouteServiceProvider;
 use Illuminate\Database\QueryException;
 
 use Log;
@@ -33,7 +32,7 @@ class RolesMiddleware
                     return $next($request);
                 }       
             }
-            return redirect(RouteServiceProvider::HOME);
+            abort(403, 'No autorizado para acceder a este módulo.');
         }
     }
 

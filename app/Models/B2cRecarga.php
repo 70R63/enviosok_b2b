@@ -17,4 +17,19 @@ class B2cRecarga extends Model
         'mp_status',
         'referencia',
     ];
+
+    protected $casts = ['monto' => 'decimal:2'];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function movimiento()
+    {
+        return $this->hasOne(B2cMovimientoSaldo::class, 'user_id', 'user_id')
+            ->where('tipo', 'RECARGA')
+            ->whereColumn('b2c_movimientos_saldo.referencia', '=',
+                \DB::raw("CONCAT('RECARGA-', b2c_recargas.id)"));
+    }
 }
