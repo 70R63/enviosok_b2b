@@ -34,7 +34,15 @@ final class ZigoCommercialPricingEngine
                     'monto_fijo' => $this->money($rule->value), 'sin_margen' => 0.0,
                     default => throw new RuntimeException('Tipo de ajuste comercial no válido.'),
                 };
-                $applied[$concept] = ['id' => $rule->id, 'name' => $rule->name, 'type' => $rule->adjustment_type];
+                $applied[$concept] = $this->auditRule(
+                    $rule->id,
+                    $rule->name,
+                    $concept,
+                    $rule->adjustment_type,
+                    (float) $rule->value,
+                    $cost,
+                    $profit
+                );
             } elseif ($cost > 0 && $concept === 'base') {
                 $legacy = app(ZigoPricingService::class)->calculate([
                     'carrier' => $carrier, 'customer_segment' => $segment, 'plan' => $context['plan'] ?? null,
@@ -43,7 +51,15 @@ final class ZigoCommercialPricingEngine
                     'user_id' => $context['user_id'] ?? null,
                 ]);
                 $profit = $this->money($legacy['final_price'] - $cost);
-                $applied[$concept] = ['id' => $legacy['pricing_rule_id'], 'name' => $legacy['pricing_rule_name'], 'type' => 'legacy_base'];
+                $applied[$concept] = $this->auditRule(
+                    $legacy['pricing_rule_id'] ?? null,
+                    (string) ($legacy['pricing_rule_name'] ?? 'Fallback heredado de base'),
+                    $concept,
+                    'legacy_base',
+                    $profit,
+                    $cost,
+                    $profit
+                );
             }
             $commercial[$concept] = $this->money($cost + $profit);
         }
@@ -69,4 +85,18 @@ final class ZigoCommercialPricingEngine
     }
 
     private function money(mixed $value): float { return round(max(0, (float) $value), 2); }
+
+    private function auditRule(mixed $id, string $name, string $concept, string $type, float $value, float $operational, float $adjustment): array
+    {
+        return [
+            'rule_id' => $id,
+            'rule_name' => $name,
+            'concept' => $concept,
+            'adjustment_type' => $type,
+            'adjustment_value' => $this->money($value),
+            'operational_amount' => $this->money($operational),
+            'commercial_amount' => $this->money($operational + $adjustment),
+            'adjustment_amount' => $this->money($adjustment),
+        ];
+    }
 }

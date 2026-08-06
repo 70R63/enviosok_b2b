@@ -8,6 +8,8 @@ use App\Services\Pricing\ZigoCommercialPricingEngine;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class ZigoCommercialPricingEngineTest extends TestCase
@@ -71,7 +73,46 @@ class ZigoCommercialPricingEngineTest extends TestCase
         $this->assertSame(130.0, $result['commercial_breakdown']['base']);
         $this->assertSame(20.0, $result['commercial_breakdown']['area_extendida']);
         $this->assertSame(174.0, $result['customer_total']);
-        $this->assertSame('legacy_base', $result['applied_rules']['base']['type']);
+        $this->assertSame('legacy_base', $result['applied_rules']['base']['adjustment_type']);
+        $this->assertSame(100.0, $result['applied_rules']['base']['operational_amount']);
+        $this->assertSame(130.0, $result['applied_rules']['base']['commercial_amount']);
+        $this->assertSame(30.0, $result['applied_rules']['base']['adjustment_amount']);
+    }
+
+    /** @test */
+    public function matches_the_mandatory_uat_example_and_audits_each_rule(): void
+    {
+        $this->rule('base', 'monto_fijo', 64, 10);
+        $this->rule('area_extendida', 'porcentaje', 10, 10);
+        $this->rule('kg_extra', 'sin_margen', 0, 10);
+        $result = $this->engine()->calculate(
+            ['costo'=>120,'costo_ae'=>190,'costo_kgs_extras'=>36,'total'=>999],
+            ['carrier'=>'ESTAFETA'], 'terrestre', 'b2c', 'caja', .16
+        );
+        $this->assertSame(['base'=>184.0,'area_extendida'=>209.0,'kg_extra'=>36.0,'seguro'=>0.0,'otros'=>0.0], $result['commercial_breakdown']);
+        $this->assertSame(429.0, $result['commercial_subtotal']);
+        $this->assertSame(68.64, $result['vat']);
+        $this->assertSame(497.64, $result['customer_total']);
+        $this->assertSame(['rule_id','rule_name','concept','adjustment_type','adjustment_value','operational_amount','commercial_amount','adjustment_amount'], array_keys($result['applied_rules']['area_extendida']));
+    }
+
+    /** @test */
+    public function extended_area_percentage_above_ten_is_rejected_by_crm(): void
+    {
+        $request = Request::create('/crm/pricing/concept-rules', 'POST', [
+            'name'=>'Área UAT','carrier'=>'ESTAFETA','service'=>'all','segment'=>'all',
+            'plan'=>'','package_type'=>'all','concept'=>'area_extendida',
+            'adjustment_type'=>'porcentaje','value'=>10.01,'priority'=>1,
+        ]);
+        try {
+            app(\App\Http\Controllers\CRM\CrmPricingController::class)->storeConceptRule($request);
+            $this->fail('El margen mayor a 10% debió rechazarse.');
+        } catch (ValidationException $exception) {
+            $this->assertSame(
+                'El margen porcentual de área extendida no puede superar 10%.',
+                $exception->errors()['value'][0]
+            );
+        }
     }
 
     private function rule(string $concept, string $type, float $value, int $priority, bool $active = true, $starts = null, $ends = null): void

@@ -52,7 +52,7 @@ final class B2cCommercialBreakdownSnapshotTest extends TestCase
             'customer_total' => 505.18,
         ]);
 
-        foreach (['Área extendida', 'Kg adicional', 'Seguro', 'Otros cargos'] as $label) {
+        foreach (['Cargo por área extendida', 'Kilogramos adicionales', 'Protección del envío', 'Otros cargos'] as $label) {
             $this->assertSame(1, substr_count($html, $label));
         }
         $this->assertSame(1, substr_count($html, 'data-concept="area_extendida"'));

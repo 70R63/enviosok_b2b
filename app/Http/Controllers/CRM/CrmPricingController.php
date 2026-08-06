@@ -1149,7 +1149,16 @@ class CrmPricingController extends Controller
             'package_type' => ['required', Rule::in(['all', 'caja', 'sobre'])],
             'concept' => ['required', Rule::in(['base', 'area_extendida', 'kg_extra', 'seguro', 'otros'])],
             'adjustment_type' => ['required', Rule::in(['porcentaje', 'monto_fijo', 'sin_margen'])],
-            'value' => ['required', 'numeric', 'min:0'],
+            'value' => [
+                'required', 'numeric', 'min:0',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    if ($request->input('concept') === 'area_extendida'
+                        && $request->input('adjustment_type') === 'porcentaje'
+                        && (float) $value > 10) {
+                        $fail('El margen porcentual de área extendida no puede superar 10%.');
+                    }
+                },
+            ],
             'priority' => ['required', 'integer', 'min:0'],
             'starts_at' => ['nullable', 'date'], 'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
         ]);

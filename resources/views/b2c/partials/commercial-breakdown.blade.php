@@ -3,9 +3,9 @@
     $breakdown = (array) ($snapshot['commercial_breakdown'] ?? []);
     $labels = [
         'base' => 'Envío',
-        'area_extendida' => 'Área extendida',
-        'kg_extra' => 'Kg adicional',
-        'seguro' => 'Seguro',
+        'area_extendida' => 'Cargo por área extendida',
+        'kg_extra' => 'Kilogramos adicionales',
+        'seguro' => 'Protección del envío',
         'otros' => 'Otros cargos',
     ];
 @endphp
@@ -13,7 +13,7 @@
 @if(array_key_exists('base', $breakdown))
     <div class="commercial-breakdown" data-commercial-breakdown>
         @foreach($labels as $concept => $label)
-            @if($concept === 'base' || (float) ($breakdown[$concept] ?? 0) > 0)
+            @if((float) ($breakdown[$concept] ?? 0) > 0)
                 <div class="summary-row commercial-concept" data-concept="{{ $concept }}">
                     <span>{{ $label }}</span>
                     <strong>${{ number_format((float) ($breakdown[$concept] ?? 0), 2) }} MXN</strong>

@@ -48,8 +48,21 @@ public function crearRecarga(Request $request)
         'referencia' => 'RECARGA-' . time(),
     ]);
 
+    $accessToken = (string) config('services.mercadopago.access_token');
+    $correlation = (string) $recarga->referencia;
+
+    if ($accessToken === '') {
+        $recarga->update(['estatus' => 'ERROR']);
+        Log::error('No se pudo iniciar la recarga: configuración incompleta.', [
+            'user_id' => auth()->id(), 'recarga_id' => $recarga->id,
+            'monto' => (float) $recarga->monto, 'correlation' => $correlation,
+        ]);
+        return redirect()->route('b2c.prepago')
+            ->with('error', 'No fue posible iniciar la recarga. Intenta nuevamente.');
+    }
+
 try {
-    SDK::setAccessToken(env('MERCADOPAGO_ACCESS_TOKEN'));
+    SDK::setAccessToken($accessToken);
 
     $item = new Item();
     $item->title = 'Recarga saldo ZIGO';
@@ -62,7 +75,7 @@ try {
 
     $preference->external_reference = 'RECARGA-' . $recarga->id;
 
-    $baseUrl = rtrim(env('APP_URL'), '/');
+    $baseUrl = rtrim((string) config('app.url'), '/');
 
     $preference->back_urls = [
         'success' => $baseUrl . '/b2c/prepago/' . $recarga->id . '/success',
@@ -77,17 +90,16 @@ try {
     $preference->save();
 
     if (!$preference->id) {
+        $recarga->update(['estatus' => 'ERROR']);
         Log::error('MP RECARGA ERROR', [
-            'error' => $preference->error ?? null,
-            'preference' => $preference,
+            'user_id' => auth()->id(), 'recarga_id' => $recarga->id,
+            'monto' => (float) $recarga->monto,
+            'exception_class' => 'MercadoPagoPreferenceError',
+            'message' => 'Mercado Pago no devolvió un identificador de preferencia.',
+            'correlation' => $correlation,
         ]);
-
-        dd([
-            'error' => $preference->error ?? null,
-            'message' => isset($preference->error->message) ? $preference->error->message : null,
-            'status' => isset($preference->error->status) ? $preference->error->status : null,
-            'error_code' => isset($preference->error->error) ? $preference->error->error : null,
-        ]);
+        return redirect()->route('b2c.prepago')
+            ->with('error', 'No fue posible iniciar la recarga. Intenta nuevamente.');
     }
 
     $recarga->update([
@@ -99,22 +111,25 @@ try {
         ?? null;
 
     if (!$checkoutUrl) {
+        $recarga->update(['estatus' => 'ERROR']);
         return redirect()
             ->route('b2c.prepago')
-            ->with('error', 'Mercado Pago no devolvió URL de pago.');
+            ->with('error', 'No fue posible iniciar la recarga. Intenta nuevamente.');
     }
 
     return redirect()->away($checkoutUrl);
 
 } catch (\Throwable $e) {
+    $recarga->update(['estatus' => 'ERROR']);
     Log::error('MP RECARGA EXCEPTION', [
-        'message' => $e->getMessage(),
-        'trace' => $e->getTraceAsString(),
+        'user_id' => auth()->id(), 'recarga_id' => $recarga->id,
+        'monto' => (float) $recarga->monto,
+        'exception_class' => get_class($e),
+        'message' => mb_substr(preg_replace('/[\r\n]+/', ' ', $e->getMessage()), 0, 300),
+        'correlation' => $correlation,
     ]);
-
-    dd([
-        'exception' => $e->getMessage(),
-    ]);
+    return redirect()->route('b2c.prepago')
+        ->with('error', 'No fue posible iniciar la recarga. Intenta nuevamente.');
   }
 }
 
@@ -124,15 +139,16 @@ public function recargaSuccess(Request $request, B2cRecarga $recarga)
         abort(403);
     }
 
-    $this->aplicarRecargaSaldo(
-        $recarga,
-        $request->get('payment_id') ?? $request->get('collection_id'),
-        $request->get('status') ?? $request->get('collection_status') ?? 'approved'
-    );
-
+    $recarga->refresh();
+    $approved = $recarga->estatus === 'APROBADA';
     return redirect()
-        ->route('b2c.prepago')
-        ->with('success', 'Saldo recargado correctamente.');
+        ->to($approved ? $this->consumeRechargeReturnUrl($recarga) : route('b2c.prepago'))
+        ->with(
+            $approved ? 'success' : 'error',
+            $approved
+                ? 'Saldo recargado correctamente.'
+                : 'La recarga está pendiente de confirmación.'
+        );
 }
 
 public function recargaFailure(B2cRecarga $recarga)
@@ -167,15 +183,20 @@ public function recargaPending(B2cRecarga $recarga)
 
 public function recargaWebhook(Request $request)
 {
-    Log::info('MP RECARGA WEBHOOK', $request->all());
-
     $paymentId = $request->input('data.id') ?? $request->input('id');
 
     if (!$paymentId) {
         return response('OK', 200);
     }
 
-    SDK::setAccessToken(env('MERCADOPAGO_ACCESS_TOKEN'));
+    $accessToken = (string) config('services.mercadopago.access_token');
+    if ($accessToken === '') {
+        Log::error('No se pudo procesar webhook de recarga: configuración incompleta.', [
+            'correlation' => (string) $paymentId,
+        ]);
+        return response('OK', 200);
+    }
+    SDK::setAccessToken($accessToken);
 
     $payment = Payment::find_by_id($paymentId);
 
@@ -204,11 +225,9 @@ public function recargaWebhook(Request $request)
 
 private function aplicarRecargaSaldo(B2cRecarga $recarga, $paymentId = null, $mpStatus = 'approved')
 {
-    if ($recarga->estatus === 'APROBADA') {
-        return;
-    }
-
     DB::transaction(function () use ($recarga, $paymentId, $mpStatus) {
+        $recarga = B2cRecarga::query()->whereKey($recarga->id)->lockForUpdate()->firstOrFail();
+        if ($recarga->estatus === 'APROBADA') return;
         $saldo = B2cSaldo::firstOrCreate(
             ['user_id' => $recarga->user_id],
             ['saldo' => 0]
@@ -237,6 +256,19 @@ private function aplicarRecargaSaldo(B2cRecarga $recarga, $paymentId = null, $mp
             'estatus' => 'APLICADO',
         ]);
     });
+}
+
+private function consumeRechargeReturnUrl(B2cRecarga $recarga): string
+{
+    $pending = (array) session('b2c_pending_recharge_checkout', []);
+    session()->forget('b2c_pending_recharge_checkout');
+    if ((int) ($pending['user_id'] ?? 0) !== (int) $recarga->user_id) {
+        return route('b2c.prepago');
+    }
+    $cotizacion = \App\Models\B2cCotizacion::query()
+        ->whereKey((int) ($pending['cotizacion_id'] ?? 0))
+        ->where('user_id', $recarga->user_id)->first();
+    return $cotizacion ? route('b2c.checkout', $cotizacion->id) : route('b2c.prepago');
 }
 
 }

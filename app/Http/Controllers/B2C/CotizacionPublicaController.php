@@ -3321,6 +3321,15 @@ public function pagarConSaldo(
                 $exception->getMessage()
             );
     } catch (\DomainException $exception) {
+        if (str_starts_with($exception->getMessage(), 'Saldo insuficiente.')) {
+            session([
+                'b2c_pending_recharge_checkout' => [
+                    'cotizacion_id' => (int) $cotizacion->id,
+                    'user_id' => (int) auth()->id(),
+                    'return_to' => route('b2c.checkout', $cotizacion->id),
+                ],
+            ]);
+        }
         return back()->with(
             'error',
             $exception->getMessage()

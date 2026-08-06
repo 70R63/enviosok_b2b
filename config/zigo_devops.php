@@ -9,5 +9,12 @@ return [
         'stage' => env('ZIGO_DEVOPS_STAGE_PATH'),
         'production' => env('ZIGO_DEVOPS_PRODUCTION_PATH'),
     ],
-    'allowed_seeders' => ['ZigoPublicChannelsSeeder'],
+    'allowed_seeders' => [
+        'ZigoPublicChannelsSeeder',
+        'ZigoUatCommercialConceptRulesSeeder',
+    ],
+    'allow_uat_commercial_concept_rules_in_production' => filter_var(
+        env('ZIGO_ALLOW_UAT_COMMERCIAL_CONCEPT_RULES_IN_PRODUCTION', false),
+        FILTER_VALIDATE_BOOLEAN
+    ),
 ];

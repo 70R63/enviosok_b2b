@@ -14,7 +14,7 @@
                 <div><label>Segmento</label><select name="segment"><option value="all">Todos</option><option value="anonymous">Anónimo</option><option value="b2c">B2C</option><option value="b2b">B2B</option><option value="api">API</option></select></div>
                 <div><label>Plan</label><input name="plan" placeholder="Opcional"></div>
                 <div><label>Tipo de paquete</label><select name="package_type"><option value="all">Todos</option><option value="caja">Caja</option><option value="sobre">Sobre</option></select></div>
-                <div><label>Concepto</label><select name="concept"><option value="base">Base</option><option value="area_extendida">Área extendida</option><option value="kg_extra">Kg extra</option><option value="seguro">Seguro</option><option value="otros">Otros</option></select></div>
+                <div><label>Concepto</label><select name="concept"><option value="base">Base</option><option value="area_extendida">Área extendida</option><option value="kg_extra">Kg extra</option><option value="seguro">Seguro</option><option value="otros">Otros</option></select><small>El margen porcentual de área extendida no puede superar 10%.</small></div>
                 <div><label>Tipo de ajuste</label><select name="adjustment_type"><option value="porcentaje">Porcentaje</option><option value="monto_fijo">Monto fijo</option><option value="sin_margen">Sin margen</option></select></div>
                 <div><label>Valor</label><input type="number" step="0.0001" min="0" name="value" value="0" required></div>
                 <div><label>Prioridad</label><input type="number" min="0" name="priority" value="100" required></div>

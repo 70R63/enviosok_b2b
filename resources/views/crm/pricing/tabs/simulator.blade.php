@@ -138,10 +138,10 @@
             <div><h3>INTERNO</h3>
                 @foreach($simulation['operational_breakdown'] as $concept => $amount)<div class="summary-line"><span>{{ $concept }}</span><strong>${{ number_format($amount, 2) }}</strong></div>@endforeach
                 <h4>Reglas aplicadas</h4>
-                @forelse($simulation['applied_rules'] as $concept => $rule)<div>{{ $concept }}: {{ $rule['name'] }}</div>@empty<div>Sin reglas por concepto.</div>@endforelse
+                @forelse($simulation['applied_rules'] as $concept => $rule)<div>{{ $concept }}: {{ $rule['rule_name'] }} · ajuste ${{ number_format($rule['adjustment_amount'], 2) }} · ZIGO ${{ number_format($rule['commercial_amount'], 2) }}</div>@empty<div>Sin reglas por concepto.</div>@endforelse
             </div>
             <div><h3>CLIENTE</h3>
-                @foreach(['base'=>'Envío','area_extendida'=>'Área extendida','kg_extra'=>'Kg adicional','seguro'=>'Seguro','otros'=>'Otros'] as $concept => $label)
+                @foreach(['base'=>'Envío','area_extendida'=>'Cargo por área extendida','kg_extra'=>'Kilogramos adicionales','seguro'=>'Protección del envío','otros'=>'Otros cargos'] as $concept => $label)
                     <div class="summary-line"><span>{{ $label }}</span><strong>${{ number_format($simulation['commercial_breakdown'][$concept], 2) }}</strong></div>
                 @endforeach
                 <div class="summary-line"><span>Subtotal</span><strong>${{ number_format($simulation['commercial_subtotal'], 2) }}</strong></div>
