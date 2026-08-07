@@ -263,6 +263,9 @@
                     <form method="POST"
                           action="{{ route('crm.facturacion.rechazar', $invoiceRequest) }}">
                         @csrf
+                        <select name="rejection_category">
+                            <option value="RFC_INVALIDO">RFC inválido</option><option value="CONSTANCIA_ILEGIBLE">Constancia fiscal ilegible</option><option value="DATOS_INCOMPLETOS">Datos fiscales incompletos</option><option value="REGIMEN_INCORRECTO">Régimen fiscal incorrecto</option><option value="USO_CFDI_INCORRECTO">Uso CFDI incorrecto</option><option value="OTRO">Otro</option>
+                        </select>
                         <textarea name="rejection_reason"
                                   rows="6"
                                   minlength="10"

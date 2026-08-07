@@ -2469,6 +2469,10 @@ public function solicitarFacturaB2c(
             ? 'Solicitud de factura registrada correctamente.'
             : 'Este pago ya tiene una solicitud de factura registrada.';
 
+    if ($invoiceRequest->wasRecentlyCreated) {
+        app(\App\Services\Notifications\CrmAdminNotificationService::class)->invoice($invoiceRequest);
+    }
+
     return redirect()
         ->route(
             'b2c.envios.detalle',
@@ -4018,6 +4022,7 @@ public function guardarIncidenciaB2c(Request $request)
         'prioridad' => 'MEDIA',
       ]);
       \App\Models\B2cIncidenciaEvent::create(['incidencia_id'=>$incidencia->id,'user_id'=>auth()->id(),'origin'=>'B2C','event_type'=>'CREATED','new_status'=>'ABIERTA','priority'=>'MEDIA','public_message'=>$data['descripcion']]);
+      app(\App\Services\Notifications\CrmAdminNotificationService::class)->incident($incidencia);
 
     return redirect()
         ->route('b2c.incidencias')

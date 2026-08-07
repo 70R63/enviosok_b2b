@@ -84,7 +84,7 @@
             <a href="{{ url('/') }}">Inicio</a>
             <a href="{{ url('/#faq') }}">FAQ</a>
             <a href="{{ url('/#paqueterias') }}">Paqueterías</a>
-            <a href="{{ route('crm.login') }}">Iniciar sesión</a>
+            <a href="{{ config('zigo_domains.portals.b2b.login_url') }}">Iniciar sesión</a>
             <a href="#solicitud" class="btn-yellow">Solicitar cuenta</a>
         </div>
     </nav>

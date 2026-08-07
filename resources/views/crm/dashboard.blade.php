@@ -37,6 +37,9 @@
                 ? \Illuminate\Support\Facades\DB::table('b2c_incidencias')->count()
                 : 0;
             $adeudos = 0;
+            $facturasPendientes = \App\Models\B2cInvoiceRequest::whereIn('status',['SOLICITADA','EN_PROCESO'])->count();
+            $incidenciasNuevas = \App\Models\B2cIncidencia::where('estatus','ABIERTA')->count();
+            $prospectosNuevos = \App\Models\CrmClient::where('commercial_status','prospecto')->where('lead_status','nuevo')->count();
         @endphp
 
         <div class="grid">
@@ -62,6 +65,13 @@
         </div>
 
         <div class="section">
+            <h2>Centro de notificaciones</h2>
+            <p><a href="{{ route('crm.facturacion.index',['status'=>'SOLICITADA']) }}">Solicitudes de facturación pendientes: <strong>{{ $facturasPendientes }}</strong></a></p>
+            <p><a href="{{ route('crm.incidencias.index') }}">Incidencias nuevas: <strong>{{ $incidenciasNuevas }}</strong></a></p>
+            <p><a href="{{ route('crm.clientes.index',['status'=>'prospecto']) }}">Prospectos nuevos: <strong>{{ $prospectosNuevos }}</strong></a></p>
+        </div>
+
+        <div class="section" style="margin-top:24px">
             <h2>Consolas activas</h2>
             <p><strong>B2C:</strong> Cliente final</p>
             <p><strong>Negocios:</strong> Empresas B2B</p>

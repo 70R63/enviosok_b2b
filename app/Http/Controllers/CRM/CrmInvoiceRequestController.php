@@ -5,6 +5,8 @@ namespace App\Http\Controllers\CRM;
 use App\Exceptions\Billing\CfdiZipValidationException;
 use App\Http\Controllers\Controller;
 use App\Models\B2cInvoiceRequest;
+use App\Models\B2cInvoiceRequestEvent;
+use App\Services\Notifications\CrmAdminNotificationService;
 use App\Services\Billing\InvoiceFulfillmentService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -194,6 +196,7 @@ class CrmInvoiceRequestController extends Controller
         $validated = $request->validate(
             [
                 'rejection_reason' => ['required', 'string', 'min:10', 'max:2000'],
+                'rejection_category' => ['nullable','in:RFC_INVALIDO,CONSTANCIA_ILEGIBLE,DATOS_INCOMPLETOS,REGIMEN_INCORRECTO,USO_CFDI_INCORRECTO,OTRO'],
             ],
             [
                 'rejection_reason.required' => 'Captura el motivo del rechazo.',
@@ -211,6 +214,7 @@ class CrmInvoiceRequestController extends Controller
             ->update([
                 'status' => B2cInvoiceRequest::STATUS_RECHAZADA,
                 'rejection_reason' => trim($validated['rejection_reason']),
+                'rejection_category' => $validated['rejection_category'] ?? 'OTRO',
                 'cancellation_reason' => null,
                 'managed_by_user_id' => $request->user()->getAuthIdentifier(),
                 'attended_at' => $invoiceRequest->attended_at ?: now(),
@@ -227,6 +231,10 @@ class CrmInvoiceRequestController extends Controller
                     'La solicitud ya no puede rechazarse porque cambió de estado.'
                 );
         }
+
+        $rejected=$invoiceRequest->fresh();
+        B2cInvoiceRequestEvent::create(['invoice_request_id'=>$rejected->id,'user_id'=>$request->user()->getAuthIdentifier(),'event_type'=>'REJECTED','previous_status'=>$invoiceRequest->status,'new_status'=>B2cInvoiceRequest::STATUS_RECHAZADA,'public_reason'=>$rejected->rejection_reason,'internal_note'=>$rejected->internal_notes]);
+        app(CrmAdminNotificationService::class)->rejected($rejected->loadMissing('user'));
 
         return redirect()
             ->route('crm.facturacion.show', $invoiceRequest)

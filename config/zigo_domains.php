@@ -46,6 +46,8 @@ foreach ($portalUrls as $portal => $url) {
     ];
 }
 
+$portals['b2b']['login_url'] = $portalUrls['b2b'] . '/negocios/login';
+
 $configuredDevOpsHost = trim((string) env('ZIGO_DEVOPS_HOST', ''));
 
 if ($configuredDevOpsHost !== '') {

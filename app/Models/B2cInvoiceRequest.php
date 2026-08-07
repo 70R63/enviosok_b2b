@@ -55,6 +55,8 @@ class B2cInvoiceRequest extends Model
         'error_message',
         'internal_notes',
         'rejection_reason',
+        'rejection_category',
+        'resubmitted_at',
         'cancellation_reason',
     ];
 
@@ -66,6 +68,7 @@ class B2cInvoiceRequest extends Model
         'attended_at' => 'datetime',
         'rejected_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'resubmitted_at' => 'datetime',
         'cfdi_total' => 'decimal:2',
         'cfdi_fecha_emision' => 'datetime',
         'cfdi_fecha_timbrado' => 'datetime',
@@ -109,6 +112,8 @@ class B2cInvoiceRequest extends Model
             'api_billing_request_id'
         );
     }
+
+    public function events(){ return $this->hasMany(B2cInvoiceRequestEvent::class,'invoice_request_id')->oldest(); }
 
     public function puedeIniciarAtencion(): bool
     {

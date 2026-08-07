@@ -11,7 +11,7 @@
         .menu a.active{background:#4361ee}.logout-btn{width:100%;border:none;text-align:left;cursor:pointer;font-size:16px}
         .content{padding:36px}.title{font-size:36px;font-weight:900;margin-bottom:6px}.subtitle{color:#64748b;margin-bottom:24px}
         .panel{background:white;border-radius:18px;padding:22px;box-shadow:0 10px 24px rgba(0,0,0,.08);margin-bottom:22px}
-        .filters{display:grid;grid-template-columns:1fr 220px auto;gap:14px;align-items:end}
+        .filters{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:14px;align-items:end}
         label{font-weight:900;display:block;margin-bottom:6px}input,select{width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:8px;box-sizing:border-box}
         .btn{display:inline-block;background:#4361ee;color:white;text-decoration:none;font-weight:800;padding:11px 15px;border-radius:9px;border:none;cursor:pointer}
         .btn-gray{background:#334155}table{width:100%;border-collapse:collapse}th,td{padding:12px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top;font-size:14px}th{background:#f8fafc}
@@ -27,6 +27,7 @@
         <div class="subtitle">
             Guías relacionadas con una cotización y un usuario B2C. Desde aquí se registra el adeudo reportado por Xperta.
         </div>
+        <p><a class="btn" href="{{ route('crm.guias.export', array_merge(request()->query(), ['scope'=>'filtered'])) }}">Exportar resultados</a> <a class="btn btn-gray" href="{{ route('crm.guias.export',['scope'=>'all']) }}">Exportar todos</a></p>
 
         <section class="panel">
             <form method="GET" action="{{ route('crm.guias.index') }}" class="filters">
@@ -34,6 +35,9 @@
                     <label>Buscar</label>
                     <input name="search" value="{{ $search }}" placeholder="Tracking, cotización, usuario o correo">
                 </div>
+                @foreach(['cliente'=>'Cliente','empresa'=>'Empresa','carrier'=>'Mensajería','servicio'=>'Servicio','estado'=>'Estado','waybill'=>'WayBill','tracking'=>'Tracking','payment_status'=>'Estado de pago','guia_estatus'=>'Estado de guía','fecha_desde'=>'Fecha desde','fecha_hasta'=>'Fecha hasta'] as $field=>$label)
+                <div><label>{{ $label }}</label><input name="{{ $field }}" value="{{ $filters[$field] ?? '' }}" @if(str_starts_with($field,'fecha_')) type="date" @endif></div>
+                @endforeach
                 <div>
                     <label>Adeudo</label>
                     <select name="adeudo">
@@ -44,6 +48,30 @@
                 </div>
                 <button class="btn" type="submit">Consultar</button>
             </form>
+        </section>
+
+        <section class="panel">
+            <h2>Pendientes de recuperación</h2>
+            <table>
+                <thead><tr><th>Cotización</th><th>Usuario</th><th>Pago / servicio</th><th>Error funcional</th><th>Intentos</th><th>WayBill / tracking</th><th>Documento</th><th>Fecha</th><th>Acción permitida</th></tr></thead>
+                <tbody>
+                @forelse($recoveryQuotes as $item)
+                    <tr>
+                        <td>#{{ $item->id }}</td><td>{{ $item->user->name ?? 'Invitado' }}<div class="muted">{{ $item->user->email ?? $item->remitente_email ?? '-' }}</div></td>
+                        <td>{{ $item->payment_status }}<div class="muted">{{ $item->service_code ?: $item->servicio }}</div></td>
+                        <td><span class="badge badge-red">{{ $item->recovery_case->classification }}</span><div class="muted">{{ $item->guia_last_error_message ?: 'Revisión requerida' }}</div></td>
+                        <td>{{ $item->guia_generation_attempts }}</td><td>{{ $item->guia_id ?: '-' }}<div class="muted">{{ $item->tracking_number ?: '-' }}</div></td><td>{{ $item->documento ? 'Disponible' : 'Ausente' }}</td><td>{{ $item->guia_last_attempt_at ?: $item->updated_at }}</td>
+                        <td>
+                            @if(!$item->guia_id && !$item->tracking_number && !in_array($item->recovery_case->classification,['QUOTE_EXPIRED','MAX_ATTEMPTS']))<form method="POST" action="{{ route('crm.guias.recovery.create',$item) }}">@csrf<button class="btn">Reintentar creación</button></form>@endif
+                            @if(!$item->guia_id && !$item->tracking_number && is_array($item->guia_response_snapshot))<form method="POST" action="{{ route('crm.guias.recovery.normalize',$item) }}">@csrf<button class="btn btn-gray">Normalizar snapshot</button></form>@endif
+                            @if(($item->guia_id || $item->tracking_number) && !$item->documento)<form method="POST" action="{{ route('crm.guias.recovery.pdf',$item) }}">@csrf<button class="btn">Recuperar PDF</button></form>@endif
+                            <form method="POST" action="{{ route('crm.guias.recovery.link',$item) }}">@csrf<button class="btn btn-gray">Renovar/enviar enlace</button></form>
+                            @if($item->recovery_case->classification==='QUOTE_EXPIRED')<form method="POST" action="{{ route('crm.guias.recovery.requote',$item) }}">@csrf<input name="nuevo_total" type="number" step="0.01" min="0.01" placeholder="Nuevo total" required><button class="btn">Registrar recotización</button></form>@endif
+                        </td>
+                    </tr>
+                @empty<tr><td colspan="9">No hay guías pendientes de recuperación.</td></tr>@endforelse
+                </tbody>
+            </table>
         </section>
 
         <section class="panel">

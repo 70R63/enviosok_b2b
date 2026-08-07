@@ -577,6 +577,8 @@
                                 <p class="invoice-note">
                                     {{ $invoiceRequest->rejection_reason ?: 'La solicitud fue rechazada. Consulta a soporte para conocer el motivo.' }}
                                 </p>
+                                <a class="btn secondary" href="{{ route('b2c.configuracion') }}">Corregir información fiscal</a>
+                                <form method="POST" enctype="multipart/form-data" action="{{ route('b2c.invoice.resubmit',$invoiceRequest) }}">@csrf<label>Constancia fiscal corregida (opcional)<input type="file" name="constancia" accept="application/pdf,image/jpeg,image/png"></label><button class="btn primary" type="submit">Reenviar documentación</button></form>
                                 @break
 
                             @case('CANCELADA')

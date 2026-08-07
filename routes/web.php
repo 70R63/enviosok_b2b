@@ -6,6 +6,8 @@ use App\Http\Controllers\LtdController;
 use App\Http\Controllers\B2C\CotizacionPublicaController;
 use App\Http\Controllers\B2C\B2cInvoiceDocumentController;
 use App\Http\Controllers\B2C\B2cAdeudoController;
+use App\Http\Controllers\B2C\GuestGuideRecoveryController;
+use App\Http\Controllers\B2C\B2cInvoiceCorrectionController;
 use App\Http\Controllers\API\CPController;
 use App\Http\Controllers\B2cMisEnviosController;
 use App\Http\Controllers\Admin\B2cIncidenciaAdminController;
@@ -17,6 +19,10 @@ use App\Http\Controllers\CRM\CrmPricingController;
 use App\Http\Controllers\CRM\CrmInvoiceRequestController;
 use App\Http\Controllers\CRM\CrmInvoiceDocumentController;
 use App\Http\Controllers\CRM\CrmGuideController;
+use App\Http\Controllers\CRM\CrmGuideRecoveryController;
+use App\Http\Controllers\CRM\CrmGuideExportController;
+use App\Http\Controllers\CRM\CrmNotificationController;
+use App\Http\Controllers\CRM\CrmPaymentExportController;
 use App\Http\Controllers\CRM\CrmDebtController;
 use App\Http\Controllers\CRM\CrmShippingProviderController;
 use App\Http\Controllers\CRM\CrmIdentityVerificationController;
@@ -57,6 +63,11 @@ Route::resource('profile','userProfileController');
 Route::get('/dashboard', function () {
     return redirect()->route('b2c.dashboard');
 })->middleware(['auth'])->name('dashboard');
+
+Route::get('/envio/recuperar', [GuestGuideRecoveryController::class, 'requestForm'])->name('guide-recovery.form');
+Route::post('/envio/recuperar', [GuestGuideRecoveryController::class, 'requestLink'])->middleware('throttle:5,1')->name('guide-recovery.request');
+Route::get('/envio/recuperar/{token}', [GuestGuideRecoveryController::class, 'show'])->middleware('throttle:20,1')->name('guide-recovery.show');
+Route::get('/envio/recuperar/{token}/pdf', [GuestGuideRecoveryController::class, 'download'])->middleware('throttle:10,1')->name('guide-recovery.download');
 
 Route::post('/b2c/cotizacion/{cotizacion}/seleccionar', [CotizacionPublicaController::class, 'seleccionar'])
     ->name('b2c.seleccionar');
@@ -517,13 +528,23 @@ Route::middleware(['ensure.zigo.portal:crm', 'auth', 'roles:sysadmin,admin'])
 
         Route::get('/guias', [CrmGuideController::class, 'index'])
             ->name('guias.index');
+        Route::get('/guias/export', CrmGuideExportController::class)->name('guias.export');
+        Route::post('/notificaciones/{delivery}/reintentar', [CrmNotificationController::class,'retry'])->whereNumber('delivery')->name('notifications.retry');
 
         Route::get('/guias/{cotizacion}', [CrmGuideController::class, 'show'])
             ->whereNumber('cotizacion')
             ->name('guias.show');
 
+        Route::post('/guias/{cotizacion}/recuperacion/crear', [CrmGuideRecoveryController::class, 'create'])->whereNumber('cotizacion')->name('guias.recovery.create');
+        Route::post('/guias/{cotizacion}/recuperacion/normalizar', [CrmGuideRecoveryController::class, 'normalize'])->whereNumber('cotizacion')->name('guias.recovery.normalize');
+        Route::post('/guias/{cotizacion}/recuperacion/pdf', [CrmGuideRecoveryController::class, 'pdf'])->whereNumber('cotizacion')->name('guias.recovery.pdf');
+        Route::post('/guias/{cotizacion}/recuperacion/enlace', [CrmGuideRecoveryController::class, 'link'])->whereNumber('cotizacion')->name('guias.recovery.link');
+        Route::post('/guias/{cotizacion}/recuperacion/recotizar', [CrmGuideRecoveryController::class, 'requote'])->whereNumber('cotizacion')->name('guias.recovery.requote');
+
         Route::get('/pagos', [CrmPaymentController::class, 'index'])
             ->name('pagos.index');
+        Route::get('/pagos/export', CrmPaymentExportController::class)
+            ->name('pagos.export');
 
         Route::get('/pagos/envios/{cotizacion}', [CrmPaymentController::class, 'showShipment'])
             ->whereNumber('cotizacion')
@@ -970,6 +991,11 @@ Route::get('/b2c/cotizar', function () {
 
 Route::post('/b2c/cotizar', [CotizacionPublicaController::class, 'cotizar'])
     ->name('b2c.cotizar');
+
+Route::middleware('auth')->group(function(){
+    Route::get('/b2c/facturacion/{invoiceRequest}/corregir',[B2cInvoiceCorrectionController::class,'correct'])->middleware('signed')->name('b2c.invoice.correct');
+    Route::post('/b2c/facturacion/{invoiceRequest}/reenviar',[B2cInvoiceCorrectionController::class,'resubmit'])->name('b2c.invoice.resubmit');
+});
 
 
 

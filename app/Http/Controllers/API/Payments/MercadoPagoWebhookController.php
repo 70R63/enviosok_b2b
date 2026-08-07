@@ -8,6 +8,7 @@ use App\Services\Payments\MercadoPagoPaymentClient;
 use App\Services\Payments\MercadoPagoWebhookSignatureValidator;
 use App\Services\Payments\PaymentVerificationService;
 use App\Services\Shipping\B2cXpertaGuideFlowService;
+use App\Services\Shipping\GuideRecoveryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -19,7 +20,8 @@ class MercadoPagoWebhookController extends Controller
         MercadoPagoWebhookSignatureValidator $signatureValidator,
         MercadoPagoPaymentClient $paymentClient,
         PaymentVerificationService $verificationService,
-        B2cXpertaGuideFlowService $xpertaGuideFlow
+        B2cXpertaGuideFlowService $xpertaGuideFlow,
+        GuideRecoveryService $guideRecovery
     ): JsonResponse {
         $paymentId = trim((string) (
             $request->query('data.id')
@@ -76,6 +78,13 @@ class MercadoPagoWebhookController extends Controller
                 'WEBHOOK'
             );
 
+            $recoveryEmail = strtolower(trim((string) (
+                $verified->remitente_email ?: $verified->destinatario_email ?: $verified->user?->email
+            )));
+            if ($verified->hasAccreditedPayment() && $recoveryEmail !== '') {
+                $guideRecovery->issue($verified, $recoveryEmail, 'processing');
+            }
+
             if ($this->shouldGenerateXpertaGuide($verified)) {
                 try {
                     $verified = $xpertaGuideFlow
@@ -89,6 +98,11 @@ class MercadoPagoWebhookController extends Controller
                         'exception' => get_class($exception),
                     ]);
                 }
+            }
+
+            $verified = $verified->fresh();
+            if ($recoveryEmail !== '') {
+                $guideRecovery->issue($verified, $recoveryEmail, $verified->documento ? 'generated' : 'pending');
             }
 
             return response()->json([

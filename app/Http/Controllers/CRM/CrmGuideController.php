@@ -9,48 +9,25 @@ use App\Models\Guia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use App\Services\Shipping\GuideRecoveryService;
+use App\Services\Exports\GuideExportQuery;
 
 class CrmGuideController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, GuideRecoveryService $recovery, GuideExportQuery $guideQuery)
     {
         $search = trim((string) $request->get('search', ''));
         $debtFilter = strtoupper(trim((string) (
             $request->get('adeudo') ?: 'TODOS'
         )));
 
-        $query = B2cCotizacion::query()
+        $filters = $guideQuery->filters($request);
+        $query = $guideQuery->make($filters)
             ->with([
-                'user:id,name,email',
                 'adeudos' => function ($query) {
                     $query->latest('id');
                 },
-            ])
-            ->whereNotNull('user_id')
-            ->where(function ($query) {
-                $query
-                    ->whereNotNull('guia_id')
-                    ->orWhereNotNull('tracking_number')
-                    ->orWhere('estatus', 'GUIA_GENERADA');
-            });
-
-        if ($search !== '') {
-            $query->where(function ($query) use ($search) {
-                $query
-                    ->where('tracking_number', 'like', '%' . $search . '%')
-                    ->orWhere('referencia', 'like', '%' . $search . '%');
-
-                if (ctype_digit($search)) {
-                    $query->orWhere('id', (int) $search);
-                }
-
-                $query->orWhereHas('user', function ($userQuery) use ($search) {
-                    $userQuery
-                        ->where('name', 'like', '%' . $search . '%')
-                        ->orWhere('email', 'like', '%' . $search . '%');
-                });
-            });
-        }
+            ]);
 
         if ($debtFilter === 'PENDIENTES') {
             $query->whereHas('adeudos', function ($debtQuery) {
@@ -68,10 +45,16 @@ class CrmGuideController extends Controller
             ->paginate(25)
             ->withQueryString();
 
+        $recoveryQuotes = B2cCotizacion::query()->with('user:id,name,email')
+            ->where(function ($q) { $q->whereNotNull('guia_last_error_code')->orWhere(function($q){$q->where(function($q){$q->whereNotNull('guia_id')->orWhereNotNull('tracking_number');})->whereNull('documento');})->orWhere(function($q){$q->whereNotNull('quote_expires_at')->whereIn('payment_status',['approved','saldo_prepago']);}); })
+            ->latest('id')->limit(100)->get()->filter(function($q)use($recovery){$case=$recovery->syncCase($q);$q->recovery_case=$case;return $case!==null;});
+
         return view('crm.guias.index', compact(
             'cotizaciones',
             'search',
             'debtFilter'
+            ,'recoveryQuotes'
+            ,'filters'
         ));
     }
 

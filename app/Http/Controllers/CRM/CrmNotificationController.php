@@ -1,0 +1,3 @@
+<?php
+namespace App\Http\Controllers\CRM;use App\Http\Controllers\Controller;use App\Models\ZigoNotificationDelivery;use App\Services\Notifications\CrmAdminNotificationService;
+final class CrmNotificationController extends Controller{public function retry(ZigoNotificationDelivery $delivery,CrmAdminNotificationService $service){if($delivery->status!=='FAILED')return back()->with('error','La notificación no está pendiente de reintento.');$service->retry($delivery->forceFill(['event_key'=>$delivery->event_key.':retry:'.$delivery->attempts]));return back()->with('success','Reintento procesado.');}}

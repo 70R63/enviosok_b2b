@@ -26,7 +26,7 @@ class LandingProspectController extends Controller
             'message' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        CrmClient::create([
+        $prospect = CrmClient::create([
             'client_type' => 'b2b',
             'commercial_status' => 'prospecto',
             'lead_status' => 'nuevo',
@@ -46,6 +46,7 @@ class LandingProspectController extends Controller
             ),
             'active' => true,
         ]);
+        app(\App\Services\Notifications\CrmAdminNotificationService::class)->prospect($prospect);
 
         return redirect()
             ->route('landing.empresas')

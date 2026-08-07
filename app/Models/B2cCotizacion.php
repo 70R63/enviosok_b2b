@@ -83,6 +83,8 @@ class B2cCotizacion extends Model
         'guia_label_format',
         'guia_request_fingerprint',
         'guia_generated_by',
+        'guide_processing_email_sent_at', 'guide_generated_email_sent_at',
+        'guide_pending_email_sent_at', 'guide_pdf_recovered_email_sent_at',
 
         'payment_id',
         'payment_status',
@@ -157,6 +159,10 @@ class B2cCotizacion extends Model
         'guia_request_snapshot' => 'array',
         'guia_response_snapshot' => 'array',
         'guia_generated_by' => 'integer',
+        'guide_processing_email_sent_at' => 'datetime',
+        'guide_generated_email_sent_at' => 'datetime',
+        'guide_pending_email_sent_at' => 'datetime',
+        'guide_pdf_recovered_email_sent_at' => 'datetime',
     ];
 
     public function user()

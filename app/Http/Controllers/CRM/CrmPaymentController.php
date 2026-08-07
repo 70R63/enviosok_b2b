@@ -9,29 +9,20 @@ use App\Models\B2cRecarga;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Services\Exports\PaymentExportQuery;
 
 class CrmPaymentController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, PaymentExportQuery $paymentQueries)
     {
-        $shipmentsQuery = B2cCotizacion::query()
-            ->with('user:id,name,email')->whereNotNull('user_id')
-            ->where(function (Builder $query) {
-                $query->whereNotNull('payment_id')->orWhereNotNull('payment_status')
-                    ->orWhereNotNull('payment_verified_at')->orWhereIn('estatus', [
-                        'PAGO_INICIADO', 'PAGO_PENDIENTE', 'PAGO_RECHAZADO',
-                        'PAGADA', 'GUIA_GENERADA', 'ERROR_GENERACION_GUIA',
-                    ]);
-            });
-        $this->filterShipments($shipmentsQuery, $request);
+        $shipmentsQuery = $paymentQueries->shipments($paymentQueries->filters($request, 'shipments'));
         $shipments = $shipmentsQuery->latest('id')
             ->paginate(25, ['*'], 'pagos_page')->withQueryString();
 
-        $rechargesQuery = B2cRecarga::query()->with('user:id,name,email');
-        $this->filterRecharges($rechargesQuery, $request);
+        $rechargesQuery = $paymentQueries->recharges($paymentQueries->filters($request, 'recharges'));
         $recharges = $rechargesQuery->latest('id')
             ->paginate(25, ['*'], 'recargas_page')->withQueryString();
-        $this->attachMovements($recharges->getCollection());
+        $paymentQueries->movements($recharges->getCollection());
 
         return view('crm.payments.index', compact('shipments', 'recharges'));
     }

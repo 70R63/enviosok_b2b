@@ -20,6 +20,7 @@ class B2cFiscalProfile extends Model
         'uso_cfdi',
         'email_facturacion',
         'activo',
+        'constancia_path',
     ];
 
     protected $casts = [
