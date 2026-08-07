@@ -81,16 +81,15 @@ class MercadoPagoWebhookController extends Controller
             $recoveryEmail = strtolower(trim((string) (
                 $verified->remitente_email ?: $verified->destinatario_email ?: $verified->user?->email
             )));
-            if ($verified->hasAccreditedPayment() && $recoveryEmail !== '') {
-                $guideRecovery->issue($verified, $recoveryEmail, 'processing');
-            }
-
             if ($this->shouldGenerateXpertaGuide($verified)) {
                 try {
                     $verified = $xpertaGuideFlow
                         ->generateAfterConfirmedPayment($verified);
                 } catch (\Throwable $exception) {
                     $this->recordAutomaticGuideFailure($verified, $exception);
+                    if ($recoveryEmail !== '') {
+                        $guideRecovery->recoverCreationFailure($verified->fresh(), $recoveryEmail);
+                    }
                     Log::warning('Pago confirmado; guía Xperta pendiente de recuperación', [
                         'cotizacion_id' => $verified->id,
                         'source' => 'WEBHOOK',
@@ -101,8 +100,8 @@ class MercadoPagoWebhookController extends Controller
             }
 
             $verified = $verified->fresh();
-            if ($recoveryEmail !== '') {
-                $guideRecovery->issue($verified, $recoveryEmail, $verified->documento ? 'generated' : 'pending');
+            if ($recoveryEmail !== '' && $verified->hasGeneratedGuide()) {
+                $guideRecovery->guideAvailable($verified, $recoveryEmail);
             }
 
             return response()->json([
@@ -131,6 +130,7 @@ class MercadoPagoWebhookController extends Controller
         return $cotizacion->payment_status === 'approved'
             && $cotizacion->payment_verified_at !== null
             && !$cotizacion->hasGeneratedGuide()
+            && strtoupper((string) $cotizacion->guia_estatus) !== 'ERROR_PROVEEDOR'
             && strtolower((string) $cotizacion->provider) === 'xperta'
             && strtolower((string) $cotizacion->carrier) === 'estafeta';
     }

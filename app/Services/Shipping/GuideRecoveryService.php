@@ -46,6 +46,67 @@ final class GuideRecoveryService
         return $plain;
     }
 
+    /**
+     * Opens the recovery path after a paid guide creation failed.  This method is
+     * deliberately safe to call from both the payment return and the webhook.
+     */
+    public function recoverCreationFailure(B2cCotizacion $q, string $email): ?string
+    {
+        $normalized = Str::lower(trim($email));
+        if ($normalized === '' || !$q->hasAccreditedPayment() || $q->guia_id || $q->tracking_number) {
+            return null;
+        }
+
+        $plain = null;
+        $token = DB::transaction(function () use ($q, $normalized, &$plain) {
+            $locked = B2cCotizacion::query()->whereKey($q->id)->lockForUpdate()->firstOrFail();
+            if (!$locked->hasAccreditedPayment() || $locked->guia_id || $locked->tracking_number) return null;
+
+            B2cGuideRecoveryCase::updateOrCreate(['cotizacion_id' => $locked->id], [
+                'classification' => self::CREATION_FAILED,
+                'status' => 'OPEN',
+                'original_paid_amount' => $locked->payment_verified_amount ?: $locked->precio,
+            ]);
+
+            $active = B2cGuideRecoveryToken::query()
+                ->where('cotizacion_id', $locked->id)->whereNull('revoked_at')
+                ->where('expires_at', '>', now())->whereColumn('attempts', '<', 'max_attempts')
+                ->latest('id')->first();
+            if (!$active) {
+                $plain = Str::random(80);
+                $active = B2cGuideRecoveryToken::create([
+                    'cotizacion_id' => $locked->id,
+                    'email_hash' => hash('sha256', $normalized),
+                    'token_hash' => hash('sha256', $plain),
+                    'expires_at' => now()->addHours((int) config('zigo_guide_recovery.token_hours', 48)),
+                    'max_attempts' => (int) config('zigo_guide_recovery.max_attempts', 10),
+                ]);
+            }
+
+            if (!B2cGuideRecoveryAudit::where('cotizacion_id', $locked->id)
+                ->where('action', 'CREATION_FAILED_RECOVERY_OPENED')->where('result', 'SUCCESS')->exists()) {
+                $this->audit($locked, 'CREATION_FAILED_RECOVERY_OPENED', 'SUCCESS');
+            }
+            return $active;
+        });
+
+        if (!$token) return null;
+        // A repeated callback cannot reconstruct an existing plaintext token.  The
+        // first caller owns delivery; later callers observe the claimed timestamp.
+        if ($plain !== null && !$this->sendOnce($q->fresh(), $normalized, $plain, 'pending')) {
+            $token->forceFill(['revoked_at' => now()])->save();
+        }
+        return $plain;
+    }
+
+    public function guideAvailable(B2cCotizacion $q, string $email): void
+    {
+        if (!$q->guia_id && !$q->tracking_number && !$q->documento) return;
+        B2cGuideRecoveryCase::where('cotizacion_id', $q->id)->update(['status' => 'RESOLVED']);
+        if ($q->fresh()->guide_generated_email_sent_at !== null) return;
+        $this->issue($q, $email, 'generated');
+    }
+
     public function resolve(string $plain): ?B2cGuideRecoveryToken
     {
         $token=B2cGuideRecoveryToken::where('token_hash',hash('sha256',$plain))->first();
@@ -60,16 +121,18 @@ final class GuideRecoveryService
             'correlation_id'=>(string)Str::uuid(),'ip_hash'=>request()?hash('sha256',(string)request()->ip()):null,'metadata'=>$metadata]);
     }
 
-    private function sendOnce(B2cCotizacion $q,string $email,string $token,string $kind): void
+    private function sendOnce(B2cCotizacion $q,string $email,string $token,string $kind): bool
     {
         $column=match($kind){'processing'=>'guide_processing_email_sent_at','generated'=>'guide_generated_email_sent_at','recovered'=>'guide_pdf_recovered_email_sent_at',default=>'guide_pending_email_sent_at'};
         $claimed=B2cCotizacion::whereKey($q->id)->whereNull($column)->update([$column=>now()]);
         if($claimed===1) {
-            try { Mail::to($email)->send(new GuideRecoveryMail($q->fresh(),$token,$kind)); }
+            try { Mail::to($email)->send(new GuideRecoveryMail($q->fresh(),$token,$kind)); return true; }
             catch(Throwable $e) {
                 B2cCotizacion::whereKey($q->id)->update([$column=>null]);
                 Log::warning('No fue posible enviar correo de recuperación',['cotizacion_id'=>$q->id,'kind'=>$kind,'exception'=>get_class($e)]);
+                return false;
             }
         }
+        return false;
     }
 }

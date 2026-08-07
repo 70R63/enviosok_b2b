@@ -1590,7 +1590,8 @@ public function pagoSuccess(
     Request $request,
     B2cCotizacion $cotizacion,
     PaymentVerificationService $verificationService,
-    \App\Services\Shipping\B2cXpertaGuideFlowService $xpertaGuideFlow
+    \App\Services\Shipping\B2cXpertaGuideFlowService $xpertaGuideFlow,
+    \App\Services\Shipping\GuideRecoveryService $guideRecovery
 ) {
     $guard = $this->guardConditionalCheckout($cotizacion);
     if ($guard) {
@@ -1616,6 +1617,8 @@ public function pagoSuccess(
         } catch (\Throwable $exception) {
             $this->recordAutomaticGuideFailure($cotizacion, $exception, 'RETURN_SUCCESS');
             $cotizacion = $cotizacion->refresh();
+            $email = strtolower(trim((string) ($cotizacion->remitente_email ?: $cotizacion->destinatario_email ?: $cotizacion->user?->email)));
+            if ($email !== '') $guideRecovery->recoverCreationFailure($cotizacion, $email);
         }
     }
 
@@ -1644,6 +1647,7 @@ private function shouldGenerateXpertaGuide(
     return $cotizacion->payment_status === 'approved'
         && $cotizacion->payment_verified_at !== null
         && !$cotizacion->hasGeneratedGuide()
+        && strtoupper((string) $cotizacion->guia_estatus) !== 'ERROR_PROVEEDOR'
         && strtolower((string) $cotizacion->provider) === 'xperta'
         && strtolower((string) $cotizacion->carrier) === 'estafeta';
 }

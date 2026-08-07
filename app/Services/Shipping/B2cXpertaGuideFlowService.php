@@ -242,14 +242,30 @@ final class B2cXpertaGuideFlowService
             'cotizacion_id' => $cotizacion->id, 'error_code' => $code,
             'exception' => get_class($exception),
         ]);
+        $diagnostic = $this->failureDiagnostic($exception, $code);
         $cotizacion->refresh()->forceFill([
             'guia_estatus' => 'ERROR_PROVEEDOR', 'estatus' => 'ERROR_GENERACION_GUIA',
             'guia_generation_started_at' => null, 'guia_last_error_code' => $code,
             'guia_last_error_message' => $this->safeMessage($exception),
             'guia_response_snapshot' => $this->lastResponseSnapshot !== []
                 ? $this->lastResponseSnapshot
-                : ['provider' => 'xperta', 'success' => false, 'error_code' => $code],
+                : $diagnostic,
         ])->save();
+    }
+
+    private function failureDiagnostic(Throwable $exception, string $code): array
+    {
+        $result = ['provider' => 'xperta', 'success' => false, 'error_code' => $code];
+        if (!$exception instanceof XpertaProviderException) return $result;
+        foreach (['http_status', 'provider_code', 'provider_message', 'correlation_id', 'request_id'] as $key) {
+            if (!array_key_exists($key, $exception->diagnosticMetadata) || !is_scalar($exception->diagnosticMetadata[$key])) continue;
+            $value = preg_replace('/(token|api.?key|password|secret)\s*[:=]\s*[^\s,;]+/i', '$1=[REDACTED]', (string) $exception->diagnosticMetadata[$key]);
+            $result[$key] = mb_substr($value, 0, $key === 'provider_message' ? 500 : 100);
+        }
+        if (!isset($result['provider_code']) && isset($exception->diagnosticMetadata['provider_message_code'])) {
+            $result['provider_code'] = mb_substr((string) $exception->diagnosticMetadata['provider_message_code'], 0, 100);
+        }
+        return $result;
     }
 
     private function safeMessage(Throwable $exception): string

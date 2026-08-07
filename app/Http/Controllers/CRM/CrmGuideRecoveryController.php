@@ -11,7 +11,7 @@ use RuntimeException;
 
 final class CrmGuideRecoveryController extends Controller
 {
-    public function create(B2cCotizacion $cotizacion,B2cXpertaGuideFlowService $flow,GuideRecoveryService $recovery){ if($cotizacion->guia_id||$cotizacion->tracking_number)abort(409);$result=$flow->generateAfterConfirmedPayment($cotizacion);$recovery->audit($result,'RETRY_CREATE','SUCCESS');return back()->with('success','Reintento procesado.'); }
+    public function create(B2cCotizacion $cotizacion,B2cXpertaGuideFlowService $flow,GuideRecoveryService $recovery){ if($cotizacion->guia_id||$cotizacion->tracking_number)abort(409);$result=$flow->generateAfterConfirmedPayment($cotizacion);$recovery->audit($result,'RETRY_CREATE','SUCCESS');$email=strtolower(trim((string)($result->remitente_email?:$result->destinatario_email?:$result->user?->email)));if($email!=='')$recovery->guideAvailable($result,$email);return back()->with('success','Reintento procesado.'); }
     public function normalize(B2cCotizacion $cotizacion,XpertaGuideResponseNormalizer $normalizer,GuideRecoveryService $recovery)
     {
         $n=$normalizer->normalize((array)$cotizacion->guia_response_snapshot);if(!$normalizer->isRecoverable($n))throw new RuntimeException('El snapshot no contiene una guía recuperable.');
