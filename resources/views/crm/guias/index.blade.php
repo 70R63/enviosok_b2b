@@ -125,7 +125,7 @@
                 </tbody>
             </table>
 
-            <div style="margin-top:18px">{{ $cotizaciones->links() }}</div>
+            <div class="pagination-wrap">{{ $cotizaciones->links('crm.pagination') }}</div>
         </section>
     </main>
 </div>

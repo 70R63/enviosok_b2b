@@ -38,9 +38,15 @@ final class XpertaGuidePdfService
             $quote->forceFill(['documento'=>$target,'guia_label_format'=>'PDF','guia_recovered_at'=>now(),'guia_estatus'=>'GENERADA','guia_last_error_code'=>null,'guia_last_error_message'=>null])->save();
             Log::info('Operación Xperta completada', $this->context($quote, $result));
             return $quote->refresh();
-        } catch (Throwable $e) {
+        } catch (XpertaProviderException $e) {
             Log::warning('Operación Xperta fallida', $this->context($quote, [], $e));
             throw $e;
+        } catch (RuntimeException $e) {
+            Log::warning('Operación Xperta fallida', $this->context($quote, [], $e));
+            throw $e;
+        } catch (Throwable $e) {
+            Log::warning('Operación Xperta fallida', $this->context($quote, [], $e));
+            throw new RuntimeException('XPERTA_PDF_PROVIDER_FAILURE', 0, $e);
         }
     }
     public function diagnostics(Throwable $e): array

@@ -7,6 +7,7 @@ use App\Models\B2cGuideRecoveryAudit;
 use App\Models\B2cGuideRecoveryCase;
 use App\Services\Shipping\GuideRecoveryService;
 use App\Services\Shipping\Xperta\XpertaGuidePdfService;
+use App\Services\Shipping\Xperta\XpertaProviderException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -89,6 +90,60 @@ final class GuestGuideRecoveryClosureTest extends TestCase
         $this->assertSame('XPERTA_HTTP_503',$audit->metadata['provider_code']);
         $this->assertStringNotContainsString('secret',$audit->metadata['provider_message']);
         Mail::assertNothingSent();
+    }
+
+    public function test_exact_stage_provider_exception_is_autoloadable_and_controlled(): void
+    {
+        $this->assertTrue(class_exists(XpertaProviderException::class));
+        Http::fake(['*'=>Http::response(['success'=>false,'message'=>'rechazo funcional'],503,['X-Request-ID'=>'request-107'])]);
+        $q=$this->case107();
+        try {
+            app(XpertaGuidePdfService::class)->fetch($q);
+            $this->fail('Expected the typed provider exception.');
+        } catch (XpertaProviderException $exception) {
+            $this->assertSame('XPERTA_HTTP_503',$exception->errorCode);
+            $this->assertSame(503,$exception->httpStatus);
+            $this->assertSame('request-107',$exception->correlationId);
+            $this->assertSame(2,$q->fresh()->guia_generation_attempts);
+            $this->assertSame('8050000000112600113484',$q->fresh()->guia_id);
+            $this->assertSame('0218429641',$q->fresh()->tracking_number);
+        }
+    }
+
+    public function test_case_133_explicit_link_is_mailed_audited_and_safe_to_repeat(): void
+    {
+        Mail::fake();
+        $q=$this->quote(['id'=>133,'remitente_email'=>'eg2bourne@gmail.com','quote_expires_at'=>now()->subMinute()]);
+        $q->id=133;
+        $q->save();
+        app(GuideRecoveryService::class)->issue($q,'eg2bourne@gmail.com','pending');
+        $response=$this->withoutMiddleware([\App\Http\Middleware\EnsureZigoPortalHost::class,\App\Http\Middleware\Authenticate::class,\App\Http\Middleware\RolesMiddleware::class,\App\Http\Middleware\VerifyCsrfToken::class])->post(route('crm.guias.recovery.link',$q));
+        $response->assertRedirect(route('crm.guias.index'))->assertSessionHas('success','Enlace de recuperación enviado correctamente.');
+        $this->assertSame('QUOTE_EXPIRED',app(GuideRecoveryService::class)->classification($q->fresh()));
+        Mail::assertSent(GuideRecoveryMail::class,2);
+        Mail::assertSent(GuideRecoveryMail::class,function(GuideRecoveryMail $mail){
+            $this->assertTrue($mail->hasTo('eg2bourne@gmail.com'));
+            $url=route('guide-recovery.show',$mail->recoveryToken);
+            $this->assertStringContainsString('/envio/recuperar/',$url);
+            $this->assertStringNotContainsString('/crm/',$url);
+            return true;
+        });
+        $this->assertSame(1,\App\Models\B2cGuideRecoveryToken::whereNull('revoked_at')->count());
+        $this->assertSame(2,B2cGuideRecoveryAudit::where('cotizacion_id',133)->where('action','TOKEN_ISSUED')->where('result','SUCCESS')->count());
+        $this->assertSame(2,B2cGuideRecoveryAudit::where('cotizacion_id',133)->where('action','MAIL_SENT')->where('result','SUCCESS')->count());
+    }
+
+    public function test_explicit_link_does_not_report_success_when_mail_fails(): void
+    {
+        $q=$this->quote(['id'=>133,'remitente_email'=>'eg2bourne@gmail.com','quote_expires_at'=>now()->subMinute()]);
+        $q->id=133;
+        $q->save();
+        Mail::shouldReceive('to')->once()->with('eg2bourne@gmail.com')->andThrow(new \RuntimeException('smtp unavailable'));
+        $response=$this->withoutMiddleware([\App\Http\Middleware\EnsureZigoPortalHost::class,\App\Http\Middleware\Authenticate::class,\App\Http\Middleware\RolesMiddleware::class,\App\Http\Middleware\VerifyCsrfToken::class])->post(route('crm.guias.recovery.link',$q));
+        $response->assertRedirect(route('crm.guias.index'))->assertSessionHas('error');
+        $this->assertDatabaseHas('b2c_guide_recovery_audits',['cotizacion_id'=>133,'action'=>'MAIL_FAILED','result'=>'FAILURE']);
+        $this->assertDatabaseMissing('b2c_guide_recovery_audits',['cotizacion_id'=>133,'action'=>'ISSUE_LINK','result'=>'SUCCESS']);
+        $this->assertSame(0,\App\Models\B2cGuideRecoveryToken::whereNull('revoked_at')->count());
     }
 
     private function case107(): B2cCotizacion

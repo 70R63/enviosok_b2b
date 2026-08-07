@@ -37,11 +37,22 @@ final class GuideRecoveryService
     public function issue(B2cCotizacion $q, string $email, string $mailKind='pending'): string
     {
         $plain=Str::random(80); $normalized=Str::lower(trim($email));
-        DB::transaction(function()use($q,$normalized,$plain){
-            B2cGuideRecoveryToken::where('cotizacion_id',$q->id)->whereNull('revoked_at')->update(['revoked_at'=>now()]);
-            B2cGuideRecoveryToken::create(['cotizacion_id'=>$q->id,'email_hash'=>hash('sha256',$normalized),'token_hash'=>hash('sha256',$plain),'expires_at'=>now()->addHours((int)config('zigo_guide_recovery.token_hours',48)),'max_attempts'=>(int)config('zigo_guide_recovery.max_attempts',10)]);
-        });
-        $this->sendOnce($q,$normalized,$plain,$mailKind);
+        $token = B2cGuideRecoveryToken::create(['cotizacion_id'=>$q->id,'email_hash'=>hash('sha256',$normalized),'token_hash'=>hash('sha256',$plain),'expires_at'=>now()->addHours((int)config('zigo_guide_recovery.token_hours',48)),'max_attempts'=>(int)config('zigo_guide_recovery.max_attempts',10)]);
+        $this->audit($q, 'TOKEN_ISSUED', 'SUCCESS', ['token_id' => $token->id]);
+
+        try {
+            Mail::to($normalized)->send(new GuideRecoveryMail($q->fresh(), $plain, $mailKind));
+        } catch (Throwable $e) {
+            $token->forceFill(['revoked_at' => now()])->save();
+            $this->audit($q, 'MAIL_FAILED', 'FAILURE', ['exception' => class_basename($e)]);
+            Log::warning('No fue posible enviar correo de recuperación',['cotizacion_id'=>$q->id,'kind'=>$mailKind,'exception'=>get_class($e)]);
+            throw new \RuntimeException('RECOVERY_MAIL_FAILED', 0, $e);
+        }
+
+        B2cGuideRecoveryToken::where('cotizacion_id',$q->id)->where('id','<>',$token->id)->whereNull('revoked_at')->update(['revoked_at'=>now()]);
+        $column=$this->mailTimestampColumn($mailKind);
+        B2cCotizacion::whereKey($q->id)->update([$column=>now()]);
+        $this->audit($q, 'MAIL_SENT', 'SUCCESS', ['token_id' => $token->id]);
         $this->audit($q,'ISSUE_LINK','SUCCESS');
         return $plain;
     }
@@ -123,7 +134,7 @@ final class GuideRecoveryService
 
     private function sendOnce(B2cCotizacion $q,string $email,string $token,string $kind): bool
     {
-        $column=match($kind){'processing'=>'guide_processing_email_sent_at','generated'=>'guide_generated_email_sent_at','recovered'=>'guide_pdf_recovered_email_sent_at',default=>'guide_pending_email_sent_at'};
+        $column=$this->mailTimestampColumn($kind);
         $claimed=B2cCotizacion::whereKey($q->id)->whereNull($column)->update([$column=>now()]);
         if($claimed===1) {
             try { Mail::to($email)->send(new GuideRecoveryMail($q->fresh(),$token,$kind)); return true; }
@@ -134,5 +145,10 @@ final class GuideRecoveryService
             }
         }
         return false;
+    }
+
+    private function mailTimestampColumn(string $kind): string
+    {
+        return match($kind){'processing'=>'guide_processing_email_sent_at','generated'=>'guide_generated_email_sent_at','recovered'=>'guide_pdf_recovered_email_sent_at',default=>'guide_pending_email_sent_at'};
     }
 }
