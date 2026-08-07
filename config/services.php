@@ -91,6 +91,7 @@ return [
         'guide_empresa_id' => env('XPERTA_GUIDE_EMPRESA_ID'),
         'guide_pdf_path' => env('XPERTA_GUIDE_PDF_PATH', '/api/v1/empresas/{empresa}/ltds/{ltd}/servicios/{service}/guia/pdf'),
         'guide_pdf_max_bytes' => env('XPERTA_GUIDE_PDF_MAX_BYTES', 10485760),
+        'guide_pdf_accepts_tracking' => env('XPERTA_GUIDE_PDF_ACCEPTS_TRACKING', false),
         'guide_probe_enabled' => env(
             'XPERTA_GUIDE_PROBE_ENABLED',
             false

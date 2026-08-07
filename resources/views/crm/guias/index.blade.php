@@ -62,11 +62,11 @@
                         <td><span class="badge badge-red">{{ $item->recovery_case->classification }}</span><div class="muted">{{ $item->guia_last_error_message ?: 'Revisión requerida' }}</div></td>
                         <td>{{ $item->guia_generation_attempts }}</td><td>{{ $item->guia_id ?: '-' }}<div class="muted">{{ $item->tracking_number ?: '-' }}</div></td><td>{{ $item->documento ? 'Disponible' : 'Ausente' }}</td><td>{{ $item->guia_last_attempt_at ?: $item->updated_at }}</td>
                         <td>
-                            @if(!$item->guia_id && !$item->tracking_number && !in_array($item->recovery_case->classification,['QUOTE_EXPIRED','MAX_ATTEMPTS']))<form method="POST" action="{{ route('crm.guias.recovery.create',$item) }}">@csrf<button class="btn">Reintentar creación</button></form>@endif
-                            @if(!$item->guia_id && !$item->tracking_number && is_array($item->guia_response_snapshot))<form method="POST" action="{{ route('crm.guias.recovery.normalize',$item) }}">@csrf<button class="btn btn-gray">Normalizar snapshot</button></form>@endif
-                            @if(($item->guia_id || $item->tracking_number) && !$item->documento)<form method="POST" action="{{ route('crm.guias.recovery.pdf',$item) }}">@csrf<button class="btn">Recuperar PDF</button></form>@endif
+                            @if($item->recovery_case->classification==='CREATION_FAILED')<form method="POST" action="{{ route('crm.guias.recovery.create',$item) }}">@csrf<button class="btn">Reintentar creación</button></form>@endif
+                            @if($item->recovery_case->classification==='DOCUMENT_MISSING')<form method="POST" action="{{ route('crm.guias.recovery.pdf',$item) }}">@csrf<button class="btn">Recuperar PDF</button></form>@endif
                             <form method="POST" action="{{ route('crm.guias.recovery.link',$item) }}">@csrf<button class="btn btn-gray">Renovar/enviar enlace</button></form>
                             @if($item->recovery_case->classification==='QUOTE_EXPIRED')<form method="POST" action="{{ route('crm.guias.recovery.requote',$item) }}">@csrf<input name="nuevo_total" type="number" step="0.01" min="0.01" placeholder="Nuevo total" required><button class="btn">Registrar recotización</button></form>@endif
+                            @if($item->recovery_case->classification==='MAX_ATTEMPTS')<span class="muted">Revisión administrativa</span>@endif
                         </td>
                     </tr>
                 @empty<tr><td colspan="9">No hay guías pendientes de recuperación.</td></tr>@endforelse

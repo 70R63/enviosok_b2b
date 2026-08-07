@@ -14,7 +14,10 @@ final class XpertaGuidePdfService
 
     public function fetch(B2cCotizacion $quote): B2cCotizacion
     {
-        $identifier = trim((string) ($quote->guia_id ?: $quote->tracking_number));
+        $identifier = trim((string) $quote->guia_id);
+        if ($identifier === '' && (bool) config('services.xperta.guide_pdf_accepts_tracking', false)) {
+            $identifier = trim((string) $quote->tracking_number);
+        }
         if ($identifier === '') throw new RuntimeException('PDF_IDENTIFIER_MISSING');
         if ($quote->documento && Storage::disk('local')->exists($quote->documento)) return $quote;
         $service = $this->service((string) ($quote->service_code ?: $quote->servicio));
@@ -40,8 +43,18 @@ final class XpertaGuidePdfService
             throw $e;
         }
     }
+    public function diagnostics(Throwable $e): array
+    {
+        $metadata = $e instanceof XpertaProviderException ? $e->diagnosticMetadata : [];
+        return [
+            'http_status' => isset($metadata['http_status']) ? (int) $metadata['http_status'] : null,
+            'provider_code' => $e instanceof XpertaProviderException ? $e->errorCode : class_basename($e),
+            'provider_message' => $this->sanitize((string) ($metadata['provider_message'] ?? $e->getMessage())),
+        ];
+    }
     private function pdfValue(array $r): string { foreach (['data.data','data.pdf','data.pdfBase64','data.document','pdf','pdfBase64','document'] as $k) { $v=data_get($r,$k); if(is_string($v)&&trim($v)!=='')return trim($v); } throw new RuntimeException('XPERTA_PDF_MISSING'); }
     private function service(string $v): string { $v=strtolower(Str::ascii(trim($v))); if($v==='terrestre'||str_contains($v,'terrestre'))return 'terrestre'; if($v==='diasig'||str_contains($v,'dia sig')||str_contains($v,'siguiente'))return 'diasig'; throw new RuntimeException('XPERTA_PDF_SERVICE_INVALID'); }
     private function headers(): array { return ['Corporativo'=>(string)config('services.xperta.corporativo'),'x-api-key'=>(string)config('services.xperta.api_key'),'Accept'=>'application/json','Content-Type'=>'application/json']; }
-    private function context(B2cCotizacion $q,array $r=[],?Throwable $e=null): array { $m=$e instanceof XpertaProviderException?$e->diagnosticMetadata:[]; return ['cotizacion_id'=>$q->id,'operation'=>'fetch_pdf','http_status'=>$r['http_status']??($m['http_status']??null),'provider_code'=>$e instanceof XpertaProviderException?$e->errorCode:($e?class_basename($e):null),'provider_message'=>$e?mb_substr(preg_replace('/(token|api.?key|password|secret)\s*[:=]\s*[^\s,;]+/i','$1=[REDACTED]',$e->getMessage()),0,300):null,'correlation_id'=>$r['correlation_id']??($m['correlation_id']??null),'request_number'=>$q->guia_provider_request_number,'attempts'=>(int)$q->guia_generation_attempts]; }
+    private function context(B2cCotizacion $q,array $r=[],?Throwable $e=null): array { $m=$e instanceof XpertaProviderException?$e->diagnosticMetadata:[]; return ['cotizacion_id'=>$q->id,'operation'=>'fetch_pdf','http_status'=>$r['http_status']??($m['http_status']??null),'provider_code'=>$e instanceof XpertaProviderException?$e->errorCode:($e?class_basename($e):null),'provider_message'=>$e?$this->sanitize((string)($m['provider_message']??$e->getMessage())):null,'correlation_id'=>$r['correlation_id']??($m['correlation_id']??null),'request_number'=>$q->guia_provider_request_number,'attempts'=>(int)$q->guia_generation_attempts]; }
+    private function sanitize(string $message): string { return mb_substr((string)preg_replace('/(token|api.?key|password|secret)\s*[:=]\s*[^\s,;]+/i','$1=[REDACTED]',strip_tags($message)),0,300); }
 }
