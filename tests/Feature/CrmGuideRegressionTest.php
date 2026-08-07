@@ -41,6 +41,7 @@ final class CrmGuideRegressionTest extends TestCase
         $index=file_get_contents(resource_path('views/crm/guias/index.blade.php'));
         $show=file_get_contents(resource_path('views/crm/guias/show.blade.php'));
         $this->assertStringContainsString("route('crm.guias.show', \$cotizacion)",$index);
+        $this->assertStringContainsString('@if(($cotizacion->guia_id || $cotizacion->tracking_number) && $cotizacion->user_id)',$index);
         $this->assertStringContainsString("links('crm.pagination')",$index);
         $this->assertStringContainsString('class="pagination-wrap"',$index);
         $this->assertStringContainsString("route('crm.guias.adeudos.store', \$cotizacion)",$show);

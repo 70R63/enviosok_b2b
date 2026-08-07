@@ -41,10 +41,19 @@ final class GuestGuideRecoveryClosureTest extends TestCase
     public function test_fetch_pdf_uses_waybill_once_and_does_not_create_or_increment_attempts(): void
     {
         Storage::fake('local');Http::fake(['*'=>Http::response(['success'=>true,'data'=>['data'=>base64_encode("%PDF-1.4\n%%EOF")]],200)]);
-        $q=$this->quote(['id'=>107,'guia_id'=>'8050000000112600113484','tracking_number'=>'0218429641','guia_generation_attempts'=>2]);$q->save();
+        $q=$this->quote(['id'=>107,'service_code'=>'diasig','guia_id'=>'8050000000112600113484','tracking_number'=>'0218429641','guia_generation_attempts'=>2]);$q->save();
         app(XpertaGuidePdfService::class)->fetch($q);
         $fresh=$q->fresh();$this->assertSame('8050000000112600113484',$fresh->guia_id);$this->assertSame('0218429641',$fresh->tracking_number);$this->assertSame(2,$fresh->guia_generation_attempts);Storage::disk('local')->assertExists($fresh->documento);
-        Http::assertSentCount(1);Http::assertSent(fn($r)=>str_ends_with($r->url(),'/servicios/terrestre/guia/pdf')&&$r->data()===['token'=>base64_encode('1|RAW'),'wayBill'=>'8050000000112600113484']);
+        Http::assertSentCount(1);Http::assertSent(function($r){
+            $body=$r->data();
+            $this->assertSame('POST',$r->method());
+            $this->assertSame('https://xperta.test/api/v1/empresas/empresa/ltds/estafeta/servicios/diasig/guia/pdf',$r->url());
+            $this->assertTrue($r->hasHeader('Corporativo','corp'));$this->assertTrue($r->hasHeader('x-api-key','api-key'));
+            $this->assertTrue($r->hasHeader('Content-Type','application/json'));$this->assertTrue($r->hasHeader('Accept','application/json'));
+            $this->assertSame(['token'=>base64_encode('1|RAW'),'wayBill'=>'8050000000112600113484'],$body);
+            $this->assertArrayNotHasKey('tracking',$body);$this->assertArrayNotHasKey('requestNumber',$body);$this->assertArrayNotHasKey('shipmentId',$body);
+            return true;
+        });
     }
 
     public function test_invalid_pdf_is_rejected_and_not_saved(): void
@@ -75,19 +84,20 @@ final class GuestGuideRecoveryClosureTest extends TestCase
     public function test_case_107_provider_error_returns_functional_message_and_stays_document_missing(): void
     {
         Storage::fake('local'); Mail::fake();
-        Http::fake(['*'=>Http::response(['success'=>false,'message'=>'token=secret rechazo funcional'],503)]);
+        Http::fake(['*'=>Http::response(['success'=>false,'data'=>['errors'=>['wayBill'=>'token=secret WayBill inválido']]],400)]);
         $q=$this->case107(); $before=$q->only(['guia_id','tracking_number','guia_generation_attempts','payment_status']);
 
         $response=$this->withoutMiddleware([\App\Http\Middleware\EnsureZigoPortalHost::class,\App\Http\Middleware\Authenticate::class,\App\Http\Middleware\RolesMiddleware::class,\App\Http\Middleware\VerifyCsrfToken::class])->from('/crm/guias')->post(route('crm.guias.recovery.pdf',$q));
 
-        $response->assertRedirect('/crm/guias')->assertSessionHas('error');
+        $response->assertRedirect('/crm/guias')->assertSessionHas('error','No fue posible recuperar el PDF. La guía permanece registrada y puede reintentarse.');
         $fresh=$q->fresh();
         $this->assertNull($fresh->documento); $this->assertSame($before,$fresh->only(array_keys($before)));
         $this->assertSame('DOCUMENT_MISSING',B2cGuideRecoveryCase::where('cotizacion_id',107)->value('classification'));
         $this->assertSame('OPEN',B2cGuideRecoveryCase::where('cotizacion_id',107)->value('status'));
         $audit=B2cGuideRecoveryAudit::where('cotizacion_id',107)->where('action','FETCH_PDF')->firstOrFail();
-        $this->assertSame('FAILURE',$audit->result); $this->assertSame(503,$audit->metadata['http_status']);
-        $this->assertSame('XPERTA_HTTP_503',$audit->metadata['provider_code']);
+        $this->assertSame('FAILURE',$audit->result); $this->assertSame(400,$audit->metadata['http_status']);
+        $this->assertSame('XPERTA_HTTP_400',$audit->metadata['provider_code']);
+        $this->assertStringContainsString('WayBill inválido',$audit->metadata['provider_message']);
         $this->assertStringNotContainsString('secret',$audit->metadata['provider_message']);
         Mail::assertNothingSent();
     }
@@ -133,6 +143,28 @@ final class GuestGuideRecoveryClosureTest extends TestCase
         $this->assertSame(2,B2cGuideRecoveryAudit::where('cotizacion_id',133)->where('action','MAIL_SENT')->where('result','SUCCESS')->count());
     }
 
+    public function test_crm_generated_mail_always_uses_configured_b2c_stage_host(): void
+    {
+        config(['app.url'=>'https://crm-stage.zigo-envios.com','zigo_domains.portals.b2c.url'=>'https://stage.zigo-envios.com']);
+        $q=$this->quote(['id'=>133]);
+        $mail=(new GuideRecoveryMail($q,'public-token','pending'))->build();
+        $this->assertStringContainsString('https://stage.zigo-envios.com/envio/recuperar/public-token',$mail->render());
+        $this->assertStringNotContainsString('crm-stage.zigo-envios.com',$mail->render());
+        $this->assertStringNotContainsString('crm.zigo-envios.com',$mail->render());
+    }
+
+    public function test_public_recovery_view_uses_b2c_layout_and_never_exposes_internal_codes(): void
+    {
+        $q=$this->quote(['guia_estatus'=>'ERROR_PROVEEDOR','guia_last_error_code'=>'QUOTE_EXPIRED']);
+        $html=view('b2c.guide-recovery',['cotizacion'=>$q,'recoveryToken'=>'token','documentAvailable'=>false,'publicStatus'=>'Estamos recuperando tu guía.'])->render();
+        $this->assertStringContainsString('name="viewport"',$html);
+        $this->assertStringContainsString('ZIGO',$html);
+        $this->assertStringContainsString('Estamos recuperando tu guía.',$html);
+        $this->assertStringNotContainsString('ERROR_PROVEEDOR',$html);
+        $this->assertStringNotContainsString('QUOTE_EXPIRED',$html);
+        $this->assertStringNotContainsString('Descargar guía',$html);
+    }
+
     public function test_explicit_link_does_not_report_success_when_mail_fails(): void
     {
         $q=$this->quote(['id'=>133,'remitente_email'=>'eg2bourne@gmail.com','quote_expires_at'=>now()->subMinute()]);
@@ -148,7 +180,7 @@ final class GuestGuideRecoveryClosureTest extends TestCase
 
     private function case107(): B2cCotizacion
     {
-        $quote=new B2cCotizacion(['remitente_email'=>'buyer@example.test','payment_status'=>'approved','payment_verified_at'=>now(),'precio'=>100,'service_code'=>'terrestre','guia_id'=>'8050000000112600113484','tracking_number'=>'0218429641','guia_generation_attempts'=>2]);
+        $quote=new B2cCotizacion(['remitente_email'=>'buyer@example.test','payment_status'=>'approved','payment_verified_at'=>now(),'precio'=>100,'service_code'=>'diasig','guia_id'=>'8050000000112600113484','tracking_number'=>'0218429641','guia_generation_attempts'=>2]);
         $quote->id=107; $quote->save(); return $quote;
     }
 

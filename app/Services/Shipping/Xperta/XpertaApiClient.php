@@ -280,15 +280,21 @@ class XpertaApiClient
         }
 
         $candidates = [
+            data_get($json, 'data.message'),
             data_get($json, 'data.error'),
             data_get($json, 'error'),
             data_get($json, 'message'),
-            data_get($json, 'data.message'),
+            data_get($json, 'errors'),
+            data_get($json, 'data.errors'),
         ];
 
         foreach ($candidates as $candidate) {
             if (is_string($candidate) && trim($candidate) !== '') {
                 return mb_substr(trim($candidate), 0, 500);
+            }
+            if (is_array($candidate) && $candidate !== []) {
+                $flattened = collect($candidate)->flatten()->filter(fn ($value) => is_scalar($value))->implode('; ');
+                if (trim($flattened) !== '') return mb_substr(trim($flattened), 0, 500);
             }
         }
 

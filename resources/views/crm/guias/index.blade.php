@@ -15,7 +15,7 @@
         label{font-weight:900;display:block;margin-bottom:6px}input,select{width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:8px;box-sizing:border-box}
         .btn{display:inline-block;background:#4361ee;color:white;text-decoration:none;font-weight:800;padding:11px 15px;border-radius:9px;border:none;cursor:pointer}
         .btn-gray{background:#334155}table{width:100%;border-collapse:collapse}th,td{padding:12px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top;font-size:14px}th{background:#f8fafc}
-        .badge{display:inline-block;padding:5px 9px;border-radius:999px;font-weight:800;font-size:12px;background:#e2e8f0}.badge-red{background:#fee2e2;color:#991b1b}.badge-green{background:#dcfce7;color:#166534}.muted{color:#64748b;font-size:13px}
+        .badge{display:inline-block;padding:5px 9px;border-radius:999px;font-weight:800;font-size:12px;background:#e2e8f0}.badge-red{background:#fee2e2;color:#991b1b}.badge-green{background:#dcfce7;color:#166534}.muted{color:#64748b;font-size:13px}.alert-ok,.alert-error{padding:13px;border-radius:10px;margin-bottom:16px;font-weight:800}.alert-ok{background:#dcfce7;color:#166534}.alert-error{background:#fee2e2;color:#991b1b}
     </style>
 </head>
 <body>
@@ -27,6 +27,8 @@
         <div class="subtitle">
             Guías relacionadas con una cotización y un usuario B2C. Desde aquí se registra el adeudo reportado por Xperta.
         </div>
+        @if(session('success'))<div class="alert-ok">{{ session('success') }}</div>@endif
+        @if(session('error'))<div class="alert-error">{{ session('error') }}</div>@endif
         <p><a class="btn" href="{{ route('crm.guias.export', array_merge(request()->query(), ['scope'=>'filtered'])) }}">Exportar resultados</a> <a class="btn btn-gray" href="{{ route('crm.guias.export',['scope'=>'all']) }}">Exportar todos</a></p>
 
         <section class="panel">
@@ -116,7 +118,9 @@
                                 @endif
                             </td>
                             <td>
-                                <a class="btn btn-gray" href="{{ route('crm.guias.show', $cotizacion) }}">Ver / Registrar adeudo</a>
+                                @if(($cotizacion->guia_id || $cotizacion->tracking_number) && $cotizacion->user_id)
+                                    <a class="btn btn-gray" href="{{ route('crm.guias.show', $cotizacion) }}">Ver / Registrar adeudo</a>
+                                @endif
                             </td>
                         </tr>
                     @empty

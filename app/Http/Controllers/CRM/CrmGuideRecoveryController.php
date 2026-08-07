@@ -38,11 +38,11 @@ final class CrmGuideRecoveryController extends Controller
                 }
             }
 
-            return redirect()->route('crm.guias.index')->with('success', 'PDF recuperado. La guía ya está disponible.');
+            return redirect()->route('crm.guias.index')->with('success', 'PDF de la guía recuperado correctamente.');
         } catch (Throwable $exception) {
             $recovery->audit($cotizacion->fresh(), 'FETCH_PDF', 'FAILURE', $pdf->diagnostics($exception));
 
-            return redirect()->route('crm.guias.index')->with('error', 'No fue posible recuperar el PDF con Xperta. La guía permanece pendiente de recuperación; inténtalo nuevamente o solicita revisión administrativa.');
+            return redirect()->route('crm.guias.index')->with('error', 'No fue posible recuperar el PDF. La guía permanece registrada y puede reintentarse.');
         }
     }
     public function link(B2cCotizacion $cotizacion,GuideRecoveryService $recovery)

@@ -21,7 +21,15 @@ final class GuestGuideRecoveryController extends Controller
     public function show(string $token,GuideRecoveryService $recovery)
     {
         $access=$recovery->resolve($token); if(!$access)abort(404);
-        return view('b2c.guide-recovery',['cotizacion'=>$access->cotizacion,'recoveryToken'=>$token]);
+        $cotizacion=$access->cotizacion;
+        $documentAvailable=(bool)($cotizacion->documento && Storage::disk('local')->exists($cotizacion->documento));
+        $classification=$recovery->classification($cotizacion);
+        $publicStatus=match($classification){
+            GuideRecoveryService::DOCUMENT_MISSING=>'Tu guía fue generada. Estamos preparando tu documento.',
+            GuideRecoveryService::QUOTE_EXPIRED,GuideRecoveryService::CREATION_FAILED,GuideRecoveryService::MAX_ATTEMPTS=>'Estamos recuperando tu guía.',
+            default=>$documentAvailable?'Tu guía está lista.':(($cotizacion->guia_id||$cotizacion->tracking_number||strtoupper((string)$cotizacion->guia_estatus)==='GENERADA')?'Tu guía fue generada. Estamos preparando tu documento.':'Estamos recuperando tu guía.'),
+        };
+        return view('b2c.guide-recovery',compact('cotizacion','token','documentAvailable','publicStatus'))->with('recoveryToken',$token);
     }
     public function download(string $token,GuideRecoveryService $recovery)
     {

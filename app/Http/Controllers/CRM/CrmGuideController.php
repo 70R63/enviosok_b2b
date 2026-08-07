@@ -23,6 +23,10 @@ class CrmGuideController extends Controller
 
         $filters = $guideQuery->filters($request);
         $query = $guideQuery->make($filters)
+            ->where(function ($query) {
+                $query->whereNotNull('guia_id')->orWhereNotNull('tracking_number');
+            })
+            ->whereNotNull('user_id')
             ->with([
                 'adeudos' => function ($query) {
                     $query->latest('id');
@@ -194,7 +198,6 @@ class CrmGuideController extends Controller
             || (
                 !$cotizacion->guia_id
                 && !$cotizacion->tracking_number
-                && $cotizacion->estatus !== 'GUIA_GENERADA'
             )
         ) {
             abort(404);
