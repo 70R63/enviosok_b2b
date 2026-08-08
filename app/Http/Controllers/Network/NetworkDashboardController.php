@@ -15,7 +15,7 @@ class NetworkDashboardController extends Controller
             'activeModules' => Module::where('is_active',true)->count(),
             // Temporal hasta que el dominio Usage exista. No consulta tablas operativas.
             'monthlyOperations' => null,
-            'tenants' => Tenant::latest()->limit(10)->get(),
+            'tenants' => Tenant::with(['currentPlan.modules'=>fn($q)=>$q->wherePivot('is_included',true)])->latest()->limit(10)->get(),
             'statusCounts' => $registry->counts(),
             'statuses' => $registry->statuses(),
         ]);

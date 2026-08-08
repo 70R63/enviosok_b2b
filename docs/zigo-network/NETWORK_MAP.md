@@ -86,7 +86,7 @@ B2C y B2B son canales, no tenants.
 | ZN-00 | Auditoría | COMPLETED |
 | ZN-01A | Network Foundation | COMPLETED |
 | ZN-01B | Launchpad + Map + Dashboard | CURRENT |
-| ZN-01C | Plan → Modules, Tenant → Plan, Construye tu ZIGO | NEXT |
+| ZN-01C | Plan → Modules, Tenant → Plan, Construye tu ZIGO | CURRENT |
 | ZN-02 | TenantDomain + Branding + White Label | PLANNED |
 | ZN-03 | Tenant Admin + Memberships | PLANNED |
 | ZN-04 | Subscription + Entitlements | PLANNED |
@@ -106,3 +106,10 @@ No hay que esperar ZN-15 para vender: el primer tenant rentable debe llegar tras
 
 ## Próximos hitos
 ZN-01C debe formalizar Tenant → Plan y Plan → Modules sin billing, usage ni tenancy operativa. Un futuro Tenant Admin (ej. `rapidex.zigo-envios.com/admin`) nunca verá otros tenants, márgenes/configuración global, DevOps, proveedores ajenos, Billing global ni este mapa interno.
+
+## Construye tu ZIGO — ZN-01C
+La primera configuración comercial relaciona `Plan → Modules` mediante `network_plan_modules` y `Tenant → Current Plan` mediante `network_tenants.current_plan_id`. `current_plan_id` es una asignación comercial nullable; **no** representa Subscription, recurrencia, cobro ni entitlement runtime. Subscription y Entitlements reemplazarán/complementarán esta lectura en ZN-04.
+
+La lista efectiva mostrada hoy para un tenant proviene exclusivamente de los módulos con `is_included=true` en su plan. `limit_value` e `included_operations` son configuración comercial, no medición de Usage.
+
+Un **Network Map Node no equivale a Commercial Module**. El mapa puede contener arquitectura, proveedores, ambientes y roadmap —por ejemplo ZIGO AI— sin que exista todavía un producto vendible en `network_modules`. AI Conversational y AI Vision sólo deberán incorporarse al catálogo cuando exista una decisión explícita de comercialización.

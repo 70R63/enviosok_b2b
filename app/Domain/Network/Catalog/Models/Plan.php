@@ -4,6 +4,8 @@ namespace App\Domain\Network\Catalog\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Domain\Network\Tenancy\Models\Tenant;
 use Illuminate\Support\Str;
 
 class Plan extends Model
@@ -39,5 +41,10 @@ class Plan extends Model
             ->using(PlanModule::class)
             ->withPivot(['is_included', 'limit_value'])
             ->withTimestamps();
+    }
+
+    public function tenants(): HasMany
+    {
+        return $this->hasMany(Tenant::class, 'current_plan_id');
     }
 }

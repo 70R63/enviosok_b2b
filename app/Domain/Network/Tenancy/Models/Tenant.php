@@ -4,6 +4,8 @@ namespace App\Domain\Network\Tenancy\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Domain\Network\Catalog\Models\Plan;
 use Illuminate\Support\Str;
 
 class Tenant extends Model
@@ -14,7 +16,15 @@ class Tenant extends Model
 
     protected $table = 'network_tenants';
 
-    protected $fillable = ['name', 'slug', 'status'];
+    protected $fillable = ['name', 'slug', 'status', 'current_plan_id'];
+
+    protected $casts = ['current_plan_id' => 'integer'];
+
+    /** Current commercial plan assignment; deliberately not a subscription. */
+    public function currentPlan(): BelongsTo
+    {
+        return $this->belongsTo(Plan::class, 'current_plan_id');
+    }
 
     protected static function booted(): void
     {

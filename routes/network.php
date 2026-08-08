@@ -26,11 +26,17 @@ Route::middleware(['network.auth', 'network.superadmin'])
         Route::get('/tenants/create', [TenantController::class, 'create'])->name('tenants.create');
         Route::post('/tenants', [TenantController::class, 'store'])->name('tenants.store');
         Route::get('/tenants/{tenant}', [TenantController::class, 'show'])->name('tenants.show');
+        Route::get('/tenants/{tenant}/edit', [TenantController::class, 'edit'])->name('tenants.edit');
+        Route::match(['put','patch'],'/tenants/{tenant}', [TenantController::class, 'update'])->name('tenants.update');
         Route::get('/modules', [ModuleController::class, 'index'])->name('modules.index');
         Route::get('/modules/create', [ModuleController::class, 'create'])->name('modules.create');
         Route::post('/modules', [ModuleController::class, 'store'])->name('modules.store');
+        Route::get('/modules/{module}/edit', [ModuleController::class, 'edit'])->name('modules.edit');
+        Route::match(['put','patch'],'/modules/{module}', [ModuleController::class, 'update'])->name('modules.update');
         Route::get('/plans', [PlanController::class, 'index'])->name('plans.index');
         Route::get('/plans/create', [PlanController::class, 'create'])->name('plans.create');
         Route::post('/plans', [PlanController::class, 'store'])->name('plans.store');
         Route::get('/plans/{plan}', [PlanController::class, 'show'])->name('plans.show');
+        Route::get('/plans/{plan}/edit', [PlanController::class, 'edit'])->name('plans.edit');
+        Route::match(['put','patch'],'/plans/{plan}', [PlanController::class, 'update'])->name('plans.update');
     });

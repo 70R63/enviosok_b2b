@@ -20,7 +20,7 @@ final class NetworkControlCenterTest extends TestCase
         Schema::create('users',fn(Blueprint $t)=>$this->users($t));
         Schema::create('roles',function(Blueprint $t){$t->id();$t->string('name');$t->string('slug');$t->timestamps();});
         Schema::create('users_roles',function(Blueprint $t){$t->unsignedBigInteger('user_id');$t->unsignedBigInteger('roles_id');});
-        Schema::create('network_tenants',function(Blueprint $t){$t->id();$t->uuid('uuid')->unique();$t->string('name');$t->string('slug')->unique();$t->string('status');$t->timestamps();});
+        Schema::create('network_tenants',function(Blueprint $t){$t->id();$t->uuid('uuid')->unique();$t->string('name');$t->string('slug')->unique();$t->string('status');$t->unsignedBigInteger('current_plan_id')->nullable();$t->timestamps();});
         Schema::create('network_modules',function(Blueprint $t){$t->id();$t->string('code')->unique();$t->string('name');$t->text('description')->nullable();$t->string('type');$t->boolean('is_active');$t->unsignedSmallInteger('sort_order');$t->timestamps();});
         Schema::create('network_plans',function(Blueprint $t){$t->id();$t->string('code')->unique();$t->string('name');$t->text('description')->nullable();$t->string('status');$t->decimal('monthly_price',12,2)->nullable();$t->decimal('annual_price',12,2)->nullable();$t->char('currency',3);$t->unsignedInteger('included_operations')->nullable();$t->timestamps();});
         Schema::create('network_plan_modules',function(Blueprint $t){$t->id();$t->unsignedBigInteger('plan_id');$t->unsignedBigInteger('module_id');$t->boolean('is_included');$t->unsignedInteger('limit_value')->nullable();$t->timestamps();});
