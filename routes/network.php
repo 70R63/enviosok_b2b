@@ -15,6 +15,8 @@ use App\Http\Controllers\Tenant\TenantHomeController;
 use App\Http\Controllers\Tenant\TenantAdminController;
 use App\Http\Controllers\Tenant\TenantAuthController;
 use App\Http\Controllers\Tenant\TenantMemberController;
+use App\Http\Controllers\Tenant\TenantB2cController;
+use App\Http\Controllers\Tenant\TenantOperationController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('network')->name('network.')->group(function (): void {
@@ -65,6 +67,12 @@ Route::middleware(['network.auth', 'network.superadmin'])
 
 Route::get('/white-label', [TenantHomeController::class, 'home'])->middleware(['tenant.resolve','tenant.subscription'])->name('tenant.home');
 
+Route::middleware(['tenant.resolve','tenant.subscription','tenant.entitlement:B2C'])->name('tenant.b2c.')->group(function (): void {
+    Route::get('/cotizar', [TenantB2cController::class, 'create'])->middleware('tenant.entitlement:SHIPPING')->name('quote.create');
+    Route::post('/cotizar', [TenantB2cController::class, 'store'])->middleware(['tenant.entitlement:SHIPPING','throttle:20,1'])->name('quote.store');
+    Route::get('/tracking', [TenantB2cController::class, 'tracking'])->middleware('tenant.entitlement:TRACKING')->name('tracking');
+});
+
 Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->group(function (): void {
     Route::get('/login', [TenantAuthController::class, 'create'])->name('login');
     Route::post('/login', [TenantAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
@@ -73,6 +81,8 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
         Route::middleware('tenant.subscription')->group(function (): void {
             Route::get('/', [TenantAdminController::class, 'dashboard'])->name('dashboard');
             Route::get('/plan', [TenantAdminController::class, 'plan'])->name('plan');
+            Route::get('/operations', [TenantOperationController::class, 'index'])->middleware('tenant.entitlement:B2C')->name('operations.index');
+            Route::post('/operations/{operation}/confirm', [TenantOperationController::class, 'confirm'])->middleware(['tenant.entitlement:B2C','tenant.entitlement:SHIPPING'])->name('operations.confirm');
             Route::middleware('tenant.members.manage')->group(function (): void {
                 Route::get('/users', [TenantMemberController::class, 'index'])->name('users.index');
                 Route::patch('/users/{membership}', [TenantMemberController::class, 'update'])->name('users.update');

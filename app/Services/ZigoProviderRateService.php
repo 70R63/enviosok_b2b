@@ -155,7 +155,7 @@ class ZigoProviderRateService
     private function getLegacyEstafetaOption(
         B2cCotizacion $cotizacion
     ): array {
-        $basePrice =
+        [$basePrice, $fallbackRate] =
             $this->getLegacyEstafetaBasePrice(
                 $cotizacion
             );
@@ -171,12 +171,13 @@ class ZigoProviderRateService
             'extended_area' => false,
             'extended_area_amount' => 0.0,
             'rate_engine' => 'legacy',
+            'is_fallback_rate' => $fallbackRate,
         ];
     }
 
     private function getLegacyEstafetaBasePrice(
         B2cCotizacion $cotizacion
-    ): float {
+    ): array {
         try {
             $data =
                 $this->buildLegacyPayload(
@@ -205,7 +206,7 @@ class ZigoProviderRateService
                 );
             }
 
-            return $basePrice;
+            return [$basePrice, false];
         } catch (Throwable $exception) {
             Log::error(
                 'ZIGO Provider Rate - '
@@ -219,7 +220,7 @@ class ZigoProviderRateService
                 ]
             );
 
-            return 395.00;
+            return [395.00, true];
         }
     }
 

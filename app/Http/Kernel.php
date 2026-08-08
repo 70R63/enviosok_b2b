@@ -77,5 +77,6 @@ class Kernel extends HttpKernel
         'tenant.auth' => \App\Http\Middleware\AuthenticateTenant::class,
         'tenant.members.manage' => \App\Http\Middleware\EnsureTenantMemberManager::class,
         'tenant.subscription' => \App\Http\Middleware\EnsureTenantSubscriptionAccess::class,
+        'tenant.entitlement' => \App\Http\Middleware\EnsureTenantEntitlement::class,
     ];
 }

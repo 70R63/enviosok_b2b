@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use App\Domain\Network\Catalog\Models\Plan;
 use App\Domain\Network\Billing\Models\{Subscription,Entitlement,UsageEvent};
+use App\Domain\Network\Channels\B2C\Models\TenantOperation;
 use Illuminate\Support\Str;
 
 class Tenant extends Model
@@ -36,6 +37,7 @@ class Tenant extends Model
     public function subscriptions(): HasMany { return $this->hasMany(Subscription::class); }
     public function entitlements(): HasMany { return $this->hasMany(Entitlement::class); }
     public function usageEvents(): HasMany { return $this->hasMany(UsageEvent::class); }
+    public function operations(): HasMany { return $this->hasMany(TenantOperation::class); }
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(\App\Models\User::class, 'network_tenant_memberships')

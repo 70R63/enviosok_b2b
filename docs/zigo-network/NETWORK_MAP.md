@@ -157,3 +157,15 @@ Usage usa eventos append-only con métrica, cantidad, fecha e idempotency key ú
 Tenant status y Subscription status son independientes. `trial`, `active`, `past_due` y `grace` operan; `canceled` opera hasta el final del periodo; `suspended` y `ended` muestran una vista segura. Esto no cambia automáticamente `Tenant.status`. Login y logout permanecen disponibles para una suscripción suspendida, mientras las vistas operativas usan `tenant.subscription`.
 
 Los cambios de estado dejan `network_subscription_events` append-only. No hay borrado de historial, proration, renovación automática, pagos, facturas ni webhooks. Un cambio de plan futuro debe terminar la Subscription actual y crear otra con un snapshot nuevo; nunca debe mutar silenciosamente el snapshot vigente.
+
+## ZN-05 Tenant-Aware B2C
+
+ZN-05 separa explícitamente **Legacy ZIGO B2C** de **Tenant B2C**. Legacy conserva sus rutas, `B2cCotizacion`, autenticación, checkout, Mercado Pago y generación de guía sin requerir `TenantContext`. Tenant B2C usa rutas nuevas (`/cotizar`, `/tracking` y `/admin/operations`) detrás de `tenant.resolve`, `tenant.subscription` y entitlements. El host verificado en `TenantDomain` es la única autoridad de ownership; ningún `tenant_id`, slug o UUID recibido por request decide el tenant.
+
+La cotización tenant crea el mismo aggregate legacy `B2cCotizacion` y delega tarifas a `ZigoProviderRateService` (Xperta, motor V2 o Estafeta habilitado) y precio final a `ZigoCommercialQuoteService`. La UI sólo recibe carrier, servicio, entrega y precio comercial final; costos provider, reglas, margen y credenciales no cruzan la frontera pública. Temporalmente se hereda la política comercial global de ZIGO con segmento `anonymous` y plan de la Subscription. Esta transición debe reemplazarse por una futura `TenantPricingPolicy` antes de ofrecer pricing individual.
+
+`network_tenant_operations` es el bridge de aislamiento y auditoría. Vincula Tenant y Subscription con un source legacy polimórfico sin agregar `tenant_id` a `b2c_cotizaciones`. Las consultas tenant siempre filtran `tenant_id`. Una cotización genera una operación `quoted`, pero no Usage contractual. Sólo la confirmación durable cambia a `confirmed` y registra `operations` mediante `UsageService` con `tenant-operation:{uuid}`; reintentos no duplican consumo.
+
+El flujo se detiene antes de checkout, pago y guía. Esas capacidades mezclan ownership por `User`, sesiones, Mercado Pago y generación provider; no se activan automáticamente hasta probar aislamiento y contrato de Usage. Tracking se expone únicamente con entitlement `TRACKING` como placeholder honesto, sin datos simulados. CRM y Driver tampoco se conectan en esta fase.
+
+Se mantiene `/white-label` como landing tenant. No se toma `/` porque la raíz legacy B2C está ligada al host configurado de ZIGO y un fallback global por host podría alterar su dispatch. El cutover seguro del root queda para ZN-05B, con pruebas explícitas de precedencia por dominio.
