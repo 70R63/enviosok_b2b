@@ -50,6 +50,16 @@ final class NetworkControlCenterTest extends TestCase
         $this->actingAs($this->user('sysadmin'));
         foreach(['/network/tenants','/network/plans','/network/modules'] as $uri)$this->get($uri)->assertOk();
     }
+    public function test_support_navigation_uses_configured_portal_host_when_host_routing_is_required(): void
+    {
+        $oldRouting=config('zigo_domains.routing_enabled');$oldPortal=config('zigo_domains.portals.support');
+        config(['zigo_domains.routing_enabled'=>true,'zigo_domains.portals.support'=>['url'=>'https://support.test','host'=>'support.test']]);
+        $url=app(NetworkMapRegistry::class)->url(app(NetworkMapRegistry::class)->node('SUPPORT'));
+        $this->assertSame('https://support.test/soporte/dashboard',$url);
+        config(['zigo_domains.portals.support'=>['url'=>null,'host'=>null]]);
+        $this->assertNull(app(NetworkMapRegistry::class)->url(app(NetworkMapRegistry::class)->node('SUPPORT')));
+        config(['zigo_domains.routing_enabled'=>$oldRouting,'zigo_domains.portals.support'=>$oldPortal]);
+    }
     private function user(string $slug): User {$u=User::forceCreate(['name'=>'Test','email'=>uniqid()."@test.local",'password'=>'secret','empresa_id'=>1]);$r=Roles::create(['name'=>$slug,'slug'=>$slug]);$u->roles()->attach($r->id);return $u;}
     private function users(Blueprint $t): void {$t->id();$t->string('name');$t->string('email')->unique();$t->string('password');$t->unsignedBigInteger('empresa_id');$t->rememberToken();$t->timestamps();}
 }

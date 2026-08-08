@@ -4,6 +4,7 @@ namespace App\Domain\Network\Map;
 
 use Illuminate\Support\Facades\Route;
 use InvalidArgumentException;
+use App\Services\ZigoPortalUrlGenerator;
 
 final class NetworkMapRegistry
 {
@@ -31,7 +32,10 @@ final class NetworkMapRegistry
     }
     public function url(array $node): ?string
     {
-        return $node['route_name'] && Route::has($node['route_name']) ? route($node['route_name']) : null;
+        if (!$node['route_name'] || !Route::has($node['route_name'])) return null;
+        return isset($node['portal'])
+            ? app(ZigoPortalUrlGenerator::class)->route($node['portal'], $node['route_name'])
+            : route($node['route_name']);
     }
     public function viewData(): array
     {
