@@ -71,5 +71,6 @@ class Kernel extends HttpKernel
         'zigo.product' => \App\Http\Middleware\EnsureApiProductAccess::class,
         'zigo.portal' => \App\Http\Middleware\EnsureZigoPortalHost::class,
         'ensure.zigo.portal' => \App\Http\Middleware\EnsureZigoPortalHost::class,
+        'network.superadmin' => \App\Http\Middleware\EnsureNetworkSuperAdmin::class,
     ];
 }
