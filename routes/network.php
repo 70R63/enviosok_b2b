@@ -10,6 +10,7 @@ use App\Http\Controllers\Network\TenantController;
 use App\Http\Controllers\Network\TenantDomainController;
 use App\Http\Controllers\Network\TenantBrandingController;
 use App\Http\Controllers\Network\TenantMembershipController as NetworkTenantMembershipController;
+use App\Http\Controllers\Network\SubscriptionController;
 use App\Http\Controllers\Tenant\TenantHomeController;
 use App\Http\Controllers\Tenant\TenantAdminController;
 use App\Http\Controllers\Tenant\TenantAuthController;
@@ -45,6 +46,10 @@ Route::middleware(['network.auth', 'network.superadmin'])
         Route::get('/tenants/{tenant}/members', [NetworkTenantMembershipController::class, 'index'])->name('tenants.members.index');
         Route::post('/tenants/{tenant}/members', [NetworkTenantMembershipController::class, 'store'])->name('tenants.members.store');
         Route::patch('/tenants/{tenant}/members/{membership}', [NetworkTenantMembershipController::class, 'update'])->name('tenants.members.update');
+        Route::get('/tenants/{tenant}/subscriptions', [SubscriptionController::class, 'index'])->name('tenants.subscriptions.index');
+        Route::post('/tenants/{tenant}/subscriptions', [SubscriptionController::class, 'store'])->name('tenants.subscriptions.store');
+        Route::patch('/tenants/{tenant}/subscriptions/{subscription}/status', [SubscriptionController::class, 'status'])->name('tenants.subscriptions.status');
+        Route::post('/tenants/{tenant}/usage', [SubscriptionController::class, 'usage'])->name('tenants.usage.store');
         Route::get('/modules', [ModuleController::class, 'index'])->name('modules.index');
         Route::get('/modules/create', [ModuleController::class, 'create'])->name('modules.create');
         Route::post('/modules', [ModuleController::class, 'store'])->name('modules.store');
@@ -58,18 +63,20 @@ Route::middleware(['network.auth', 'network.superadmin'])
         Route::match(['put','patch'],'/plans/{plan}', [PlanController::class, 'update'])->name('plans.update');
     });
 
-Route::get('/white-label', [TenantHomeController::class, 'home'])->middleware('tenant.resolve')->name('tenant.home');
+Route::get('/white-label', [TenantHomeController::class, 'home'])->middleware(['tenant.resolve','tenant.subscription'])->name('tenant.home');
 
 Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->group(function (): void {
     Route::get('/login', [TenantAuthController::class, 'create'])->name('login');
     Route::post('/login', [TenantAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
     Route::middleware('tenant.auth')->group(function (): void {
-        Route::get('/', [TenantAdminController::class, 'dashboard'])->name('dashboard');
         Route::post('/logout', [TenantAuthController::class, 'destroy'])->name('logout');
-        Route::get('/plan', [TenantAdminController::class, 'plan'])->name('plan');
-        Route::middleware('tenant.members.manage')->group(function (): void {
-            Route::get('/users', [TenantMemberController::class, 'index'])->name('users.index');
-            Route::patch('/users/{membership}', [TenantMemberController::class, 'update'])->name('users.update');
+        Route::middleware('tenant.subscription')->group(function (): void {
+            Route::get('/', [TenantAdminController::class, 'dashboard'])->name('dashboard');
+            Route::get('/plan', [TenantAdminController::class, 'plan'])->name('plan');
+            Route::middleware('tenant.members.manage')->group(function (): void {
+                Route::get('/users', [TenantMemberController::class, 'index'])->name('users.index');
+                Route::patch('/users/{membership}', [TenantMemberController::class, 'update'])->name('users.update');
+            });
         });
     });
 });

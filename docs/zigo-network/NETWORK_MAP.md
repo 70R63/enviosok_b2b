@@ -88,7 +88,8 @@ B2C y B2B son canales, no tenants.
 | ZN-01B | Launchpad + Map + Dashboard | CURRENT |
 | ZN-01C | Plan → Modules, Tenant → Plan, Construye tu ZIGO | COMPLETED |
 | ZN-02 | TenantDomain + Branding + White Label | COMPLETED |
-| ZN-03 | Tenant Admin + Memberships | CURRENT |
+| ZN-03 | Tenant Admin + Memberships | COMPLETED |
+| ZN-04 | Subscription + Entitlements + Usage Foundation | CURRENT |
 | ZN-03 | Tenant Admin + Memberships | PLANNED |
 | ZN-04 | Subscription + Entitlements | PLANNED |
 | ZN-05 | Primer canal tenant-aware | PLANNED |
@@ -144,3 +145,15 @@ Las invitaciones se difieren a ZN-03B. Cuando se incorporen deberán usar tokens
 Tres superficies pueden compartir segmentos de URL sin compartir autoridad. **ZIGO Network Admin** vive en `/network` y exige `network.auth + network.superadmin`. **Tenant Admin** vive en `/admin` sobre un `TenantDomain` verificado y exige `tenant.resolve + tenant.auth + TenantMembership`. **Legacy Internal Admin** conserva `/admin/incidencias` y `/admin/conciliacion-saldo`, pero pertenece al portal interno B2C y exige adicionalmente `zigo.portal:b2c,strict`, autenticación y roles globales.
 
 El modo `strict` mantiene la verificación exacta del host B2C incluso cuando el routing por subdominios general está desactivado para compatibilidad local. Por ello, compartir el path `/admin` nunca habilita endpoints internos desde un dominio tenant; esos intentos responden 404 antes de evaluar la sesión o el rol.
+
+## ZN-04 Subscription, Entitlements y Usage
+
+El flujo SaaS es `Tenant -> Subscription -> Plan -> Entitlement Snapshot -> Usage`. Un **Plan** es una plantilla comercial editable; una **Subscription** es la asignación histórica de ese plan para un tenant y periodo. `network_tenants.current_plan_id` permanece sólo como compatibilidad: cuando existe una Subscription vigente, `Subscription.plan_id` es la fuente preferida; sin ella, Tenant Admin puede usar el plan anterior como fallback explícito. Esta deuda debe retirarse después de migrar todos los tenants.
+
+`PlanModule` configura la plantilla, mientras `Entitlement` congela sólo módulos incluidos, código, habilitación y límite al crear la Subscription. Cambiar posteriormente el Plan no modifica el snapshot. El límite contractual `included_operations` también se congela como `Subscription.operations_limit`; no debe confundirse con Usage.
+
+Usage usa eventos append-only con métrica, cantidad, fecha e idempotency key única por tenant/métrica. `operations` es la única métrica contractual inicial; `quotes`, `shipments` y `tracking_queries` quedan catalogadas sin integración operativa. Los totales se limitan a `current_period_start..current_period_end`; se calculan remaining, percentage y over-limit, pero ZN-04 no bloquea automáticamente al exceder el límite.
+
+Tenant status y Subscription status son independientes. `trial`, `active`, `past_due` y `grace` operan; `canceled` opera hasta el final del periodo; `suspended` y `ended` muestran una vista segura. Esto no cambia automáticamente `Tenant.status`. Login y logout permanecen disponibles para una suscripción suspendida, mientras las vistas operativas usan `tenant.subscription`.
+
+Los cambios de estado dejan `network_subscription_events` append-only. No hay borrado de historial, proration, renovación automática, pagos, facturas ni webhooks. Un cambio de plan futuro debe terminar la Subscription actual y crear otra con un snapshot nuevo; nunca debe mutar silenciosamente el snapshot vigente.

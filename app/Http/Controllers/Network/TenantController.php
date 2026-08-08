@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Network\StoreTenantRequest;
 use App\Http\Requests\Network\UpdateTenantRequest;
 use App\Domain\Network\Catalog\Models\Plan;
+use App\Domain\Network\Billing\{EntitlementService,SubscriptionService,UsageService};
 class TenantController extends Controller
 {
     public function index() { return view('network.tenants.index',['tenants'=>Tenant::with('currentPlan')->latest()->paginate(20)]); }
@@ -14,7 +15,7 @@ class TenantController extends Controller
         $tenant=Tenant::create($request->validated());
         return redirect()->route('network.tenants.show',$tenant)->with('success','Tenant creado correctamente.');
     }
-    public function show(Tenant $tenant) { $tenant->load(['domains','branding','primaryDomain','currentPlan.modules'=>fn($q)=>$q->wherePivot('is_included',true)->orderBy('sort_order')])->loadCount(['memberships','memberships as active_memberships_count'=>fn($q)=>$q->where('status','active'),'memberships as owners_count'=>fn($q)=>$q->where('role','owner')->where('status','active')]); return view('network.tenants.show',compact('tenant')); }
+    public function show(Tenant $tenant,SubscriptionService $subscriptions,EntitlementService $entitlements,UsageService $usage) { $tenant->load(['domains','branding','primaryDomain','currentPlan.modules'=>fn($q)=>$q->wherePivot('is_included',true)->orderBy('sort_order')])->loadCount(['memberships','memberships as active_memberships_count'=>fn($q)=>$q->where('status','active'),'memberships as owners_count'=>fn($q)=>$q->where('role','owner')->where('status','active')]);$subscription=$subscriptions->currentForTenant($tenant);$modules=$entitlements->enabledModules($tenant);$usageSummary=$subscription?$usage->summary($tenant,'operations',$subscription):null; return view('network.tenants.show',compact('tenant','subscription','modules','usageSummary')); }
     public function edit(Tenant $tenant) { return view('network.tenants.edit',['tenant'=>$tenant,'plans'=>Plan::orderBy('name')->get()]); }
     public function update(UpdateTenantRequest $request,Tenant $tenant)
     {

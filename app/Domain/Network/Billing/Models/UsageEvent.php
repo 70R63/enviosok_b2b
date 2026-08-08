@@ -1,0 +1,4 @@
+<?php
+namespace App\Domain\Network\Billing\Models;
+use App\Domain\Network\Tenancy\Models\Tenant;use Illuminate\Database\Eloquent\Model;use Illuminate\Database\Eloquent\Relations\BelongsTo;use Illuminate\Support\Str;
+final class UsageEvent extends Model{public$timestamps=false;protected$table='network_usage_events';protected$fillable=['tenant_id','subscription_id','metric','quantity','reference_type','reference_id','idempotency_key','occurred_at','metadata'];protected$casts=['quantity'=>'integer','occurred_at'=>'datetime','metadata'=>'array','created_at'=>'datetime'];protected static function booted():void{static::creating(function(self$e):void{$e->uuid??=(string)Str::uuid();$e->created_at??=now();});}public function tenant():BelongsTo{return$this->belongsTo(Tenant::class);}public function subscription():BelongsTo{return$this->belongsTo(Subscription::class);}}

@@ -5,11 +5,13 @@ use App\Domain\Network\Catalog\Models\Plan;
 use App\Domain\Network\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
 use App\Domain\Network\Map\NetworkMapRegistry;
+use App\Domain\Network\Billing\Models\Subscription;
+use Illuminate\Support\Facades\Schema;
 class NetworkDashboardController extends Controller
 {
     public function __invoke(NetworkMapRegistry $registry)
     {
-        return view('network.dashboard', [
+        $subscriptionCounts=array_fill_keys(Subscription::STATUSES,0);if(Schema::hasTable('network_subscriptions'))$subscriptionCounts=array_merge($subscriptionCounts,Subscription::selectRaw('status, count(*) as total')->groupBy('status')->pluck('total','status')->all());return view('network.dashboard', [
             'activeTenants' => Tenant::where('status','active')->count(),
             'activePlans' => Plan::where('status','active')->count(),
             'activeModules' => Module::where('is_active',true)->count(),
@@ -18,6 +20,7 @@ class NetworkDashboardController extends Controller
             'tenants' => Tenant::with(['currentPlan.modules'=>fn($q)=>$q->wherePivot('is_included',true)])->latest()->limit(10)->get(),
             'statusCounts' => $registry->counts(),
             'statuses' => $registry->statuses(),
+            'subscriptionCounts'=>$subscriptionCounts,
         ]);
     }
 }

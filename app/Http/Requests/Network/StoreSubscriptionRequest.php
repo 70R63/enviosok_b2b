@@ -1,0 +1,4 @@
+<?php
+namespace App\Http\Requests\Network;
+use App\Domain\Network\Billing\Models\Subscription;use Illuminate\Foundation\Http\FormRequest;use Illuminate\Validation\Rule;
+final class StoreSubscriptionRequest extends FormRequest{public function authorize():bool{return true;}public function rules():array{return['plan_id'=>['required','integer',Rule::exists('network_plans','id')->where('status','active')],'status'=>['required',Rule::in(Subscription::STATUSES)],'started_at'=>['required','date'],'current_period_start'=>['required','date','after_or_equal:started_at'],'current_period_end'=>['required','date','after:current_period_start'],'trial_ends_at'=>['nullable','date','after_or_equal:started_at','before_or_equal:current_period_end'],'grace_ends_at'=>['nullable','date','after_or_equal:current_period_end']];}}

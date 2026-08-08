@@ -9,7 +9,7 @@ $node = static fn (string $code, string $label, string $group, string $status, s
 ], $extra);
 
 return [
-    'version' => 'ZN-03',
+    'version' => 'ZN-04',
     'statuses' => [
         'live' => ['label' => 'LIVE', 'description' => 'Funcional actualmente.'],
         'partial' => ['label' => 'PARTIAL', 'description' => 'Funcionalidad real, aún incompleta para Network.'],
@@ -31,6 +31,9 @@ return [
         $node('WHITE_LABEL','White Label','CHANNELS','partial','fas fa-paint-brush','Shell visual tenant con preview interno.', ['current_capabilities'=>['Preview de branding, plan y módulos'],'future_capabilities'=>['B2C/B2B tenant-aware']]),
         $node('TENANT_MEMBERSHIPS','Tenant Memberships','CONTROL','live','fas fa-user-shield','Relación multi-tenant entre usuarios globales y roles de tenant.', ['current_capabilities'=>['Roles owner/admin/operator/support/billing/viewer','Suspensión de acceso','Aislamiento por tenant'],'future_capabilities'=>['Invitaciones y permisos granulares']]),
         $node('TENANT_ADMIN','Tenant Admin','CHANNELS','partial','fas fa-user-cog','Consola administrativa resuelta por el host de cada tenant.', ['current_capabilities'=>['Login tenant','Dashboard','Mi plan','Gestión de usuarios'],'future_capabilities'=>['Operación tenant-aware','Usage y billing']]),
+        $node('SUBSCRIPTION','Subscriptions','FINANCE','live','fas fa-file-contract','Historial contractual por tenant y periodo.', ['current_capabilities'=>['Estados SaaS','Periodos','Auditoría','Plan snapshot'],'future_capabilities'=>['Renovación y proveedor de pago']]),
+        $node('ENTITLEMENTS','Entitlements','CONTROL','live','fas fa-key','Snapshot inmutable de capacidades habilitadas por suscripción.', ['current_capabilities'=>['Snapshot desde PlanModule','Límites y overrides preparados'],'future_capabilities'=>['Enforcement runtime']]),
+        $node('USAGE','Usage','FINANCE','live','fas fa-tachometer-alt','Eventos inmutables e idempotentes de consumo contractual.', ['current_capabilities'=>['Métrica operations','Agregación por periodo','Remaining y over-limit'],'future_capabilities'=>['Integración B2C/Shipping']]),
         $node('B2C','Canal B2C','CHANNELS','partial','fas fa-user','Cotización, compra y autoservicio para consumidor.', ['commercial_module_code'=>'B2C','route_name'=>'b2c.dashboard','current_capabilities'=>['Cotización','Pagos','Guías','Tracking'],'future_capabilities'=>['Tenant-aware y white label']]),
         $node('B2B','Canal B2B','CHANNELS','partial','fas fa-briefcase','Portal operativo para clientes empresa.', ['commercial_module_code'=>'B2B','route_name'=>'negocios.dashboard','current_capabilities'=>['Portal autenticado'],'future_capabilities'=>['B2B V2 multi-tenant']]),
         $node('CRM','CRM','BUSINESS','live','fas fa-address-book','Operación comercial y administrativa.', ['commercial_module_code'=>'CRM','route_name'=>'crm.dashboard','current_capabilities'=>['Clientes','Empresas','Pricing','Operación'],'future_capabilities'=>['Integración tenant y AI']]),
@@ -72,6 +75,7 @@ return [
         ['from'=>'TENANTS','to'=>'PLANS','status'=>'current'],['from'=>'PLANS','to'=>'MODULES','status'=>'current'],['from'=>'MODULES','to'=>'NETWORK_CORE','status'=>'current'],
         ['from'=>'TENANTS','to'=>'TENANT_DOMAIN','status'=>'current'],['from'=>'TENANT_DOMAIN','to'=>'TENANT_CONTEXT','status'=>'current'],['from'=>'TENANT_CONTEXT','to'=>'WHITE_LABEL','status'=>'current'],['from'=>'TENANT_BRANDING','to'=>'WHITE_LABEL','status'=>'current'],['from'=>'MODULES','to'=>'WHITE_LABEL','status'=>'current'],
         ['from'=>'TENANTS','to'=>'TENANT_MEMBERSHIPS','status'=>'current'],['from'=>'TENANT_MEMBERSHIPS','to'=>'TENANT_ADMIN','status'=>'current'],['from'=>'TENANT_CONTEXT','to'=>'TENANT_ADMIN','status'=>'current'],
+        ['from'=>'TENANTS','to'=>'SUBSCRIPTION','status'=>'current'],['from'=>'PLANS','to'=>'SUBSCRIPTION','status'=>'current'],['from'=>'SUBSCRIPTION','to'=>'ENTITLEMENTS','status'=>'current'],['from'=>'MODULES','to'=>'ENTITLEMENTS','status'=>'current'],['from'=>'SUBSCRIPTION','to'=>'USAGE','status'=>'current'],['from'=>'BILLING_SAAS','to'=>'SUBSCRIPTION','status'=>'future'],
         ['from'=>'NETWORK_CORE','to'=>'B2C','status'=>'current'],['from'=>'NETWORK_CORE','to'=>'B2B','status'=>'current'],['from'=>'NETWORK_CORE','to'=>'CRM','status'=>'current'],['from'=>'NETWORK_CORE','to'=>'API','status'=>'current'],
         ['from'=>'B2C','to'=>'SHIPPING','status'=>'current'],['from'=>'B2B','to'=>'SHIPPING','status'=>'current'],['from'=>'SHIPPING','to'=>'XPERTA','status'=>'current'],['from'=>'SHIPPING','to'=>'ESTAFETA','status'=>'current'],['from'=>'SHIPPING','to'=>'TRACKING','status'=>'current'],
         ['from'=>'NETWORK_CORE','to'=>'SUPPORT','status'=>'current'],['from'=>'NETWORK_CORE','to'=>'INVOICING','status'=>'current'],['from'=>'NETWORK_CORE','to'=>'DEVOPS','status'=>'current'],

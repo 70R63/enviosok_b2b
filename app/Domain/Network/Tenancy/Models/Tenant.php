@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use App\Domain\Network\Catalog\Models\Plan;
+use App\Domain\Network\Billing\Models\{Subscription,Entitlement,UsageEvent};
 use Illuminate\Support\Str;
 
 class Tenant extends Model
@@ -32,6 +33,9 @@ class Tenant extends Model
     public function branding(): HasOne { return $this->hasOne(TenantBranding::class); }
     public function primaryDomain(): HasOne { return $this->hasOne(TenantDomain::class)->where('is_primary',true)->where('status','verified'); }
     public function memberships(): HasMany { return $this->hasMany(TenantMembership::class); }
+    public function subscriptions(): HasMany { return $this->hasMany(Subscription::class); }
+    public function entitlements(): HasMany { return $this->hasMany(Entitlement::class); }
+    public function usageEvents(): HasMany { return $this->hasMany(UsageEvent::class); }
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(\App\Models\User::class, 'network_tenant_memberships')

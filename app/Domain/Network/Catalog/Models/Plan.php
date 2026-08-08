@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Domain\Network\Tenancy\Models\Tenant;
+use App\Domain\Network\Billing\Models\Subscription;
 use Illuminate\Support\Str;
 
 class Plan extends Model
@@ -47,4 +48,5 @@ class Plan extends Model
     {
         return $this->hasMany(Tenant::class, 'current_plan_id');
     }
+    public function subscriptions(): HasMany { return $this->hasMany(Subscription::class); }
 }

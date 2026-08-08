@@ -1,0 +1,2 @@
+@extends('tenant.layout')
+@section('content')<section class="hero"><div class="eyebrow">ESTADO DEL SERVICIO</div><h1>Servicio temporalmente no disponible</h1><p>La operación de este espacio está temporalmente limitada. Contacta al equipo de soporte de {{ $tenant->branding?->brand_name??$tenant->name }} para recibir asistencia.</p><p class="notice">No se muestran detalles financieros ni información interna.</p></section>@endsection
