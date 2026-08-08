@@ -6,6 +6,8 @@ use App\Domain\Network\Billing\Models\Subscription;
 use App\Domain\Network\Tenancy\Models\Tenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use App\Domain\Shipping\Local\Models\LocalShipment;
 use Illuminate\Support\Str;
 
 final class TenantOperation extends Model
@@ -23,4 +25,5 @@ final class TenantOperation extends Model
 
     public function tenant(): BelongsTo { return $this->belongsTo(Tenant::class); }
     public function subscription(): BelongsTo { return $this->belongsTo(Subscription::class); }
+    public function localShipment(): HasOne { return $this->hasOne(LocalShipment::class, 'tenant_operation_id'); }
 }

@@ -43,7 +43,8 @@ final class NetworkControlCenterTest extends TestCase
         foreach(['ZIGO_AI','AI_CONVERSATIONAL','AI_VISION','WHATSAPP','WEBCHAT','BOT_BUILDER','HUMAN_HANDOFF','ADDRESS_OCR','DOCUMENT_AI'] as $code)$this->assertSame('planned',$registry->node($code)['implementation_status']);
         $this->assertSame('experimental',$registry->node('DIMENSION_AI')['implementation_status']);
         $this->assertSame(count($nodes),array_sum($registry->counts()));
-        $planned=$registry->node('ZIGO_LOCAL');$this->assertNull($registry->url($planned));
+        $local=$registry->node('ZIGO_LOCAL');$this->assertSame('partial',$local['implementation_status']);$this->assertStringEndsWith('/network/local-shipping',$registry->url($local));
+        foreach(['LOCAL_SHIPMENT','LOCAL_GUIDE','LOCAL_TRACKING'] as $code)$this->assertContains($code,$codes);
     }
     public function test_existing_network_catalog_routes_remain_available(): void
     {

@@ -60,7 +60,7 @@ Plataforma externa o futura integración; no módulo propio actual.
 Futuro: recepción, inventario, fulfillment, preparación, despacho y cross docking.
 
 ## ZIGO Local
-Proveedor futuro de última milla conectado a Driver, POD y GPS.
+Proveedor propio en foundation: cobertura por zonas/CP, catálogo de servicios, cotización, shipment, guía y tracking básico. Driver, POD y GPS siguen planeados.
 
 ## Proveedores
 Xperta tiene integración real. Estafeta tiene auth, guía, rastreo y pricing local; auditorías señalan coverage/quote moderno incompleto, por eso es PARTIAL.
@@ -92,8 +92,8 @@ B2C y B2B son canales, no tenants.
 | ZN-04 | Subscription + Entitlements + Usage Foundation | CURRENT |
 | ZN-03 | Tenant Admin + Memberships | PLANNED |
 | ZN-04 | Subscription + Entitlements | PLANNED |
-| ZN-05 | Primer canal tenant-aware | PLANNED |
-| ZN-06 | ZIGO Local | PLANNED |
+| ZN-05 | Primer canal tenant-aware | COMPLETED |
+| ZN-06 | ZIGO Local | CURRENT |
 | ZN-07 | Driver + Tracking + POD | PLANNED |
 | ZN-08 | Billing SaaS | PLANNED |
 | ZN-09 | B2B V2 Multi-Tenant | PLANNED |
@@ -169,3 +169,15 @@ La cotización tenant crea el mismo aggregate legacy `B2cCotizacion` y delega ta
 El flujo se detiene antes de checkout, pago y guía. Esas capacidades mezclan ownership por `User`, sesiones, Mercado Pago y generación provider; no se activan automáticamente hasta probar aislamiento y contrato de Usage. Tracking se expone únicamente con entitlement `TRACKING` como placeholder honesto, sin datos simulados. CRM y Driver tampoco se conectan en esta fase.
 
 Se mantiene `/white-label` como landing tenant. No se toma `/` porque la raíz legacy B2C está ligada al host configurado de ZIGO y un fallback global por host podría alterar su dispatch. El cutover seguro del root queda para ZN-05B, con pruebas explícitas de precedencia por dominio.
+
+## ZN-06 ZIGO Local Shipping
+
+`ZIGO_LOCAL` es una capacidad logística de plataforma y no el nombre comercial del tenant. El nombre público por defecto es **ZIGO Local** y puede configurarse; RapidGo Local permanece exclusivamente como branding del tenant. El bounded context `App\Domain\Shipping\Local` está separado de Xperta, Estafeta y B2C legacy.
+
+La cobertura se configura en Network mediante zonas y códigos postales validados con `ZigoPostalCodeService`. Los servicios enlazan zona origen/destino, nivel, límites y un precio fijo inicial. `base_cost` y `base_price` se almacenan separados; sólo Network ve costo operativo y el contrato público devuelve provider, servicio, estimado y precio final. No se crean zonas ni tarifas automáticamente.
+
+Una `TenantOperation` confirmada y contabilizada representa el contrato; un `LocalShipment` representa su ejecución física. La relación es única e idempotente, siempre verifica el mismo `tenant_id` y crear la guía no vuelve a registrar Usage. El tracking público usa un identificador `ZL + fecha + random` con restricción única, no el id incremental.
+
+El shipment congela remitente, destinatario, paquete, pricing y un snapshot de guía/branding para reconstrucción independiente de datos mutables. La etiqueta propia 4×6 se genera con TCPDF, Code 128 y un QR que contiene únicamente `https://<tenant-host>/tracking/<tracking>`. No reproduce diseños de carriers ni incluye secretos o costos.
+
+Los eventos de tracking son append-only y parten de `CREATED`; la máquina de estados admite `READY_FOR_PICKUP`, `PICKED_UP`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`, `DELIVERY_FAILED` y `CANCELED`. ZN-07 agregará asignación Driver, pickup, POD, evidencia, firma, fotografía y geolocalización sin mover esos artefactos al shipment ni sobrescribir su timeline.

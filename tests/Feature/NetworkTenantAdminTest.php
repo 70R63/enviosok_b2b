@@ -10,9 +10,11 @@ use App\Models\Roles\Roles;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Tests\Support\WhiteLabelTestSchema;
 use Tests\TestCase;
 
@@ -89,8 +91,83 @@ final class NetworkTenantAdminTest extends TestCase
         $tenant->update(['current_plan_id' => $plan->id]);
         $this->actingAs($user);
         $this->get($this->url($tenant, '/admin'))->assertOk()->assertSee('RapidGo Local')->assertSee('Tracking')->assertDontSee('Commerce');
-        $this->get($this->url($tenant, '/admin/plan'))->assertOk()->assertSee('SÓLO LECTURA')->assertSee('Tracking')->assertDontSee('Commerce');
+        $this->get($this->url($tenant, '/admin/plan'))->assertOk()->assertSee('SÓLO LECTURA')->assertSee('Tracking')->assertSee('compra y activación inmediata')->assertDontSee('Commerce');
         $this->assertFalse(collect(app('router')->getRoutes()->getRoutesByName())->has('tenant.admin.plan.update'));
+    }
+
+    public function test_configuration_page_is_tenant_scoped_and_navigation_has_no_dead_links(): void
+    {
+        [$tenant, $owner] = $this->tenantOwner('configuration');
+        $response = $this->actingAs($owner)->get($this->url($tenant, '/admin/configuracion'))
+            ->assertOk()->assertSee('configuration.zigo.local')->assertSee('PRODUCTION')->assertSee('VERIFIED')
+            ->assertSee('https://configuration.zigo.local/white-label', false)
+            ->assertDontSee('href="#"', false);
+        foreach (['tenant.admin.dashboard', 'tenant.admin.operations.index', 'tenant.admin.users.index', 'tenant.admin.plan', 'tenant.admin.configuration.edit'] as $route) {
+            $this->assertNotNull(app('router')->getRoutes()->getByName($route));
+        }
+        $response->assertSee('class="active" href="'.route('tenant.admin.configuration.edit').'"', false);
+    }
+
+    public function test_owner_and_admin_can_update_only_current_tenant_branding_with_safe_uploads(): void
+    {
+        Storage::fake('public');
+        [$tenant, $owner] = $this->tenantOwner('branding-owner');
+        $admin = $this->user('branding-admin@test.local');
+        $tenant->memberships()->create(['user_id' => $admin->id, 'role' => 'admin', 'status' => 'active']);
+        $this->actingAs($owner)->patch($this->url($tenant, '/admin/configuracion'), [
+            'brand_name' => 'Owner Brand', 'primary_color' => '#112233', 'logo' => UploadedFile::fake()->image('customer-logo.png')->size(100),
+        ])->assertRedirect();
+        $branding = $tenant->fresh()->branding;
+        $this->assertSame('Owner Brand', $branding->brand_name);
+        $this->assertStringStartsWith('tenant-branding/'.$tenant->uuid.'/', $branding->logo_path);
+        $this->assertStringNotContainsString('customer-logo', $branding->logo_path);
+        Storage::disk('public')->assertExists($branding->logo_path);
+
+        $this->actingAs($admin)->patch($this->url($tenant, '/admin/configuracion'), [
+            'brand_name' => 'Admin Brand', 'secondary_color' => '#445566', 'accent_color' => '#778899', 'support_email' => 'support@example.test', 'support_phone' => '8112345678',
+            'favicon' => UploadedFile::fake()->image('favicon.webp')->size(50),
+        ])->assertRedirect();
+        $this->assertSame('Admin Brand', $tenant->fresh()->branding->brand_name);
+        Storage::disk('public')->assertExists($tenant->fresh()->branding->favicon_path);
+    }
+
+    public function test_operator_and_viewer_cannot_update_configuration(): void
+    {
+        $tenant = $this->tenantWithDomain('branding-readonly');
+        foreach (['operator', 'viewer'] as $role) {
+            $user = $this->user($role.'-branding@test.local');
+            $tenant->memberships()->create(['user_id' => $user->id, 'role' => $role, 'status' => 'active']);
+            $this->actingAs($user)->get($this->url($tenant, '/admin/configuracion'))->assertOk()->assertSee('Sólo owners y admins activos');
+            $this->patch($this->url($tenant, '/admin/configuracion'), ['brand_name' => 'Forbidden'])->assertForbidden();
+        }
+        $this->assertNull($tenant->fresh()->branding);
+    }
+
+    public function test_configuration_rejects_invalid_colors_svg_and_non_images(): void
+    {
+        Storage::fake('public');
+        [$tenant, $owner] = $this->tenantOwner('branding-validation');
+        $this->actingAs($owner)->patch($this->url($tenant, '/admin/configuracion'), [
+            'primary_color' => 'red', 'secondary_color' => '#12345G', 'accent_color' => 'javascript:red',
+            'logo' => UploadedFile::fake()->create('logo.svg', 10, 'image/svg+xml'),
+            'favicon' => UploadedFile::fake()->create('favicon.txt', 10, 'text/plain'),
+        ])->assertSessionHasErrors(['primary_color', 'secondary_color', 'accent_color', 'logo', 'favicon']);
+        $this->assertNull($tenant->fresh()->branding);
+    }
+
+    public function test_configuration_cannot_change_domain_or_another_tenant_branding(): void
+    {
+        [$a, $owner] = $this->tenantOwner('scope-a');
+        $b = $this->tenantWithDomain('scope-b');
+        $originalDomain = $a->primaryDomain()->first()->domain;
+        $this->actingAs($owner)->patch($this->url($a, '/admin/configuracion'), [
+            'brand_name' => 'Scoped A', 'tenant_id' => $b->id, 'domain' => 'attacker.test', 'environment' => 'sandbox', 'status' => 'disabled', 'is_primary' => false,
+        ])->assertRedirect();
+        $this->assertSame('Scoped A', $a->fresh()->branding->brand_name);
+        $this->assertNull($b->fresh()->branding);
+        $this->assertSame($originalDomain, $a->fresh()->primaryDomain()->first()->domain);
+        $this->assertSame('production', $a->fresh()->primaryDomain()->first()->environment);
+        $this->assertSame('verified', $a->fresh()->primaryDomain()->first()->status);
     }
 
     public function test_owner_manages_members_but_last_active_owner_is_preserved(): void
@@ -186,6 +263,7 @@ final class NetworkTenantAdminTest extends TestCase
         $tenant = $this->tenantWithDomain($slug);
         $user = $this->user($slug.'@test.local');
         $tenant->memberships()->create(['user_id' => $user->id, 'role' => 'owner', 'status' => 'active']);
+
         return [$tenant, $user];
     }
 
@@ -193,30 +271,107 @@ final class NetworkTenantAdminTest extends TestCase
     {
         $tenant = $this->tenant($slug);
         $tenant->domains()->create(['domain' => $slug.'.zigo.local', 'type' => 'subdomain', 'environment' => 'production', 'is_primary' => true, 'status' => 'verified', 'verified_at' => now()]);
+
         return $tenant;
     }
 
-    private function tenant(string $slug): Tenant { return Tenant::create(['name' => ucfirst($slug), 'slug' => $slug, 'status' => 'active']); }
-    private function module(string $code, string $name): Module { return Module::create(['code' => $code, 'name' => $name, 'type' => 'addon', 'is_active' => true, 'sort_order' => 1]); }
+    private function tenant(string $slug): Tenant
+    {
+        return Tenant::create(['name' => ucfirst($slug), 'slug' => $slug, 'status' => 'active']);
+    }
+
+    private function module(string $code, string $name): Module
+    {
+        return Module::create(['code' => $code, 'name' => $name, 'type' => 'addon', 'is_active' => true, 'sort_order' => 1]);
+    }
+
     private function user(string $email, ?string $globalRole = null): User
     {
         $user = User::forceCreate(['name' => 'Test User', 'email' => $email, 'password' => Hash::make('tenant-secret'), 'empresa_id' => 1]);
-        if ($globalRole) { $role = Roles::create(['name' => $globalRole, 'slug' => $globalRole]); $user->roles()->attach($role->id); }
+        if ($globalRole) {
+            $role = Roles::create(['name' => $globalRole, 'slug' => $globalRole]);
+            $user->roles()->attach($role->id);
+        }
+
         return $user;
     }
 
     private function schema(): void
     {
-        foreach (['b2c_cotizaciones','network_tenant_memberships','network_tenant_brandings','network_tenant_domains','network_plan_modules','network_tenants','network_plans','network_modules','users_roles','roles','users'] as $table) Schema::dropIfExists($table);
-        Schema::create('users', function (Blueprint $t): void { $t->id(); $t->string('name'); $t->string('email')->unique(); $t->string('password'); $t->unsignedBigInteger('empresa_id'); $t->rememberToken(); $t->timestamps(); });
-        Schema::create('roles', function (Blueprint $t): void { $t->id(); $t->string('name'); $t->string('slug'); $t->timestamps(); });
-        Schema::create('users_roles', function (Blueprint $t): void { $t->unsignedBigInteger('user_id'); $t->unsignedBigInteger('roles_id'); });
-        Schema::create('network_modules', function (Blueprint $t): void { $t->id(); $t->string('code')->unique(); $t->string('name'); $t->text('description')->nullable(); $t->string('type'); $t->boolean('is_active'); $t->unsignedSmallInteger('sort_order'); $t->timestamps(); });
-        Schema::create('network_plans', function (Blueprint $t): void { $t->id(); $t->string('code')->unique(); $t->string('name'); $t->text('description')->nullable(); $t->string('status'); $t->decimal('monthly_price',12,2)->nullable(); $t->decimal('annual_price',12,2)->nullable(); $t->char('currency',3); $t->unsignedInteger('included_operations')->nullable(); $t->timestamps(); });
-        Schema::create('network_tenants', function (Blueprint $t): void { $t->id(); $t->uuid('uuid')->unique(); $t->string('name'); $t->string('slug')->unique(); $t->string('status'); $t->unsignedBigInteger('current_plan_id')->nullable(); $t->timestamps(); });
-        Schema::create('network_plan_modules', function (Blueprint $t): void { $t->id(); $t->unsignedBigInteger('plan_id'); $t->unsignedBigInteger('module_id'); $t->boolean('is_included'); $t->unsignedInteger('limit_value')->nullable(); $t->timestamps(); $t->unique(['plan_id','module_id']); });
+        foreach (['b2c_cotizaciones', 'network_tenant_memberships', 'network_tenant_brandings', 'network_tenant_domains', 'network_plan_modules', 'network_tenants', 'network_plans', 'network_modules', 'users_roles', 'roles', 'users'] as $table) {
+            Schema::dropIfExists($table);
+        }
+        Schema::create('users', function (Blueprint $t): void {
+            $t->id();
+            $t->string('name');
+            $t->string('email')->unique();
+            $t->string('password');
+            $t->unsignedBigInteger('empresa_id');
+            $t->rememberToken();
+            $t->timestamps();
+        });
+        Schema::create('roles', function (Blueprint $t): void {
+            $t->id();
+            $t->string('name');
+            $t->string('slug');
+            $t->timestamps();
+        });
+        Schema::create('users_roles', function (Blueprint $t): void {
+            $t->unsignedBigInteger('user_id');
+            $t->unsignedBigInteger('roles_id');
+        });
+        Schema::create('network_modules', function (Blueprint $t): void {
+            $t->id();
+            $t->string('code')->unique();
+            $t->string('name');
+            $t->text('description')->nullable();
+            $t->string('type');
+            $t->boolean('is_active');
+            $t->unsignedSmallInteger('sort_order');
+            $t->timestamps();
+        });
+        Schema::create('network_plans', function (Blueprint $t): void {
+            $t->id();
+            $t->string('code')->unique();
+            $t->string('name');
+            $t->text('description')->nullable();
+            $t->string('status');
+            $t->decimal('monthly_price', 12, 2)->nullable();
+            $t->decimal('annual_price', 12, 2)->nullable();
+            $t->char('currency', 3);
+            $t->unsignedInteger('included_operations')->nullable();
+            $t->timestamps();
+        });
+        Schema::create('network_tenants', function (Blueprint $t): void {
+            $t->id();
+            $t->uuid('uuid')->unique();
+            $t->string('name');
+            $t->string('slug')->unique();
+            $t->string('status');
+            $t->unsignedBigInteger('current_plan_id')->nullable();
+            $t->timestamps();
+        });
+        Schema::create('network_plan_modules', function (Blueprint $t): void {
+            $t->id();
+            $t->unsignedBigInteger('plan_id');
+            $t->unsignedBigInteger('module_id');
+            $t->boolean('is_included');
+            $t->unsignedInteger('limit_value')->nullable();
+            $t->timestamps();
+            $t->unique(['plan_id', 'module_id']);
+        });
         WhiteLabelTestSchema::create();
-        Schema::create('network_tenant_memberships', function (Blueprint $t): void { $t->id(); $t->unsignedBigInteger('tenant_id'); $t->unsignedBigInteger('user_id'); $t->string('role'); $t->string('status'); $t->timestamps(); $t->unique(['tenant_id','user_id']); });
-        Schema::create('b2c_cotizaciones', function (Blueprint $t): void { $t->id(); });
+        Schema::create('network_tenant_memberships', function (Blueprint $t): void {
+            $t->id();
+            $t->unsignedBigInteger('tenant_id');
+            $t->unsignedBigInteger('user_id');
+            $t->string('role');
+            $t->string('status');
+            $t->timestamps();
+            $t->unique(['tenant_id', 'user_id']);
+        });
+        Schema::create('b2c_cotizaciones', function (Blueprint $t): void {
+            $t->id();
+        });
     }
 }

@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers\Tenant;
 
-use App\Domain\Network\Channels\B2C\TenantB2cQuoteService;
 use App\Domain\Network\Channels\B2C\Exceptions\TenantQuoteUnavailableException;
+use App\Domain\Network\Channels\B2C\TenantB2cQuoteService;
 use App\Domain\Network\Tenancy\TenantContext;
+use App\Domain\Shipping\Local\Models\LocalShipment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
@@ -39,5 +40,22 @@ final class TenantB2cController extends Controller
     public function tracking(TenantContext $context)
     {
         return view('tenant.b2c.tracking', ['tenant' => $context->tenant()->load('branding')]);
+    }
+
+    public function track(string $tracking, TenantContext $context)
+    {
+        $shipment = LocalShipment::with('events')->where('tenant_id', $context->tenant()->id)->where('tracking_number', $tracking)->firstOrFail();
+
+        return view('tenant.b2c.tracking-result', [
+            'tenant' => $context->tenant()->load('branding'),
+            'trackingResult' => [
+                'tracking_number' => $shipment->tracking_number,
+                'status' => $shipment->status,
+                'events' => $shipment->events->map(fn ($event) => [
+                    'status' => $event->status,
+                    'occurred_at' => $event->occurred_at,
+                ]),
+            ],
+        ]);
     }
 }

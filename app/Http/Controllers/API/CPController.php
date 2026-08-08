@@ -2,57 +2,28 @@
 
 namespace App\Http\Controllers\API;
 
-use App\Http\Controllers\API\ApiController;
+use App\Services\ZigoPostalCodeService;
 use Illuminate\Http\Request;
-use App\Http\Requests\StoreCPRequest;
-use App\Http\Requests\UpdateCPRequest;
-use App\Models\CP;
 
-use Log;
-
-class CPController extends ApiController
+final class CPController extends ApiController
 {
-    /**
-     * Muestr a una lista de colonias basado en el CP.
-     *
-     * @return \Illuminate\Http\Response
-     */
-    public function colonias(Request $request)
+    public function colonias(Request $request, ZigoPostalCodeService $postalCodes)
     {
-        Log::info(__CLASS__." ".__FUNCTION__." INICIANDO-----------------");
-        Log::debug(print_r($request->all(),true));
-        try {
-            $resultado = CP::where('d_codigo', 'like', $request['cp'].'%')
-                    ->get();
-
-            Log::debug(print_r($resultado->toArray(),true));
-
-            Log::info(__CLASS__." ".__FUNCTION__." FINALIZANDO-----------------");
-            $mensaje = "ok";
-            return $this->successResponse($resultado, $mensaje);    
-
-        } catch (\InvalidArgumentException $ex) {
-            Log::debug($ex );
-            $mensaje = $ex->getMessage();
-
-        } catch (\ErrorException $ex) {
-            Log::info(__CLASS__." ".__FUNCTION__." ErrorException");
-            Log::debug(print_r($ex,true));
-            
-            $mensaje =$ex->getMessage();
-
-        } catch (\HttpException $ex) {
-            Log::info(__CLASS__." ".__FUNCTION__." HttpException");
-            $resultado = $ex;
-            $mensaje = $ex->getMessage();
-        } catch (\Exception $e) {
-            Log::info(__CLASS__." ".__FUNCTION__." Exception");
-            Log::debug(print_r($e->getMessage(),true ));
-           $mensaje = $e->getMessage();
+        $result = $postalCodes->lookup((string) $request->query('cp'));
+        if (! ($result['success'] ?? false)) {
+            return $this->sendError('Postal code lookup failed', $result['message'], (string) $result['status']);
         }
-        Log::info(__CLASS__." ".__FUNCTION__." FINALIZANDO-----------------");
-        return $this->sendError("Exception",$mensaje, "400");
-    }
 
-    
+        $data = collect($result['colonias'])->map(fn (array $colonia) => [
+            'd_codigo' => $result['codigo_postal'],
+            'd_asenta' => $colonia['nombre'],
+            'd_tipo_asenta' => $colonia['tipo_asentamiento'],
+            'd_mnpio' => $result['municipio'],
+            'd_estado' => $result['estado'],
+            'd_ciudad' => $result['ciudad'],
+            'd_zona' => $colonia['zona'],
+        ])->values();
+
+        return $this->successResponse($data, 'ok');
+    }
 }

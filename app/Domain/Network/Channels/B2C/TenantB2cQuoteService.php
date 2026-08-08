@@ -9,11 +9,12 @@ use App\Domain\Network\Tenancy\Models\Tenant;
 use App\Models\B2cCotizacion;
 use App\Services\ZigoCommercialQuoteService;
 use App\Services\ZigoProviderRateService;
+use App\Domain\Shipping\Local\LocalQuoteService;
 use Illuminate\Support\Facades\DB;
 
 final class TenantB2cQuoteService
 {
-    public function __construct(private ZigoProviderRateService $providers, private ZigoCommercialQuoteService $commercial, private SubscriptionService $subscriptions) {}
+    public function __construct(private ZigoProviderRateService $providers, private ZigoCommercialQuoteService $commercial, private SubscriptionService $subscriptions, private LocalQuoteService $localQuotes) {}
 
     public function quote(Tenant $tenant, array $data): array
     {
@@ -44,6 +45,12 @@ final class TenantB2cQuoteService
                 ];
             }
 
+            $publicOptions = array_merge($publicOptions, $this->localQuotes->quote([
+                'cp_origen' => $data['cp_origen'], 'cp_destino' => $data['cp_destino'],
+                'weight' => $weight, 'length' => $data['length'] ?? null,
+                'width' => $data['width'] ?? null, 'height' => $data['height'] ?? null,
+            ]));
+
             if ($publicOptions === []) {
                 throw TenantQuoteUnavailableException::noCommercialRates();
             }
@@ -55,7 +62,7 @@ final class TenantB2cQuoteService
                 'source_type' => B2cCotizacion::class, 'source_id' => $quote->id,
                 'provider' => $publicOptions[0]['provider'] ?? null,
                 'service_code' => $publicOptions[0]['service_code'] ?? null,
-                'metadata' => ['origin_postal_code' => $data['cp_origen'], 'destination_postal_code' => $data['cp_destino'], 'package_type' => $data['tipo_envio']],
+                'metadata' => ['origin_postal_code' => $data['cp_origen'], 'destination_postal_code' => $data['cp_destino'], 'package_type' => $data['tipo_envio'], 'final_price' => $publicOptions[0]['price'], 'currency' => 'MXN'],
             ]);
 
             return ['operation' => $operation, 'options' => $publicOptions];

@@ -923,11 +923,11 @@ Route::middleware(['auth', 'roles:sysadmin,admin,adminops,cliente'])
 // RUTAS PÚBLICAS / UTILIDADES B2C
 // ===============================
 Route::get('/postal-code/lookup/{codigoPostal}', [PostalCodeLookupController::class, 'show'])
-    ->middleware('throttle:60,1')
+    ->middleware(['zigo.portal:b2c', 'throttle:60,1'])
     ->name('postal-code.lookup');
 
 Route::get('/b2c/cp/colonias', [PostalCodeLookupController::class, 'colonias'])
-    ->middleware('throttle:60,1')
+    ->middleware(['zigo.portal:b2c', 'throttle:60,1'])
     ->name('b2c.cp.colonias');
 
 Route::view('/nosotros', 'public.nosotros')->name('public.nosotros');
