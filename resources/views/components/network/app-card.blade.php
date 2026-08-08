@@ -1,0 +1,2 @@
+@props(['node'])
+<article class="card app-card" data-search="{{ strtolower($node['label'].' '.$node['code'].' '.$node['description'].' '.$node['group']) }}"><div class="app-head"><span class="app-icon"><i class="{{ $node['icon'] }}"></i></span><x-network.status-badge :status="$node['implementation_status']" /></div><h3>{{ $node['label'] }}</h3><p>{{ $node['description'] }}</p><button type="button" class="app-action" data-node="{{ $node['code'] }}" aria-label="Ver {{ $node['label'] }}">{{ $node['resolved_url'] ? 'ABRIR' : 'DETALLE' }} <span>→</span></button></article>

@@ -72,5 +72,6 @@ class Kernel extends HttpKernel
         'zigo.portal' => \App\Http\Middleware\EnsureZigoPortalHost::class,
         'ensure.zigo.portal' => \App\Http\Middleware\EnsureZigoPortalHost::class,
         'network.superadmin' => \App\Http\Middleware\EnsureNetworkSuperAdmin::class,
+        'network.auth' => \App\Http\Middleware\AuthenticateNetwork::class,
     ];
 }

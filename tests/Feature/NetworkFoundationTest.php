@@ -28,7 +28,7 @@ class NetworkFoundationTest extends TestCase
 
     public function test_network_requires_authentication(): void
     {
-        $this->get('/network')->assertRedirect('/login');
+        $this->get('/network')->assertRedirect('/network/login');
     }
 
     public function test_non_sysadmin_receives_403(): void
@@ -39,7 +39,7 @@ class NetworkFoundationTest extends TestCase
     public function test_sysadmin_can_enter_and_dashboard_has_no_legacy_table_dependency(): void
     {
         $this->actingAs($this->userWithRole('sysadmin'))->get('/network')
-            ->assertOk()->assertSee('ZIGO NETWORK')->assertSee('Pendiente dominio Usage');
+            ->assertOk()->assertSee('ZIGO NETWORK')->assertSee('Control Center');
     }
 
     public function test_tenant_slug_is_unique(): void
