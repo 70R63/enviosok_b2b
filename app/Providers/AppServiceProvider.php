@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Schema;
+use App\Domain\Network\Tenancy\TenantContext;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -14,7 +15,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        //
+        $this->app->scoped(TenantContext::class, fn () => new TenantContext());
     }
 
     /**
@@ -28,4 +29,3 @@ class AppServiceProvider extends ServiceProvider
     }
 }
 //use Illuminate\Support\Facades\Schema;
-

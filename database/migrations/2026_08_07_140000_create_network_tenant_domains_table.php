@@ -1,0 +1,3 @@
+<?php
+use Illuminate\Database\Migrations\Migration;use Illuminate\Database\Schema\Blueprint;use Illuminate\Support\Facades\Schema;
+return new class extends Migration{public function up():void{Schema::create('network_tenant_domains',function(Blueprint $table):void{$table->id();$table->foreignId('tenant_id')->constrained('network_tenants')->cascadeOnDelete();$table->string('domain')->unique();$table->string('type',20);$table->string('environment',20);$table->boolean('is_primary')->default(false);$table->string('status',20)->default('pending');$table->timestamp('verified_at')->nullable();$table->timestamps();$table->index(['tenant_id','environment','is_primary']);});}public function down():void{Schema::dropIfExists('network_tenant_domains');}};

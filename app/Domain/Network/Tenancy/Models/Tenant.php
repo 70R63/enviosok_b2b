@@ -5,6 +5,8 @@ namespace App\Domain\Network\Tenancy\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use App\Domain\Network\Catalog\Models\Plan;
 use Illuminate\Support\Str;
 
@@ -25,6 +27,9 @@ class Tenant extends Model
     {
         return $this->belongsTo(Plan::class, 'current_plan_id');
     }
+    public function domains(): HasMany { return $this->hasMany(TenantDomain::class); }
+    public function branding(): HasOne { return $this->hasOne(TenantBranding::class); }
+    public function primaryDomain(): HasOne { return $this->hasOne(TenantDomain::class)->where('is_primary',true)->where('status','verified'); }
 
     protected static function booted(): void
     {

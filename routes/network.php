@@ -7,6 +7,9 @@ use App\Http\Controllers\Network\NetworkLaunchpadController;
 use App\Http\Controllers\Network\NetworkTopologyController;
 use App\Http\Controllers\Network\PlanController;
 use App\Http\Controllers\Network\TenantController;
+use App\Http\Controllers\Network\TenantDomainController;
+use App\Http\Controllers\Network\TenantBrandingController;
+use App\Http\Controllers\Tenant\TenantHomeController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('network')->name('network.')->group(function (): void {
@@ -28,6 +31,13 @@ Route::middleware(['network.auth', 'network.superadmin'])
         Route::get('/tenants/{tenant}', [TenantController::class, 'show'])->name('tenants.show');
         Route::get('/tenants/{tenant}/edit', [TenantController::class, 'edit'])->name('tenants.edit');
         Route::match(['put','patch'],'/tenants/{tenant}', [TenantController::class, 'update'])->name('tenants.update');
+        Route::get('/tenants/{tenant}/preview', [TenantHomeController::class, 'preview'])->name('tenants.preview');
+        Route::get('/tenants/{tenant}/domains', [TenantDomainController::class, 'index'])->name('tenants.domains.index');
+        Route::post('/tenants/{tenant}/domains', [TenantDomainController::class, 'store'])->name('tenants.domains.store');
+        Route::patch('/tenants/{tenant}/domains/{domain}', [TenantDomainController::class, 'update'])->name('tenants.domains.update');
+        Route::delete('/tenants/{tenant}/domains/{domain}', [TenantDomainController::class, 'disable'])->name('tenants.domains.disable');
+        Route::get('/tenants/{tenant}/branding', [TenantBrandingController::class, 'edit'])->name('tenants.branding.edit');
+        Route::match(['put','patch'],'/tenants/{tenant}/branding', [TenantBrandingController::class, 'update'])->name('tenants.branding.update');
         Route::get('/modules', [ModuleController::class, 'index'])->name('modules.index');
         Route::get('/modules/create', [ModuleController::class, 'create'])->name('modules.create');
         Route::post('/modules', [ModuleController::class, 'store'])->name('modules.store');
@@ -40,3 +50,5 @@ Route::middleware(['network.auth', 'network.superadmin'])
         Route::get('/plans/{plan}/edit', [PlanController::class, 'edit'])->name('plans.edit');
         Route::match(['put','patch'],'/plans/{plan}', [PlanController::class, 'update'])->name('plans.update');
     });
+
+Route::get('/white-label', [TenantHomeController::class, 'home'])->middleware('tenant.resolve')->name('tenant.home');

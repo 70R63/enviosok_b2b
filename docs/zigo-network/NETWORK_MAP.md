@@ -86,8 +86,8 @@ B2C y B2B son canales, no tenants.
 | ZN-00 | Auditoría | COMPLETED |
 | ZN-01A | Network Foundation | COMPLETED |
 | ZN-01B | Launchpad + Map + Dashboard | CURRENT |
-| ZN-01C | Plan → Modules, Tenant → Plan, Construye tu ZIGO | CURRENT |
-| ZN-02 | TenantDomain + Branding + White Label | PLANNED |
+| ZN-01C | Plan → Modules, Tenant → Plan, Construye tu ZIGO | COMPLETED |
+| ZN-02 | TenantDomain + Branding + White Label | CURRENT |
 | ZN-03 | Tenant Admin + Memberships | PLANNED |
 | ZN-04 | Subscription + Entitlements | PLANNED |
 | ZN-05 | Primer canal tenant-aware | PLANNED |
@@ -113,3 +113,17 @@ La primera configuración comercial relaciona `Plan → Modules` mediante `netwo
 La lista efectiva mostrada hoy para un tenant proviene exclusivamente de los módulos con `is_included=true` en su plan. `limit_value` e `included_operations` son configuración comercial, no medición de Usage.
 
 Un **Network Map Node no equivale a Commercial Module**. El mapa puede contener arquitectura, proveedores, ambientes y roadmap —por ejemplo ZIGO AI— sin que exista todavía un producto vendible en `network_modules`. AI Conversational y AI Vision sólo deberán incorporarse al catálogo cuando exista una decisión explícita de comercialización.
+
+## ZN-02 White Label Foundation
+Flujo implementado: `HTTP HOST → TenantDomain → Tenant active → TenantContext request-scoped → Branding → Current Plan → Modules incluidos`. `TenantContext` no representa al usuario autenticado: el tenant operativo se resuelve principalmente por host.
+
+`ZigoDomainResolver` continúa protegiendo portales internos ZIGO (CRM, B2B, Soporte, API y DevOps). `TenantDomainResolver` es independiente y sólo atiende dominios white-label explícitamente registrados. Aunque infraestructura disponga de wildcard `*.zigo-envios.com` y Wildcard SSL, un hostname desconocido nunca se infiere por slug: responde 404. Dominios `pending` o `disabled` no resuelven; tenants `inactive` o `suspended` tampoco operan en esta fase.
+
+Los dominios soportan `subdomain|custom` y `production|sandbox`, pero Sandbox, validación DNS/CNAME, SSL y provisioning automático siguen pendientes. Stage es ambiente interno ZIGO y no equivale a Tenant Sandbox. Network Stage futuro: `network-stage.zigo-envios.com`; Network Production futuro: `network.zigo-envios.com`. No se modifica DNS, SiteGround ni `SESSION_DOMAIN`.
+
+### Prueba local
+1. Agregar manualmente en el archivo hosts de Windows: `127.0.0.1 cliente-piloto.zigo.local` (esta aplicación nunca lo modifica).
+2. Registrar `cliente-piloto.zigo.local` en Network como `verified` para un tenant `active`.
+3. Abrir `http://cliente-piloto.zigo.local:8000/white-label`.
+
+Branding almacena rutas de PNG/JPG/WEBP mediante el disco `public`, nunca base64 ni SVG. Para servir archivos localmente puede requerirse ejecutar manualmente `php artisan storage:link`; ZN-02 no lo ejecuta. El preview es sólo un shell visual y no cotiza, rastrea ni crea guías reales.
