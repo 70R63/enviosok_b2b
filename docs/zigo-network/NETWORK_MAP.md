@@ -87,7 +87,8 @@ B2C y B2B son canales, no tenants.
 | ZN-01A | Network Foundation | COMPLETED |
 | ZN-01B | Launchpad + Map + Dashboard | CURRENT |
 | ZN-01C | Plan → Modules, Tenant → Plan, Construye tu ZIGO | COMPLETED |
-| ZN-02 | TenantDomain + Branding + White Label | CURRENT |
+| ZN-02 | TenantDomain + Branding + White Label | COMPLETED |
+| ZN-03 | Tenant Admin + Memberships | CURRENT |
 | ZN-03 | Tenant Admin + Memberships | PLANNED |
 | ZN-04 | Subscription + Entitlements | PLANNED |
 | ZN-05 | Primer canal tenant-aware | PLANNED |
@@ -127,3 +128,19 @@ Los dominios soportan `subdomain|custom` y `production|sandbox`, pero Sandbox, v
 3. Abrir `http://cliente-piloto.zigo.local:8000/white-label`.
 
 Branding almacena rutas de PNG/JPG/WEBP mediante el disco `public`, nunca base64 ni SVG. Para servir archivos localmente puede requerirse ejecutar manualmente `php artisan storage:link`; ZN-02 no lo ejecuta. El preview es sólo un shell visual y no cotiza, rastrea ni crea guías reales.
+
+## ZN-03 Tenant Admin & Memberships
+
+El acceso administrativo tenant sigue el flujo `Host -> TenantDomain verified -> TenantContext -> TenantMembership active -> /admin`. El host es la autoridad: el cliente nunca selecciona ni envía un `tenant_id` para decidir autorización. Un usuario puede pertenecer a varios tenants mediante `network_tenant_memberships`, con un rol distinto en cada uno.
+
+`User` continúa siendo la identidad global existente y no recibe `tenant_id`. `TenantMembership` expresa pertenencia y rol (`owner`, `admin`, `operator`, `support`, `billing`, `viewer`) exclusivamente dentro de un tenant. Por tanto, un rol global no equivale a un rol tenant: `sysadmin` protege ZIGO Network, mientras que `owner` y `admin` permiten administrar el tenant pero jamás conceden acceso a `/network`.
+
+La consola `/admin` usa el branding, plan y módulos incluidos del tenant resuelto. No implementa operación B2C/B2B real, Usage, Billing ni Entitlements. Las sesiones continúan host-only porque no se modifica `SESSION_DOMAIN`: no existe SSO entre `clienteA.zigo.local` y `clienteB.zigo.local`.
+
+Las invitaciones se difieren a ZN-03B. Cuando se incorporen deberán usar tokens hasheados, expirables y de un solo uso; ZN-03 sólo agrega usuarios ya existentes por email y nunca crea contraseñas provisionales.
+
+### Frontera de administración por host
+
+Tres superficies pueden compartir segmentos de URL sin compartir autoridad. **ZIGO Network Admin** vive en `/network` y exige `network.auth + network.superadmin`. **Tenant Admin** vive en `/admin` sobre un `TenantDomain` verificado y exige `tenant.resolve + tenant.auth + TenantMembership`. **Legacy Internal Admin** conserva `/admin/incidencias` y `/admin/conciliacion-saldo`, pero pertenece al portal interno B2C y exige adicionalmente `zigo.portal:b2c,strict`, autenticación y roles globales.
+
+El modo `strict` mantiene la verificación exacta del host B2C incluso cuando el routing por subdominios general está desactivado para compatibilidad local. Por ello, compartir el path `/admin` nunca habilita endpoints internos desde un dominio tenant; esos intentos responden 404 antes de evaluar la sesión o el rol.

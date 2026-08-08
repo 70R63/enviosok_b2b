@@ -283,7 +283,7 @@ Route::post('/b2c/paquete/{cotizacion}', [CotizacionPublicaController::class, 'g
 });
 
 // Admin - Incidencias B2C
-Route::middleware(['auth', 'roles:sysadmin,admin,adminops,operaciones'])
+Route::middleware(['zigo.portal:b2c,strict', 'auth', 'roles:sysadmin,admin,adminops,operaciones'])
     ->prefix('admin')
     ->group(function () {
 

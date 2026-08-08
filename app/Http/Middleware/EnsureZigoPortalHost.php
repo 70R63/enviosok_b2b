@@ -15,15 +15,17 @@ class EnsureZigoPortalHost
         $this->domainResolver = $domainResolver;
     }
 
-    public function handle(Request $request, Closure $next, string $portal)
+    public function handle(Request $request, Closure $next, string $portal, string $mode = 'compatible')
     {
         abort_unless(
             $this->domainResolver->supportsPortal($portal),
             404
         );
 
-        if (app()->runningInConsole()
-            || !$this->domainResolver->isSubdomainRoutingEnabled()) {
+        $strict = $mode === 'strict';
+
+        if (!$strict && (app()->runningInConsole()
+            || !$this->domainResolver->isSubdomainRoutingEnabled())) {
             return $next($request);
         }
 

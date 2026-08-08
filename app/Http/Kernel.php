@@ -74,5 +74,7 @@ class Kernel extends HttpKernel
         'network.superadmin' => \App\Http\Middleware\EnsureNetworkSuperAdmin::class,
         'network.auth' => \App\Http\Middleware\AuthenticateNetwork::class,
         'tenant.resolve' => \App\Http\Middleware\ResolveNetworkTenant::class,
+        'tenant.auth' => \App\Http\Middleware\AuthenticateTenant::class,
+        'tenant.members.manage' => \App\Http\Middleware\EnsureTenantMemberManager::class,
     ];
 }

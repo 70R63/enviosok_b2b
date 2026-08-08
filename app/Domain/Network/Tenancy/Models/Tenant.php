@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use App\Domain\Network\Catalog\Models\Plan;
 use Illuminate\Support\Str;
 
@@ -30,6 +31,12 @@ class Tenant extends Model
     public function domains(): HasMany { return $this->hasMany(TenantDomain::class); }
     public function branding(): HasOne { return $this->hasOne(TenantBranding::class); }
     public function primaryDomain(): HasOne { return $this->hasOne(TenantDomain::class)->where('is_primary',true)->where('status','verified'); }
+    public function memberships(): HasMany { return $this->hasMany(TenantMembership::class); }
+    public function users(): BelongsToMany
+    {
+        return $this->belongsToMany(\App\Models\User::class, 'network_tenant_memberships')
+            ->withPivot(['role', 'status'])->withTimestamps();
+    }
 
     protected static function booted(): void
     {
