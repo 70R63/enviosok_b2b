@@ -45,6 +45,11 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
     ];
 
+    public function tenantCustomerProfiles()
+    {
+        return $this->hasMany(\App\Domain\Network\Channels\B2C\Models\TenantCustomerProfile::class);
+    }
+
     public function sendPasswordResetNotification(
         $token
     ): void {

@@ -19,8 +19,11 @@ class AuthenticatedSessionController extends Controller
      *
      * @return \Illuminate\View\View
      */
-    public function create()
+    public function create(Request $request)
     {
+        if (app(\App\Domain\Network\Tenancy\TenantDomainResolver::class)->resolve($request->getHost())) {
+            return app(\App\Http\Controllers\Tenant\CustomerAuthController::class)->create(app(\App\Domain\Network\Tenancy\TenantContext::class));
+        }
         return view('auth.login');
     }
 
@@ -30,8 +33,11 @@ class AuthenticatedSessionController extends Controller
      * @param  \App\Http\Requests\Auth\LoginRequest  $request
      * @return \Illuminate\Http\RedirectResponse
      */
-    public function store(LoginRequest $request)
+public function store(LoginRequest $request)
 {
+    if (app(\App\Domain\Network\Tenancy\TenantDomainResolver::class)->resolve($request->getHost())) {
+        return app(\App\Http\Controllers\Tenant\CustomerAuthController::class)->store($request, app(\App\Domain\Network\Tenancy\TenantContext::class));
+    }
     Log::debug("store Login");
 
     $request->authenticate();
@@ -68,6 +74,9 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request)
     {
+        if (app(\App\Domain\Network\Tenancy\TenantDomainResolver::class)->resolve($request->getHost())) {
+            return app(\App\Http\Controllers\Tenant\CustomerAuthController::class)->destroy($request);
+        }
         Log::debug("destruyendo sesion");
         Auth::guard('web')->logout();
 

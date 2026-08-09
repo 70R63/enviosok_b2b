@@ -23,6 +23,8 @@ use App\Http\Controllers\Tenant\TenantDriverController;
 use App\Http\Controllers\Tenant\TenantHomeController;
 use App\Http\Controllers\Tenant\TenantMemberController;
 use App\Http\Controllers\Tenant\TenantOperationController;
+use App\Http\Controllers\Tenant\CustomerAuthController;
+use App\Http\Controllers\Tenant\CustomerPortalController;
 use App\Http\Controllers\DeliveryEvidenceController;
 use App\Http\Controllers\Driver\CentralDriverAuthController;
 use App\Http\Controllers\Driver\DriverPwaController;
@@ -109,7 +111,29 @@ Route::middleware(['network.auth', 'network.superadmin'])
         Route::patch('/local-shipping/services/{service}/toggle', [LocalShippingController::class, 'toggleService'])->name('local-shipping.services.toggle');
     });
 
+Route::get('/', [TenantHomeController::class, 'home'])->middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:B2C'])->name('tenant.customer.landing');
 Route::get('/white-label', [TenantHomeController::class, 'home'])->middleware(['tenant.resolve', 'tenant.subscription'])->name('tenant.home');
+
+Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:B2C'])->name('tenant.customer.')->group(function (): void {
+    Route::get('/registro', [CustomerAuthController::class, 'registration'])->name('register');
+    Route::post('/registro', [CustomerAuthController::class, 'register'])->middleware('throttle:5,1')->name('register.store');
+    Route::post('/cotizar/seleccionar', [TenantB2cController::class, 'select'])->name('quote.select');
+    Route::get('/rastreo', [TenantB2cController::class, 'tracking'])->middleware('tenant.entitlement:TRACKING')->name('tracking');
+    Route::get('/rastreo/{tracking}', [TenantB2cController::class, 'track'])->middleware('tenant.entitlement:TRACKING')->name('tracking.show');
+    Route::middleware('tenant.customer')->prefix('app')->name('app.')->group(function (): void {
+        Route::get('/', [CustomerPortalController::class, 'dashboard'])->name('dashboard');
+        Route::get('/cotizar', [CustomerPortalController::class, 'quote'])->middleware('tenant.entitlement:SHIPPING')->name('quote');
+        Route::post('/cotizar', [TenantB2cController::class, 'store'])->middleware(['tenant.entitlement:SHIPPING', 'throttle:20,1'])->name('quote.store');
+        Route::post('/cotizar/seleccionar', [TenantB2cController::class, 'select'])->name('quote.select');
+        Route::get('/envios', [CustomerPortalController::class, 'index'])->name('shipments');
+        Route::get('/envios/{shipment}', [CustomerPortalController::class, 'show'])->name('shipments.show');
+        Route::get('/envios/{shipment}/guia.pdf', [CustomerPortalController::class, 'guide'])->name('shipments.guide');
+        Route::get('/perfil', [CustomerPortalController::class, 'profile'])->name('profile');
+        Route::patch('/perfil', [CustomerPortalController::class, 'updateProfile'])->name('profile.update');
+        Route::get('/ayuda', [CustomerPortalController::class, 'support'])->name('support');
+        Route::get('/evidencia', [CustomerPortalController::class, 'proofOptions'])->name('evidence');
+    });
+});
 
 Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:B2C'])->name('tenant.b2c.')->group(function (): void {
     Route::get('/cotizar', [TenantB2cController::class, 'create'])->middleware('tenant.entitlement:SHIPPING')->name('quote.create');

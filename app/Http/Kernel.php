@@ -82,5 +82,6 @@ class Kernel extends HttpKernel
         'tenant.driver' => \App\Http\Middleware\AuthenticateDriver::class,
         'driver.central.context' => \App\Http\Middleware\ResolveCentralDriverContext::class,
         'driver.private' => \App\Http\Middleware\ProtectDriverResponse::class,
+        'tenant.customer' => \App\Http\Middleware\AuthenticateTenantCustomer::class,
     ];
 }

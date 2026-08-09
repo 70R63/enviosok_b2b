@@ -15,7 +15,7 @@ final class TenantOperation extends Model
     public const STATUSES = ['draft', 'quoted', 'confirmed', 'canceled'];
 
     protected $table = 'network_tenant_operations';
-    protected $fillable = ['tenant_id', 'subscription_id', 'channel', 'status', 'source_type', 'source_id', 'provider', 'service_code', 'external_reference', 'created_by_user_id', 'metadata'];
+    protected $fillable = ['tenant_id', 'subscription_id', 'channel', 'status', 'source_type', 'source_id', 'provider', 'service_code', 'external_reference', 'created_by_user_id', 'customer_profile_id', 'metadata'];
     protected $casts = ['metadata' => 'array'];
 
     protected static function booted(): void
@@ -26,4 +26,5 @@ final class TenantOperation extends Model
     public function tenant(): BelongsTo { return $this->belongsTo(Tenant::class); }
     public function subscription(): BelongsTo { return $this->belongsTo(Subscription::class); }
     public function localShipment(): HasOne { return $this->hasOne(LocalShipment::class, 'tenant_operation_id'); }
+    public function customerProfile(): BelongsTo { return $this->belongsTo(TenantCustomerProfile::class, 'customer_profile_id'); }
 }

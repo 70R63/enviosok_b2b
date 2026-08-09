@@ -8,12 +8,14 @@ use App\Domain\Network\Tenancy\TenantContext;
 use App\Domain\Shipping\Local\Models\LocalShipment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Domain\Network\Channels\B2C\Models\TenantOperation;
+use App\Domain\Network\Channels\B2C\Models\TenantCustomerProfile;
 
 final class TenantB2cController extends Controller
 {
     public function create(TenantContext $context)
     {
-        return view('tenant.b2c.quote', ['tenant' => $context->tenant()->load('branding'), 'result' => null]);
+        return view('tenant.b2c.quote', ['tenant' => $context->tenant()->load('branding'), 'result' => null, 'customerPortal' => false]);
     }
 
     public function store(Request $request, TenantContext $context, TenantB2cQuoteService $quotes)
@@ -34,7 +36,35 @@ final class TenantB2cController extends Controller
             ]);
         }
 
-        return view('tenant.b2c.quote', ['tenant' => $tenant, 'result' => $result]);
+        $request->session()->put('tenant_customer.quote_result', [
+            'tenant_id' => $tenant->id, 'operation_uuid' => $result['operation']->uuid,
+            'options' => collect($result['options'])->values()->all(),
+        ]);
+        return view('tenant.b2c.quote', ['tenant' => $tenant, 'result' => $result, 'customerPortal' => $request->is('app/*')]);
+    }
+
+    public function select(Request $request, TenantContext $context)
+    {
+        $data = $request->validate(['operation_uuid' => ['required', 'uuid'], 'option' => ['required', 'integer', 'min:0']]);
+        $quote = $request->session()->get('tenant_customer.quote_result');
+        abort_unless(is_array($quote) && (int) ($quote['tenant_id'] ?? 0) === $context->id()
+            && hash_equals((string) ($quote['operation_uuid'] ?? ''), $data['operation_uuid']), 404);
+        $option = $quote['options'][$data['option']] ?? null;
+        abort_unless(is_array($option), 404);
+        $operation = TenantOperation::where('tenant_id', $context->id())->where('uuid', $data['operation_uuid'])->where('status', 'quoted')->firstOrFail();
+        $metadata = $operation->metadata ?? [];
+        $metadata['selected_quote'] = ['service' => $option['service'] ?? null, 'delivery' => $option['delivery'] ?? null, 'price' => $option['price'] ?? null, 'currency' => 'MXN'];
+        $metadata['final_price'] = $option['price'] ?? $metadata['final_price'] ?? null;
+        $operation->update(['provider' => $option['provider'] ?? null, 'service_code' => $option['service_code'] ?? null, 'metadata' => $metadata]);
+        if (auth()->check()) {
+            $profile = TenantCustomerProfile::where('tenant_id', $context->id())->where('user_id', auth()->id())->where('status', 'active')->first();
+            if ($profile) {
+                $operation->update(['customer_profile_id' => $profile->id, 'created_by_user_id' => auth()->id()]);
+                return redirect('/app')->with('success', 'Servicio seleccionado. Tu cotización quedó guardada para continuar.');
+            }
+        }
+        $request->session()->put('tenant_customer.pending_quote', ['tenant_id' => $context->id(), 'operation_uuid' => $operation->uuid]);
+        return redirect('/login')->with('status', 'Inicia sesión o crea tu cuenta para continuar con este servicio.');
     }
 
     public function tracking(TenantContext $context)

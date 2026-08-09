@@ -48,7 +48,7 @@ final class LocalGuideService
 
     public function trackingUrl(LocalShipment $shipment, string $tenantHost): string
     {
-        return 'https://'.$tenantHost.'/tracking/'.rawurlencode($shipment->tracking_number);
+        return 'https://'.$tenantHost.'/rastreo/'.rawurlencode($shipment->tracking_number);
     }
 
     private function address(TCPDF $pdf, array $address): void

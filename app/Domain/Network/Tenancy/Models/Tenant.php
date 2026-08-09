@@ -38,6 +38,7 @@ class Tenant extends Model
     public function entitlements(): HasMany { return $this->hasMany(Entitlement::class); }
     public function usageEvents(): HasMany { return $this->hasMany(UsageEvent::class); }
     public function operations(): HasMany { return $this->hasMany(TenantOperation::class); }
+    public function customerProfiles(): HasMany { return $this->hasMany(\App\Domain\Network\Channels\B2C\Models\TenantCustomerProfile::class); }
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(\App\Models\User::class, 'network_tenant_memberships')
