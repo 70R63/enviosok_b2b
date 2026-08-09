@@ -18,10 +18,12 @@ use App\Http\Controllers\Tenant\TenantAdminController;
 use App\Http\Controllers\Tenant\TenantAuthController;
 use App\Http\Controllers\Tenant\TenantB2cController;
 use App\Http\Controllers\Tenant\TenantConfigurationController;
+use App\Http\Controllers\Tenant\TenantDeliveryProofOptionController;
 use App\Http\Controllers\Tenant\TenantDriverController;
 use App\Http\Controllers\Tenant\TenantHomeController;
 use App\Http\Controllers\Tenant\TenantMemberController;
 use App\Http\Controllers\Tenant\TenantOperationController;
+use App\Http\Controllers\DeliveryEvidenceController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('network')->name('network.')->group(function (): void {
@@ -69,6 +71,7 @@ Route::middleware(['network.auth', 'network.superadmin'])
         Route::get('/plans/{plan}/edit', [PlanController::class, 'edit'])->name('plans.edit');
         Route::match(['put', 'patch'], '/plans/{plan}', [PlanController::class, 'update'])->name('plans.update');
         Route::get('/local-shipping', [LocalShippingController::class, 'index'])->name('local-shipping.index');
+        Route::get('/delivery-proofs/{proof}/{kind}', [DeliveryEvidenceController::class, 'network'])->name('delivery-proofs.evidence');
         Route::post('/local-shipping/zones', [LocalShippingController::class, 'storeZone'])->name('local-shipping.zones.store');
         Route::post('/local-shipping/zones/{zone}/postal-codes', [LocalShippingController::class, 'storePostalCode'])->name('local-shipping.postal-codes.store');
         Route::patch('/local-shipping/zones/{zone}/toggle', [LocalShippingController::class, 'toggleZone'])->name('local-shipping.zones.toggle');
@@ -95,9 +98,14 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
             Route::get('/plan', [TenantAdminController::class, 'plan'])->name('plan');
             Route::get('/configuracion', [TenantConfigurationController::class, 'edit'])->name('configuration.edit');
             Route::patch('/configuracion', [TenantConfigurationController::class, 'update'])->name('configuration.update');
+            Route::get('/configuracion/entregas', [TenantDeliveryProofOptionController::class, 'index'])->name('delivery-proof-options.index');
+            Route::post('/configuracion/entregas', [TenantDeliveryProofOptionController::class, 'store'])->name('delivery-proof-options.store');
+            Route::put('/configuracion/entregas/{option}', [TenantDeliveryProofOptionController::class, 'update'])->name('delivery-proof-options.update');
             Route::get('/operations', [TenantOperationController::class, 'index'])->middleware('tenant.entitlement:B2C')->name('operations.index');
             Route::post('/operations/{operation}/confirm', [TenantOperationController::class, 'confirm'])->middleware(['tenant.entitlement:B2C', 'tenant.entitlement:SHIPPING'])->name('operations.confirm');
             Route::get('/operations/{operation}', [TenantOperationController::class, 'show'])->middleware('tenant.entitlement:SHIPPING')->name('operations.show');
+            Route::get('/delivery-proofs/{proof}/{kind}', [DeliveryEvidenceController::class, 'tenant'])->name('delivery-proofs.evidence');
+            Route::get('/delivery-failures/{attempt}/photo', [DeliveryEvidenceController::class, 'tenantFailed'])->name('delivery-failures.photo');
             Route::post('/operations/{operation}/local-shipment', [TenantOperationController::class, 'shipment'])->middleware('tenant.entitlement:SHIPPING')->name('operations.shipment');
             Route::get('/operations/{operation}/guide.pdf', [TenantOperationController::class, 'guide'])->middleware('tenant.entitlement:SHIPPING')->name('operations.guide');
             Route::post('/operations/{operation}/pickup-request', [TenantOperationController::class, 'requestPickup'])->middleware('tenant.entitlement:SHIPPING')->name('operations.pickup-request');
@@ -128,5 +136,9 @@ Route::middleware('tenant.resolve')->prefix('driver')->name('tenant.driver.')->g
         Route::post('/availability', [DriverConsoleController::class, 'availability'])->name('availability');
         Route::get('/shipments/{shipment}', [DriverConsoleController::class, 'show'])->name('shipments.show');
         Route::post('/shipments/{shipment}/transition', [DriverConsoleController::class, 'transition'])->name('shipments.transition');
+        Route::get('/shipments/{shipment}/proof', [DriverConsoleController::class, 'proofForm'])->name('shipments.proof');
+        Route::post('/shipments/{shipment}/proof', [DriverConsoleController::class, 'storeProof'])->name('shipments.proof.store');
+        Route::get('/shipments/{shipment}/failure', [DriverConsoleController::class, 'failureForm'])->name('shipments.failure');
+        Route::post('/shipments/{shipment}/failure', [DriverConsoleController::class, 'storeFailure'])->name('shipments.failure.store');
     });
 });

@@ -4,12 +4,16 @@ namespace App\Domain\Shipping\Local;
 
 use App\Domain\Network\Channels\B2C\Models\TenantOperation;
 use App\Domain\Network\Tenancy\Models\Tenant;
+use App\Domain\Shipping\LastMile\DeliveryRequirementService;
 use App\Domain\Shipping\Local\Models\LocalShipment;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 final class LocalShipmentService
 {
+    public function __construct(private DeliveryRequirementService $requirements) {}
+
     public function create(Tenant $tenant, TenantOperation $operation, array $data, ?int $userId = null): LocalShipment
     {
         abort_unless((int) $operation->tenant_id === (int) $tenant->id, 404);
@@ -21,8 +25,10 @@ final class LocalShipmentService
             abort_unless($operation->status === 'confirmed' && strtoupper((string) $operation->provider) === 'ZIGO_LOCAL', 422);
             $existing = LocalShipment::where('tenant_operation_id', $operation->id)->lockForUpdate()->first();
             if ($existing) {
+                if (Schema::hasTable('local_shipment_delivery_requirements')) $this->requirements->forShipment($existing);
                 return $existing;
             }
+            $proofOption = Schema::hasTable('tenant_delivery_proof_options') ? $this->requirements->option($tenant, $data['delivery_proof_option_uuid'] ?? null) : null;
             $branding = $tenant->loadMissing('branding')->branding;
             $tracking = $this->trackingNumber();
             $guide = [
@@ -39,8 +45,9 @@ final class LocalShipmentService
                 'pricing_snapshot' => $data['pricing'], 'guide_snapshot' => $guide, 'created_by_user_id' => $userId,
             ]);
             $shipment->events()->create(['status' => 'CREATED', 'event_code' => 'SHIPMENT_CREATED', 'occurred_at' => now(), 'created_by_user_id' => $userId]);
+            if ($proofOption) $this->requirements->snapshot($shipment, $proofOption);
 
-            return $shipment;
+            return $proofOption ? $shipment->load('deliveryRequirement') : $shipment;
         });
     }
 

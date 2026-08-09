@@ -1,5 +1,7 @@
 # ZIGO Network Platform
 
+Las decisiones de evidencia configurable, propiedad financiera, Mercado Pago futuro, responsabilidad de payouts y contrato de rutas ZN-UX-01 están versionadas en `DELIVERY_PROOF_AND_COMMERCIAL_ROADMAP.md`. Los fondos de operaciones y Drivers pertenecen al tenant; ZIGO no usa treasury propio para cubrirlos.
+
 ## Visión
 Plataforma logística SaaS 360 de INNOTECH. Network Control Center es una consola interna ZIGO, nunca el futuro Tenant Admin.
 
@@ -68,7 +70,9 @@ Futuro: recepción, inventario, fulfillment, preparación, despacho y cross dock
 Proveedor propio en foundation: cobertura por zonas/CP, catálogo de servicios, cotización, shipment, guía y tracking básico.
 
 ## Driver / Last Mile
-Capacidad CURRENT en desarrollo: `Tenant -> Shipping -> Driver / Last Mile -> Tracking`. La identidad reutiliza `User` y `TenantMembership(role=driver)` con un perfil operativo tenant-scoped. Las asignaciones son durables, conservan historial y sólo una permanece activa por shipment. El Driver asignado ejecuta exclusivamente transiciones permitidas por `LocalTrackingService`; no genera Usage adicional. POD, fotos, firma, GPS, mapas, push y operación offline permanecen FUTURE.
+Capacidad CURRENT en desarrollo: `Tenant → Shipping → Driver → POD → Tracking → Workforce / Operations Analytics (FUTURE)`. La identidad reutiliza `User` y `TenantMembership(role=driver)` con un perfil operativo tenant-scoped. Las asignaciones son durables, conservan historial y sólo una permanece activa por shipment. El Driver asignado ejecuta exclusivamente transiciones permitidas; no genera Usage adicional. Mapas avanzados, push y operación offline permanecen FUTURE.
+
+ZN-07B incorpora POD privado 1:1 con receptor, fotografía, firma y GPS puntual obligatorio al confirmar, además de evidencia append-only para intentos fallidos. No existe tracking continuo ni GPS background. Las coordenadas quedan preparadas para futura comparación con expected pickup/delivery coordinates; si no existen coordenadas esperadas no se infieren por CP. Los archivos se sirven sólo mediante endpoints autorizados. La eliminación de EXIF queda como hardening posterior porque el stack actual no garantiza re-encoding seguro en todos los ambientes.
 
 ZN-07A.2 incorpora presencia con TTL, disponibilidad operacional, auto dispatch por menor carga, navegación mediante URLs oficiales, atribución durable de entrega, políticas de compensación específicas por conductor y un ledger append-only con snapshot monetario inmutable. Ninguna de estas acciones consume una operación adicional.
 

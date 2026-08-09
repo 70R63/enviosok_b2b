@@ -8,15 +8,20 @@ use App\Domain\Shipping\Local\Models\LocalShippingService;
 use App\Domain\Shipping\Local\Models\LocalShippingZone;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 final class LocalShippingController extends Controller
 {
     public function index()
     {
+        $relations = ['tenant', 'activeDriverAssignment.driverProfile.user'];
+        $podEnabled = Schema::hasTable('local_delivery_proofs');
+        if ($podEnabled) $relations = array_merge($relations, ['deliveryProof.driverProfile.user', 'failedDeliveryAttempts']);
         return view('network.local-shipping.index', [
             'zones' => LocalShippingZone::with('postalCodes')->orderBy('name')->get(),
             'services' => LocalShippingService::with(['originZone', 'destinationZone'])->orderBy('name')->get(),
-            'shipments' => LocalShipment::with(['tenant', 'activeDriverAssignment.driverProfile.user'])->latest()->paginate(25),
+            'shipments' => LocalShipment::with($relations)->latest()->paginate(25),
+            'podEnabled' => $podEnabled,
         ]);
     }
 

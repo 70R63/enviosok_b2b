@@ -8,6 +8,7 @@ use App\Domain\Network\Tenancy\Models\TenantMembership;
 use App\Domain\Network\Tenancy\TenantAccessService;
 use App\Domain\Network\Tenancy\TenantContext;
 use App\Domain\Shipping\LastMile\Models\DriverProfile;
+use App\Domain\Shipping\LastMile\Models\TenantDeliveryProofOption;
 use App\Domain\Shipping\Local\LocalGuideService;
 use App\Domain\Shipping\Local\LocalShipmentService;
 use App\Domain\Shipping\Local\LocalTrackingService;
@@ -15,6 +16,7 @@ use App\Domain\Shipping\Local\Models\LocalShipment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Schema;
 
 final class TenantOperationController extends Controller
 {
@@ -40,7 +42,10 @@ final class TenantOperationController extends Controller
         $this->authorizeOperator($context);
         $item = TenantOperation::where('tenant_id', $context->tenant()->id)->where('uuid', $operation)->firstOrFail();
 
-        $shipment = LocalShipment::with('activeDriverAssignment.driverProfile.user')->where('tenant_id', $context->tenant()->id)->where('tenant_operation_id', $item->id)->first();
+        $relations = ['activeDriverAssignment.driverProfile.user', 'deliveryRequirement'];
+        $podEnabled = Schema::hasTable('local_delivery_proofs');
+        if ($podEnabled) $relations = array_merge($relations, ['deliveryProof', 'failedDeliveryAttempts']);
+        $shipment = LocalShipment::with($relations)->where('tenant_id', $context->tenant()->id)->where('tenant_operation_id', $item->id)->first();
 
         return view('tenant.admin.operation', [
             'tenant' => $context->tenant()->load('branding'), 'operation' => $item, 'shipment' => $shipment,
@@ -48,6 +53,8 @@ final class TenantOperationController extends Controller
                 ? app(\App\Domain\Shipping\LastMile\DriverDispatchService::class)->manualCandidates($context->tenant(), $shipment)
                 : collect(),
             'canManageDrivers' => $access->hasRole(['owner', 'admin'], auth()->user()),
+            'podEnabled' => $podEnabled,
+            'proofOptions' => Schema::hasTable('tenant_delivery_proof_options') ? TenantDeliveryProofOption::where('tenant_id', $context->id())->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get() : collect(),
         ]);
     }
 
@@ -77,6 +84,7 @@ final class TenantOperationController extends Controller
             'sender.name' => 'required|max:120', 'sender.address' => 'required|max:300', 'sender.postal_code' => 'required|regex:/^\d{5}$/', 'sender.phone' => 'nullable|max:30',
             'recipient.name' => 'required|max:120', 'recipient.address' => 'required|max:300', 'recipient.postal_code' => 'required|regex:/^\d{5}$/', 'recipient.phone' => 'nullable|max:30',
             'package.type' => 'required|max:40', 'package.weight' => 'required|numeric|gt:0', 'package.length' => 'nullable|numeric|gt:0', 'package.width' => 'nullable|numeric|gt:0', 'package.height' => 'nullable|numeric|gt:0', 'reference' => 'nullable|max:100',
+            'delivery_proof_option_uuid' => 'nullable|uuid',
         ]);
         $data['pricing'] = ['final_price' => (float) ($item->metadata['final_price'] ?? 0), 'currency' => 'MXN'];
         $shipment = $shipments->create($context->tenant(), $item, $data, auth()->id());

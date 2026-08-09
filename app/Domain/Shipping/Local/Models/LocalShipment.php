@@ -5,6 +5,10 @@ namespace App\Domain\Shipping\Local\Models;
 use App\Domain\Network\Channels\B2C\Models\TenantOperation;
 use App\Domain\Network\Tenancy\Models\Tenant;
 use App\Domain\Shipping\LastMile\Models\DriverAssignment;
+use App\Domain\Shipping\LastMile\Models\DriverDeliveryAttribution;
+use App\Domain\Shipping\LastMile\Models\LocalDeliveryFailedAttempt;
+use App\Domain\Shipping\LastMile\Models\LocalDeliveryProof;
+use App\Domain\Shipping\LastMile\Models\LocalShipmentDeliveryRequirement;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -50,4 +54,9 @@ final class LocalShipment extends Model
     {
         return $this->hasOne(DriverAssignment::class, 'active_shipment_id');
     }
+
+    public function deliveryProof(): HasOne { return $this->hasOne(LocalDeliveryProof::class, 'local_shipment_id'); }
+    public function failedDeliveryAttempts(): HasMany { return $this->hasMany(LocalDeliveryFailedAttempt::class, 'local_shipment_id'); }
+    public function deliveryAttribution(): HasOne { return $this->hasOne(DriverDeliveryAttribution::class, 'local_shipment_id'); }
+    public function deliveryRequirement(): HasOne { return $this->hasOne(LocalShipmentDeliveryRequirement::class, 'local_shipment_id'); }
 }

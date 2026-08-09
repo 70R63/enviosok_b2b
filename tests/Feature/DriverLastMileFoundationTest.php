@@ -16,14 +16,21 @@ use App\Domain\Shipping\LastMile\Models\DriverDeliveryAttribution;
 use App\Domain\Shipping\LastMile\Models\DriverEarningEntry;
 use App\Domain\Shipping\LastMile\Models\DriverAssignment;
 use App\Domain\Shipping\LastMile\Models\DriverProfile;
+use App\Domain\Shipping\LastMile\Models\LocalDeliveryProof;
+use App\Domain\Shipping\LastMile\Models\LocalShipmentDeliveryRequirement;
+use App\Domain\Shipping\LastMile\Models\TenantDeliveryProofOption;
+use App\Domain\Shipping\LastMile\DeliveryRequirementService;
 use App\Domain\Shipping\Local\Models\LocalShipment;
 use App\Domain\Shipping\Local\LocalTrackingService;
+use App\Domain\Shipping\Local\LocalShipmentService;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\UploadedFile;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\TestCase;
 
@@ -147,11 +154,12 @@ final class DriverLastMileFoundationTest extends TestCase
         $this->post($this->url($tenant, "/admin/local-shipments/{$shipment->uuid}/transition"), ['status' => 'IN_TRANSIT'])->assertSessionHasErrors('status');
         $this->actingAs($driverUser);
         $this->post($this->url($tenant, "/driver/shipments/{$shipment->uuid}/transition"), ['status' => 'DELIVERED'])->assertSessionHasErrors('status');
-        foreach (['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'] as $status) {
+        foreach (['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'] as $status) {
             $this->post($this->url($tenant, "/driver/shipments/{$shipment->uuid}/transition"), ['status' => $status])->assertRedirect();
         }
+        $this->deliverWithProof($assignment = DriverAssignment::where('local_shipment_id', $shipment->id)->where('status', 'ACTIVE')->firstOrFail(), $driverUser);
         $before = DB::table('local_tracking_events')->count();
-        $this->post($this->url($tenant, "/driver/shipments/{$shipment->uuid}/transition"), ['status' => 'DELIVERED'])->assertNotFound();
+        $this->post($this->url($tenant, "/driver/shipments/{$shipment->uuid}/transition"), ['status' => 'DELIVERED'])->assertSessionHasErrors('status');
         $this->assertSame($before, DB::table('local_tracking_events')->count());
         $this->assertSame('DELIVERED', $shipment->fresh()->status);
         $this->assertDatabaseCount('local_tracking_events', 6);
@@ -296,7 +304,7 @@ final class DriverLastMileFoundationTest extends TestCase
 
         $salaryShipment = $this->shipment($tenant, 'ZL260811SALARY01');
         $salaryAssignment = $this->assignedOutForDelivery($tenant, $salaryShipment, $profile, $owner, $driverUser);
-        app(DriverDeliveryService::class)->deliver($salaryAssignment, $driverUser->id);
+        $this->deliverWithProof($salaryAssignment, $driverUser);
         $this->assertDatabaseCount('driver_delivery_attributions', 1);
         $this->assertDatabaseCount('driver_earning_entries', 0);
 
@@ -304,7 +312,7 @@ final class DriverLastMileFoundationTest extends TestCase
             $policy->update(['compensation_type' => $type, 'amount_per_delivery' => $amount]);
             $shipment = $this->shipment($tenant, 'ZL260811'.str_replace('_', '', $type));
             $assignment = $this->assignedOutForDelivery($tenant, $shipment, $profile, $owner, $driverUser);
-            app(DriverDeliveryService::class)->deliver($assignment, $driverUser->id);
+            $this->deliverWithProof($assignment, $driverUser);
         }
         $this->assertSame(110.0, (float) DriverEarningEntry::sum('amount'));
         $this->assertDatabaseCount('driver_earning_entries', 2);
@@ -336,7 +344,7 @@ final class DriverLastMileFoundationTest extends TestCase
         $policy = DriverCompensationPolicy::create(['tenant_id' => $tenant->id, 'driver_profile_id' => $profile->id, 'compensation_type' => 'PER_DELIVERY', 'settlement_frequency' => 'BIWEEKLY', 'amount_per_delivery' => 88, 'currency' => 'MXN', 'updated_by_user_id' => $owner->id]);
         $shipment = $this->shipment($tenant, 'ZL260811REPORT01');
         $assignment = $this->assignedOutForDelivery($tenant, $shipment, $profile, $owner, $driverUser);
-        app(DriverDeliveryService::class)->deliver($assignment, $driverUser->id);
+        $this->deliverWithProof($assignment, $driverUser);
         DriverEarningEntry::create(['tenant_id' => $tenant->id, 'driver_profile_id' => $other->id, 'driver_user_id' => $other->user_id, 'local_shipment_id' => $shipment->id, 'driver_assignment_id' => $assignment->id, 'compensation_policy_id' => $policy->id, 'entry_type' => 'ADJUSTMENT', 'compensation_type' => 'PER_DELIVERY', 'amount' => 999, 'currency' => 'MXN', 'occurred_at' => now(), 'created_at' => now()]);
 
         $this->actingAs($driverUser)->get($this->url($tenant, '/driver'))->assertOk()->assertSee('88.00')->assertDontSee('999.00');
@@ -384,7 +392,7 @@ final class DriverLastMileFoundationTest extends TestCase
             ]);
             $shipment = $this->shipment($tenant);
             $assignment = $this->assignedOutForDelivery($tenant, $shipment, $profile, $owner, $profile->user);
-            app(DriverDeliveryService::class)->deliver($assignment, $profile->user_id);
+            $this->deliverWithProof($assignment, $profile->user);
         }
 
         $this->assertDatabaseCount('driver_compensation_policies', 3);
@@ -422,10 +430,11 @@ final class DriverLastMileFoundationTest extends TestCase
         $assignment = $this->assignedOutForDelivery($tenant, $shipment, $profile, $owner, $driverUser);
         $otherShipment = $this->shipment($tenant, 'ZL260812OTHERDRV1');
         $otherAssignment = $this->assignedOutForDelivery($tenant, $otherShipment, $otherDriver, $owner, $otherDriver->user);
-        app(DriverDeliveryService::class)->deliver($otherAssignment, $otherDriver->user_id);
+        $this->deliverWithProof($otherAssignment, $otherDriver->user);
 
-        $url = $this->url($tenant, "/driver/shipments/{$shipment->uuid}/transition");
-        $response = $this->actingAs($driverUser)->post($url, ['status' => 'DELIVERED']);
+        $url = $this->url($tenant, "/driver/shipments/{$shipment->uuid}/proof");
+        $payload = ['received_by_name' => 'Safe Receiver', 'receiver_type' => 'RECIPIENT', 'photo' => UploadedFile::fake()->image('pod.jpg'), 'signature' => $this->signaturePayload(), 'latitude' => 25.6866, 'longitude' => -100.3161, 'accuracy_meters' => 8];
+        $response = $this->actingAs($driverUser)->post($url, $payload);
         $response->assertRedirect(route('tenant.driver.dashboard'))->assertSessionHas('success', 'Entrega completada correctamente.');
         $this->get($this->url($tenant, "/driver/shipments/{$shipment->uuid}"))->assertNotFound();
 
@@ -440,7 +449,7 @@ final class DriverLastMileFoundationTest extends TestCase
             ->assertDontSee('Destination 2')->assertDontSee('Origin 1')->assertDontSee('8112345678');
 
         $counts = [DriverDeliveryAttribution::count(), DriverEarningEntry::count(), DB::table('local_tracking_events')->where('local_shipment_id', $shipment->id)->where('status', 'DELIVERED')->count(), DB::table('network_usage_events')->sum('quantity')];
-        $this->post($url, ['status' => 'DELIVERED'])->assertNotFound();
+        $this->post($url, $payload + ['photo' => UploadedFile::fake()->image('again.jpg')])->assertNotFound();
         $this->assertSame($counts, [DriverDeliveryAttribution::count(), DriverEarningEntry::count(), DB::table('local_tracking_events')->where('local_shipment_id', $shipment->id)->where('status', 'DELIVERED')->count(), DB::table('network_usage_events')->sum('quantity')]);
 
         [$otherTenant, $otherOwner] = $this->tenantOwner('terminal-other-tenant');
@@ -448,6 +457,197 @@ final class DriverLastMileFoundationTest extends TestCase
         $crossTenantShipment = $this->shipment($otherTenant, 'ZL260812OTHERTEN1');
         DriverDeliveryAttribution::create(['tenant_id' => $otherTenant->id, 'local_shipment_id' => $crossTenantShipment->id, 'driver_assignment_id' => DriverAssignment::create(['tenant_id' => $otherTenant->id, 'local_shipment_id' => $crossTenantShipment->id, 'driver_profile_id' => $otherTenantDriver->id, 'assigned_by_user_id' => $otherOwner->id, 'assigned_at' => now(), 'status' => 'COMPLETED'])->id, 'driver_profile_id' => $otherTenantDriver->id, 'driver_user_id' => $otherTenantDriver->user_id, 'driver_code_snapshot' => $otherTenantDriver->code, 'delivered_at' => now(), 'created_at' => now()]);
         $this->get($this->url($tenant, '/driver'))->assertOk()->assertDontSee($crossTenantShipment->tracking_number);
+    }
+
+    public function test_pod_validation_assignment_scope_and_delivery_without_proof_are_enforced(): void
+    {
+        Storage::fake('local');
+        [$tenant, $driverUser, $profile] = $this->driverTenant('pod-validation');
+        $owner = $this->member($tenant, 'owner', 'pod-validation-owner@test.local');
+        $other = $this->driver($tenant, 'pod-validation-other@test.local', 'POD-OTHER');
+        $shipment = $this->shipment($tenant, 'ZL260812PODVALID1');
+        $assignment = $this->assignedOutForDelivery($tenant, $shipment, $profile, $owner, $driverUser);
+        $url = $this->url($tenant, "/driver/shipments/{$shipment->uuid}/proof");
+
+        try {
+            app(DriverDeliveryService::class)->deliver($assignment, $driverUser->id);
+            $this->fail('DELIVERED sin POD debe rechazarse.');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+            $this->assertSame(422, $exception->getStatusCode());
+        }
+        $valid = ['received_by_name' => 'Receiver', 'receiver_type' => 'RECIPIENT', 'photo' => UploadedFile::fake()->image('pod.jpg'), 'signature' => $this->signaturePayload(), 'latitude' => 25.6, 'longitude' => -100.3, 'accuracy_meters' => 5];
+        $this->actingAs($other->user)->post($url, $valid)->assertNotFound();
+        $this->actingAs($driverUser)->post($url, array_merge($valid, ['receiver_type' => 'ARBITRARY']))->assertSessionHasErrors('receiver_type');
+        $this->post($url, array_merge($valid, ['photo' => UploadedFile::fake()->createWithContent('bad.svg', '<svg/>')]))->assertSessionHasErrors('photo');
+        $this->post($url, array_merge($valid, ['photo' => UploadedFile::fake()->createWithContent('fake.jpg', '<script>alert(1)</script>')]))->assertSessionHasErrors('photo');
+        $this->post($url, array_merge($valid, ['photo' => UploadedFile::fake()->create('large.jpg', 6000, 'image/jpeg')]))->assertSessionHasErrors('photo');
+        $this->post($url, array_merge($valid, ['signature' => 'data:image/png;base64,bm90LWltYWdl']))->assertSessionHasErrors('signature');
+        $this->post($url, array_merge($valid, ['latitude' => 91]))->assertSessionHasErrors('latitude');
+        $this->assertSame('OUT_FOR_DELIVERY', $shipment->fresh()->status);
+        $this->assertDatabaseCount('local_delivery_proofs', 0);
+    }
+
+    public function test_active_assignment_ui_is_clear_and_owner_reassignment_remains_available(): void
+    {
+        [$tenant, $owner] = $this->tenantOwner('assignment-ux');
+        $driver = $this->driver($tenant, 'assignment-ux-driver@test.local', 'UX-DRV-01');
+        $replacement = $this->driver($tenant, 'assignment-ux-replacement@test.local', 'UX-DRV-02');
+        $driver->update(['availability_status' => 'AVAILABLE']);
+        $shipment = $this->shipment($tenant, 'ZL260812ASSIGNUX1');
+        $this->ready($shipment);
+        app(DriverAssignmentService::class)->assign($tenant, $shipment->fresh(), $driver, $owner->id);
+
+        $page = $this->actingAs($owner)->get($this->url($tenant, "/admin/operations/{$shipment->operation->uuid}"));
+        $page->assertOk()->assertSee('Conductor asignado')->assertSee($driver->user->name)->assertSee('UX-DRV-01')
+            ->assertSee('BUSY')->assertSee('Reasignar conductor')->assertSee('Confirmar reasignación')
+            ->assertDontSee('Asignar / reasignar')->assertDontSee('Sin conductor asignado.');
+
+        $this->post($this->url($tenant, "/admin/local-shipments/{$shipment->uuid}/driver"), ['driver_uuid' => $replacement->uuid])->assertRedirect();
+        $this->assertSame($replacement->id, $shipment->fresh()->activeDriverAssignment->driver_profile_id);
+    }
+
+    public function test_proof_validation_errors_are_visible_and_have_no_delivery_side_effects(): void
+    {
+        Storage::fake('local');
+        [$tenant, $driverUser, $profile] = $this->driverTenant('pod-ux-validation');
+        $owner = $this->member($tenant, 'owner', 'pod-ux-validation-owner@test.local');
+        DriverCompensationPolicy::create(['tenant_id' => $tenant->id, 'driver_profile_id' => $profile->id, 'compensation_type' => 'PER_DELIVERY', 'settlement_frequency' => 'WEEKLY', 'amount_per_delivery' => 75, 'currency' => 'MXN', 'updated_by_user_id' => $owner->id]);
+        DB::table('network_usage_events')->insert(['tenant_id' => $tenant->id, 'metric' => 'operations', 'quantity' => 40, 'created_at' => now()]);
+        $shipment = $this->shipment($tenant, 'ZL260812PODUX001');
+        $this->assignedOutForDelivery($tenant, $shipment, $profile, $owner, $driverUser);
+        $url = $this->url($tenant, "/driver/shipments/{$shipment->uuid}/proof");
+        $base = ['received_by_name' => 'Receiver Preserved', 'receiver_type' => 'FAMILY', 'signature' => $this->signaturePayload(), 'latitude' => 25.6, 'longitude' => -100.3, 'accuracy_meters' => 5];
+
+        $this->actingAs($driverUser)->from($url)->post($url, $base)->assertRedirect($url)->assertSessionHasErrors('photo');
+        $this->get($url)->assertOk()->assertSee('No fue posible finalizar la entrega.')->assertSee('Selecciona una fotografía de evidencia.')
+            ->assertSee('Receiver Preserved')->assertSee('value="FAMILY" selected', false)->assertSee('Evidencia pendiente:')
+            ->assertSee('window.isSecureContext')->assertSee('Permiso de ubicación denegado.')->assertSee('Finalizando entrega...');
+
+        $withoutGps = $base + ['photo' => UploadedFile::fake()->image('pod.jpg')];
+        unset($withoutGps['latitude'], $withoutGps['longitude'], $withoutGps['accuracy_meters']);
+        $this->post($url, $withoutGps)->assertSessionHasErrors(['latitude', 'longitude', 'accuracy_meters']);
+
+        $this->assertDatabaseCount('local_delivery_proofs', 0);
+        $this->assertDatabaseCount('driver_delivery_attributions', 0);
+        $this->assertDatabaseCount('driver_earning_entries', 0);
+        $this->assertSame('OUT_FOR_DELIVERY', $shipment->fresh()->status);
+        $this->assertSame(0, DB::table('local_tracking_events')->where('local_shipment_id', $shipment->id)->where('status', 'DELIVERED')->count());
+        $this->assertSame(40, (int) DB::table('network_usage_events')->sum('quantity'));
+    }
+
+    public function test_failed_evidence_is_append_only_and_protected_pod_is_authorized(): void
+    {
+        Storage::fake('local');
+        [$tenant, $driverUser, $profile] = $this->driverTenant('pod-access');
+        $owner = $this->member($tenant, 'owner', 'pod-access-owner@test.local');
+        DriverCompensationPolicy::create(['tenant_id' => $tenant->id, 'driver_profile_id' => $profile->id, 'compensation_type' => 'SALARIED', 'settlement_frequency' => 'WEEKLY', 'currency' => 'MXN', 'updated_by_user_id' => $owner->id]);
+        $failedShipment = $this->shipment($tenant, 'ZL260812FAIL0001');
+        $this->assignedOutForDelivery($tenant, $failedShipment, $profile, $owner, $driverUser);
+        $failUrl = $this->url($tenant, "/driver/shipments/{$failedShipment->uuid}/failure");
+        $this->actingAs($driverUser)->post($failUrl, ['reason' => 'RECIPIENT_ABSENT', 'notes' => 'No answer'])->assertRedirect(route('tenant.driver.dashboard'));
+        $this->post($this->url($tenant, "/driver/shipments/{$failedShipment->uuid}/transition"), ['status' => 'OUT_FOR_DELIVERY'])->assertRedirect();
+        $this->post($failUrl, ['reason' => 'OTHER', 'notes' => 'Second attempt'])->assertRedirect();
+        $this->assertDatabaseCount('local_delivery_failed_attempts', 2);
+        $this->assertDatabaseCount('driver_earning_entries', 0);
+
+        $shipment = $this->shipment($tenant, 'ZL260812ACCESS01');
+        $this->assignedOutForDelivery($tenant, $shipment, $profile, $owner, $driverUser);
+        $payload = ['received_by_name' => 'Private POD Name', 'receiver_type' => 'SECURITY', 'photo' => UploadedFile::fake()->image('pod.png'), 'signature' => $this->signaturePayload(), 'latitude' => 25.6, 'longitude' => -100.3, 'accuracy_meters' => 5];
+        $this->post($this->url($tenant, "/driver/shipments/{$shipment->uuid}/proof"), $payload)->assertRedirect(route('tenant.driver.dashboard'));
+        $proof = LocalDeliveryProof::firstOrFail();
+        $this->assertDatabaseCount('driver_earning_entries', 0);
+        $this->actingAs($owner)->get($this->url($tenant, "/admin/operations/{$shipment->operation->uuid}"))->assertOk()->assertSee('PRUEBA DE ENTREGA')->assertSee('Private POD Name');
+        $this->get($this->url($tenant, "/admin/delivery-proofs/{$proof->uuid}/photo"))->assertOk();
+        [$otherTenant, $otherOwner] = $this->tenantOwner('pod-access-other');
+        $this->actingAs($otherOwner)->get($this->url($otherTenant, "/admin/delivery-proofs/{$proof->uuid}/photo"))->assertNotFound();
+        $this->get($this->url($otherTenant, "/tracking/{$shipment->tracking_number}"))->assertNotFound();
+        $this->actingAs($driverUser)->get($this->url($tenant, "/tracking/{$shipment->tracking_number}"))->assertOk()->assertDontSee('Private POD Name')->assertDontSee((string) $proof->latitude);
+
+        $sysadmin = $this->user('pod-sysadmin@test.local');
+        $role = DB::table('roles')->insertGetId(['name' => 'Sysadmin', 'slug' => 'sysadmin', 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('users_roles')->insert(['user_id' => $sysadmin->id, 'roles_id' => $role]);
+        $this->actingAs($sysadmin)->get("/network/delivery-proofs/{$proof->uuid}/signature")->assertOk();
+        $this->get('/network/local-shipping')->assertOk()->assertSee($shipment->tracking_number)->assertSee('YES')->assertSee('2');
+    }
+
+    public function test_tenant_proof_options_defaults_validation_and_isolation(): void
+    {
+        [$tenant,$owner] = $this->tenantOwner('proof-options');
+        [$other,$otherOwner] = $this->tenantOwner('proof-options-other');
+        $url = $this->url($tenant, '/admin/configuracion/entregas');
+        $base = ['name'=>'Firma al recibir','description'=>'Firma','require_signature'=>1,'receiver_policy'=>'RECIPIENT_ONLY','max_delivery_attempts'=>2,'surcharge_amount'=>5,'currency'=>'MXN','is_active'=>1,'sort_order'=>1];
+        $this->actingAs($owner)->post($url, $base+['code'=>'SIGNATURE','is_default'=>1])->assertRedirect();
+        $this->post($url, $base+['code'=>'PHOTO','name'=>'Foto','require_signature'=>0,'require_photo'=>1,'is_default'=>1])->assertRedirect();
+        $this->assertSame(2, TenantDeliveryProofOption::where('tenant_id',$tenant->id)->count());
+        $this->assertSame(1, TenantDeliveryProofOption::where('tenant_id',$tenant->id)->where('is_default',true)->where('is_active',true)->count());
+        $this->post($url, ['code'=>'EMPTY','name'=>'Vacía','receiver_policy'=>'RECIPIENT_ONLY','max_delivery_attempts'=>2,'currency'=>'MXN','is_active'=>1,'sort_order'=>3])->assertSessionHasErrors('evidence');
+        $foreign = TenantDeliveryProofOption::where('tenant_id',$tenant->id)->firstOrFail();
+        $this->actingAs($otherOwner)->put($this->url($other, "/admin/configuracion/entregas/{$foreign->uuid}"), $base+['code'=>'HACK'])->assertNotFound();
+        $foreign->update(['is_active'=>false]);
+        $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
+        app(DeliveryRequirementService::class)->option($tenant, $foreign->uuid);
+    }
+
+    public function test_shipment_requirement_snapshot_is_frozen_and_immutable(): void
+    {
+        [$tenant] = $this->tenantOwner('proof-snapshot');
+        $option = $this->proofOption($tenant, 'SIGNED', ['name'=>'Firma original','require_receiver_name'=>true,'require_signature'=>true,'receiver_policy'=>'AUTHORIZED_PERSON','max_delivery_attempts'=>3,'surcharge_amount'=>10]);
+        $operation=TenantOperation::create(['tenant_id'=>$tenant->id,'subscription_id'=>$tenant->subscriptions()->first()->id,'channel'=>'b2c','status'=>'confirmed','provider'=>'ZIGO_LOCAL','service_code'=>'LOCAL64000SD','metadata'=>[]]);
+        $shipment=app(LocalShipmentService::class)->create($tenant,$operation,['sender'=>['name'=>'A','address'=>'Origen','postal_code'=>'64000'],'recipient'=>['name'=>'B','address'=>'Destino','postal_code'=>'64000'],'package'=>['type'=>'sobre','weight'=>1],'pricing'=>['final_price'=>100,'currency'=>'MXN'],'delivery_proof_option_uuid'=>$option->uuid]);
+        $snapshot = $shipment->deliveryRequirement;
+        $option->update(['name'=>'Foto nueva','require_signature'=>false,'require_photo'=>true,'max_delivery_attempts'=>1,'surcharge_amount'=>99]);
+        $snapshot->refresh();
+        $this->assertSame('Firma original',$snapshot->proof_option_name_snapshot); $this->assertTrue($snapshot->require_signature); $this->assertFalse($snapshot->require_photo); $this->assertSame(3,$snapshot->max_delivery_attempts); $this->assertSame(10.0,(float)$snapshot->surcharge_amount_snapshot);
+        $this->expectException(\LogicException::class); $snapshot->update(['require_photo'=>true]);
+    }
+
+    public function test_dynamic_receiver_signature_photo_and_gps_modalities(): void
+    {
+        Storage::fake('local');
+        [$tenant,$driver,$profile] = $this->driverTenant('dynamic-pod'); $owner=$this->member($tenant,'owner','dynamic-pod-owner@test.local');
+        $cases = [
+            ['RECEIVER',['require_receiver_name'=>true],['received_by_name'=>'Persona']],
+            ['SIGNATURE',['require_signature'=>true],['signature'=>$this->signaturePayload()]],
+            ['GPS',['require_gps'=>true],['latitude'=>25.6,'longitude'=>-100.3,'accuracy_meters'=>4]],
+            ['PHOTO',['require_photo'=>true],['photo'=>UploadedFile::fake()->image('pod.jpg')]],
+        ];
+        foreach($cases as $index=>[$code,$flags,$payload]) {
+            TenantDeliveryProofOption::where('tenant_id',$tenant->id)->update(['is_default'=>false]);
+            $option=$this->proofOption($tenant,$code,$flags+['is_default'=>true]);
+            $shipment=$this->shipment($tenant,'ZL260813DYNAMIC'.($index+1)); $this->assignedOutForDelivery($tenant,$shipment,$profile,$owner,$driver);
+            $this->actingAs($driver)->post($this->url($tenant,"/driver/shipments/{$shipment->uuid}/proof"),$payload)->assertRedirect(route('tenant.driver.dashboard'));
+            $this->assertSame('DELIVERED',$shipment->fresh()->status);
+        }
+        $this->assertDatabaseCount('local_delivery_proofs',4);
+    }
+
+    public function test_required_evidence_receiver_policy_and_attempt_limit_are_enforced(): void
+    {
+        Storage::fake('local');
+        [$tenant,$driver,$profile]=$this->driverTenant('pod-rules'); $owner=$this->member($tenant,'owner','pod-rules-owner@test.local');
+        $full=$this->proofOption($tenant,'FULL',['require_receiver_name'=>true,'require_receiver_type'=>true,'require_signature'=>true,'require_photo'=>true,'require_gps'=>true,'receiver_policy'=>'RECIPIENT_ONLY','max_delivery_attempts'=>2,'is_default'=>true]);
+        $shipment=$this->shipment($tenant,'ZL260813RULES001'); $this->assignedOutForDelivery($tenant,$shipment,$profile,$owner,$driver); $url=$this->url($tenant,"/driver/shipments/{$shipment->uuid}/proof");
+        $valid=['received_by_name'=>'Persona','receiver_type'=>'RECIPIENT','signature'=>$this->signaturePayload(),'photo'=>UploadedFile::fake()->image('pod.jpg'),'latitude'=>25.6,'longitude'=>-100.3,'accuracy_meters'=>5];
+        foreach(['signature','photo','latitude'] as $field){$payload=$valid;unset($payload[$field]);$this->actingAs($driver)->post($url,$payload)->assertSessionHasErrors($field);}
+        $this->post($url,array_merge($valid,['receiver_type'=>'FAMILY']))->assertSessionHasErrors('receiver_type');
+        $this->assertDatabaseCount('local_delivery_proofs',0);
+
+        $attemptShipment=$this->shipment($tenant,'ZL260813ATTEMPT1'); $this->assignedOutForDelivery($tenant,$attemptShipment,$profile,$owner,$driver); app(DeliveryRequirementService::class)->snapshot($attemptShipment,$full);
+        $fail=$this->url($tenant,"/driver/shipments/{$attemptShipment->uuid}/failure");
+        $this->post($fail,['reason'=>'OTHER'])->assertSessionHasErrors('notes');
+        $this->post($fail,['reason'=>'NO_ANSWER'])->assertRedirect(route('tenant.driver.dashboard'));
+        $this->post($this->url($tenant,"/driver/shipments/{$attemptShipment->uuid}/transition"),['status'=>'OUT_FOR_DELIVERY'])->assertRedirect();
+        $this->post($fail,['reason'=>'PROPERTY_APPEARS_ABANDONED','notes'=>'Sin actividad visible','latitude'=>25.61,'longitude'=>-100.31,'accuracy_meters'=>6])->assertRedirect(route('tenant.driver.dashboard'));
+        $attempts=$attemptShipment->failedDeliveryAttempts()->orderBy('attempt_number')->get(); $this->assertSame([1,2],$attempts->pluck('attempt_number')->all());
+        $this->post($this->url($tenant,"/driver/shipments/{$attemptShipment->uuid}/transition"),['status'=>'OUT_FOR_DELIVERY'])->assertSessionHasErrors('status');
+        $this->assertDatabaseCount('driver_earning_entries',0); $this->assertSame('DELIVERY_FAILED',$attemptShipment->fresh()->status);
+        $this->get($this->url($tenant,"/tracking/{$attemptShipment->tracking_number}"))->assertOk()->assertSee('Intento de entrega no completado')->assertDontSee('PROPERTY_APPEARS_ABANDONED')->assertDontSee('Sin actividad visible')->assertDontSee((string)$attempts->last()->latitude);
+    }
+
+    public function test_zn_07b_2_migration_is_reversible_in_isolation(): void
+    {
+        $migration=require database_path('migrations/2026_08_13_100000_create_configurable_delivery_proof_tables.php'); $migration->down();
+        $this->assertFalse(Schema::hasTable('tenant_delivery_proof_options')); $this->assertFalse(Schema::hasTable('local_shipment_delivery_requirements')); $this->assertFalse(Schema::hasColumn('local_delivery_failed_attempts','attempt_number'));
     }
 
     public function test_zn_07a_2_migration_is_reversible_in_isolation(): void
@@ -458,6 +658,14 @@ final class DriverLastMileFoundationTest extends TestCase
         $this->assertFalse(Schema::hasTable('driver_delivery_attributions'));
         $this->assertFalse(Schema::hasTable('driver_compensation_policies'));
         $this->assertFalse(Schema::hasColumn('tenant_driver_profiles', 'last_seen_at'));
+    }
+
+    public function test_zn_07b_migration_is_reversible_in_isolation(): void
+    {
+        $migration = require database_path('migrations/2026_08_12_100000_create_driver_delivery_evidence_tables.php');
+        $migration->down();
+        $this->assertFalse(Schema::hasTable('local_delivery_proofs'));
+        $this->assertFalse(Schema::hasTable('local_delivery_failed_attempts'));
     }
 
     private function driverTenant(string $slug, bool $entitlement = true, string $subscriptionStatus = 'active'): array
@@ -533,6 +741,28 @@ final class DriverLastMileFoundationTest extends TestCase
         }
 
         return $assignment;
+    }
+
+    private function deliverWithProof(DriverAssignment $assignment, User $driver): void
+    {
+        $proof = LocalDeliveryProof::create(['tenant_id' => $assignment->tenant_id, 'local_shipment_id' => $assignment->local_shipment_id, 'driver_assignment_id' => $assignment->id, 'driver_profile_id' => $assignment->driver_profile_id, 'received_by_name' => 'Test Receiver', 'receiver_type' => 'RECIPIENT', 'photo_path' => 'tests/photo.png', 'signature_path' => 'tests/signature.png', 'latitude' => 25.6866, 'longitude' => -100.3161, 'accuracy_meters' => 10, 'captured_at' => now(), 'created_at' => now()]);
+        app(DriverDeliveryService::class)->deliver($assignment, $driver->id, $proof->id);
+    }
+
+    private function signaturePayload(): string
+    {
+        $image = imagecreatetruecolor(120, 60);
+        $white = imagecolorallocate($image, 255, 255, 255);
+        $black = imagecolorallocate($image, 0, 0, 0);
+        imagefill($image, 0, 0, $white);
+        imageline($image, 10, 40, 110, 20, $black);
+        ob_start(); imagepng($image); $binary = ob_get_clean(); imagedestroy($image);
+        return 'data:image/png;base64,'.base64_encode($binary);
+    }
+
+    private function proofOption(Tenant $tenant, string $code, array $overrides=[]): TenantDeliveryProofOption
+    {
+        return TenantDeliveryProofOption::create(array_merge(['tenant_id'=>$tenant->id,'code'=>$code,'name'=>$code,'require_receiver_name'=>false,'require_receiver_type'=>false,'require_signature'=>false,'require_photo'=>false,'require_gps'=>false,'receiver_policy'=>'ANY_PERSON_AT_ADDRESS','max_delivery_attempts'=>2,'surcharge_amount'=>0,'currency'=>'MXN','is_default'=>false,'is_active'=>true,'sort_order'=>0],$overrides));
     }
 
     private function url(Tenant $tenant, string $path): string
@@ -669,5 +899,7 @@ final class DriverLastMileFoundationTest extends TestCase
         (require database_path('migrations/2026_08_09_100000_create_local_shipping_foundation_tables.php'))->up();
         (require database_path('migrations/2026_08_10_100000_create_driver_last_mile_tables.php'))->up();
         (require database_path('migrations/2026_08_11_100000_create_driver_presence_earnings_tables.php'))->up();
+        (require database_path('migrations/2026_08_12_100000_create_driver_delivery_evidence_tables.php'))->up();
+        (require database_path('migrations/2026_08_13_100000_create_configurable_delivery_proof_tables.php'))->up();
     }
 }
