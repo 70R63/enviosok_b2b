@@ -1,0 +1,3 @@
+@extends('tenant.admin.layout')
+@section('title','Confirmación de pago')
+@section('content')<section class="z-card z-stack" style="max-width:680px;margin:auto;text-align:center">@if($order->status==='ACTIVATED')<span class="z-badge z-badge--success">Activado</span><h1>Servicio activo</h1>@elseif($result==='failure')<span class="z-badge z-badge--danger">Pago no completado</span><h1>Intenta nuevamente</h1>@else<span class="z-badge z-badge--warning">Confirmando</span><h1>Estamos verificando tu pago</h1><p>El regreso del navegador no activa el servicio.</p>@endif<a class="z-btn" href="{{ route('tenant.admin.saas.payment',$order->uuid) }}">Consultar estado</a></section>@endsection

@@ -35,6 +35,8 @@ use App\Http\Controllers\Tenant\TenantPaymentConnectionController;
 use App\Http\Controllers\Tenant\CustomerPaymentController;
 use App\Http\Controllers\Network\NetworkPaymentController;
 use App\Http\Controllers\Payments\PaymentEdgeHealthController;
+use App\Http\Controllers\Tenant\TenantSaasController;
+use App\Http\Controllers\Network\CommercialCatalogController;
 
 Route::domain(config('zigo_driver.host'))->prefix('driver')->name('driver.')->group(function (): void {
     Route::get('/manifest.webmanifest', [DriverPwaController::class, 'manifest'])->name('manifest');
@@ -116,6 +118,10 @@ Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superad
         Route::match(['put', 'patch'], '/plans/{plan}', [PlanController::class, 'update'])->name('plans.update');
         Route::get('/local-shipping', [LocalShippingController::class, 'index'])->name('local-shipping.index');
         Route::get('/payments', NetworkPaymentController::class)->name('payments.index');
+        Route::get('/catalog', [CommercialCatalogController::class, 'index'])->name('catalog.index');
+        Route::post('/catalog', [CommercialCatalogController::class, 'store'])->name('catalog.store');
+        Route::put('/catalog/{product}', [CommercialCatalogController::class, 'update'])->name('catalog.update');
+        Route::get('/saas-orders', [CommercialCatalogController::class, 'orders'])->name('saas-orders.index');
         Route::get('/delivery-proofs/{proof}/{kind}', [DeliveryEvidenceController::class, 'network'])->name('delivery-proofs.evidence');
         Route::post('/local-shipping/zones', [LocalShippingController::class, 'storeZone'])->name('local-shipping.zones.store');
         Route::post('/local-shipping/zones/{zone}/postal-codes', [LocalShippingController::class, 'storePostalCode'])->name('local-shipping.postal-codes.store');
@@ -173,6 +179,12 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
         Route::middleware(['tenant.subscription', 'tenant.admin.access'])->group(function (): void {
             Route::get('/', [TenantAdminController::class, 'dashboard'])->name('dashboard');
             Route::get('/plan', [TenantAdminController::class, 'plan'])->name('plan');
+            Route::get('/marketplace', [TenantSaasController::class, 'marketplace'])->name('marketplace');
+            Route::post('/marketplace/contratar', [TenantSaasController::class, 'purchase'])->middleware('throttle:8,1')->name('marketplace.purchase');
+            Route::get('/compras', [TenantSaasController::class, 'purchases'])->name('purchases');
+            Route::get('/compras/{order}/pago', [TenantSaasController::class, 'payment'])->name('saas.payment');
+            Route::post('/compras/{order}/pago', [TenantSaasController::class, 'checkout'])->middleware('throttle:6,1')->name('saas.checkout');
+            Route::get('/compras/{order}/retorno/{result}', [TenantSaasController::class, 'returned'])->middleware('throttle:20,1')->name('saas.return');
             Route::get('/configuracion', [TenantConfigurationController::class, 'edit'])->name('configuration.edit');
             Route::patch('/configuracion', [TenantConfigurationController::class, 'update'])->name('configuration.update');
             Route::get('/configuracion/entregas', [TenantDeliveryProofOptionController::class, 'index'])->name('delivery-proof-options.index');
