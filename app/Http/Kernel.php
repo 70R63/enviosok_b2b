@@ -83,5 +83,7 @@ class Kernel extends HttpKernel
         'driver.central.context' => \App\Http\Middleware\ResolveCentralDriverContext::class,
         'driver.private' => \App\Http\Middleware\ProtectDriverResponse::class,
         'tenant.customer' => \App\Http\Middleware\AuthenticateTenantCustomer::class,
+        'zigo.surface.host' => \App\Http\Middleware\EnsureConfiguredSurfaceHost::class,
+        'payments.edge.headers' => \App\Http\Middleware\SecurePaymentEdgeHeaders::class,
     ];
 }

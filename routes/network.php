@@ -34,6 +34,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Tenant\TenantPaymentConnectionController;
 use App\Http\Controllers\Tenant\CustomerPaymentController;
 use App\Http\Controllers\Network\NetworkPaymentController;
+use App\Http\Controllers\Payments\PaymentEdgeHealthController;
 
 Route::domain(config('zigo_driver.host'))->prefix('driver')->name('driver.')->group(function (): void {
     Route::get('/manifest.webmanifest', [DriverPwaController::class, 'manifest'])->name('manifest');
@@ -62,15 +63,19 @@ Route::domain(config('zigo_driver.host'))->prefix('driver')->name('driver.')->gr
     });
 });
 
-Route::get('/payments/mercado-pago/oauth/callback', [TenantPaymentConnectionController::class, 'callback'])
-    ->middleware('throttle:10,1')->name('payments.mercado-pago.oauth.callback');
+Route::domain(config('zigo_surfaces.payments.host'))->group(function (): void {
+    Route::get('/payments/health', PaymentEdgeHealthController::class)
+        ->middleware('payments.edge.headers')->name('payments.health');
+    Route::get('/payments/mercado-pago/oauth/callback', [TenantPaymentConnectionController::class, 'callback'])
+        ->middleware(['throttle:10,1', 'payments.edge.headers'])->name('payments.mercado-pago.oauth.callback');
+});
 
-Route::prefix('network')->name('network.')->group(function (): void {
+Route::middleware('zigo.surface.host:network')->prefix('network')->name('network.')->group(function (): void {
     Route::get('/login', [NetworkAuthController::class, 'create'])->name('login');
     Route::post('/login', [NetworkAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
 });
 
-Route::middleware(['network.auth', 'network.superadmin'])
+Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superadmin'])
     ->prefix('network')
     ->name('network.')
     ->group(function (): void {

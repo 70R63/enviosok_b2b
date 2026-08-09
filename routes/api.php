@@ -5,9 +5,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Payments\MercadoPagoWebhookController as TenantMercadoPagoWebhookController;
 
-Route::post('/payments/mercado-pago/webhook', TenantMercadoPagoWebhookController::class)
-    ->withoutMiddleware('throttle:api')
-    ->name('payments.mercado-pago.webhook');
+Route::domain(config('zigo_surfaces.payments.host'))->group(function (): void {
+    Route::post('/payments/mercado-pago/webhook', TenantMercadoPagoWebhookController::class)
+        ->withoutMiddleware('throttle:api')->middleware('payments.edge.headers')
+        ->name('payments.mercado-pago.webhook');
+});
 
 use App\Http\Controllers\API\LoginController  as AuthController;
 use App\Http\Controllers\API\GuiaController;
