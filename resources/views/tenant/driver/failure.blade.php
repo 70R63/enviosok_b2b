@@ -2,7 +2,7 @@
 @section('title','Entrega fallida')
 @section('content')
 @php($shipment=$assignment->shipment)
-<h1>¿Qué ocurrió?</h1><p><code>{{ $shipment->tracking_number }}</code></p><p><strong>Intento actual: {{ $attemptNumber }} de {{ $requirement->max_delivery_attempts }}</strong></p>
+<div class="z-eyebrow">Intento {{ $attemptNumber }} de {{ $requirement->max_delivery_attempts }}</div><h1>No pude entregar</h1><p><code>{{ $shipment->tracking_number }}</code></p><h2>¿Qué ocurrió?</h2><p><strong>Intento actual: {{ $attemptNumber }} de {{ $requirement->max_delivery_attempts }}</strong></p>
 @if($errors->any())<div class="validation-summary" role="alert"><strong>No fue posible registrar el intento.</strong><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
 <form class="card failure-form" id="failure-form" method="POST" enctype="multipart/form-data" novalidate action="{{ route('tenant.driver.shipments.failure.store',$shipment->uuid) }}">@csrf
 <label>Razón<select name="reason" id="reason" required><option value="">Seleccionar razón</option>@foreach(\App\Domain\Shipping\LastMile\Models\LocalDeliveryFailedAttempt::REASONS as $reason)<option value="{{ $reason }}" @selected(old('reason') === $reason)>{{ \App\Domain\Shipping\LastMile\Models\LocalDeliveryFailedAttempt::REASON_LABELS[$reason] }}</option>@endforeach</select>@error('reason')<span class="field-error">{{ $message }}</span>@enderror</label>

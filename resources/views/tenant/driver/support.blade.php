@@ -1,0 +1,8 @@
+@extends('tenant.driver.layout')
+@section('title','Ayuda y soporte')
+@section('content')
+<header class="z-page-header"><div><div class="z-eyebrow">Ayuda</div><h1>Ayuda y soporte</h1><p class="z-muted">Elige el equipo correcto para resolver más rápido.</p></div></header>
+<section class="z-card driver-support"><div class="z-eyebrow">Soporte operativo</div><h2>{{ $tenant->branding?->brand_name??$tenant->name }}</h2><p>Paquete · Dirección · Destinatario · Asignación</p><div class="z-cluster">@if($tenant->branding?->support_phone)<a class="z-btn" href="tel:{{ preg_replace('/[^+0-9]/','',$tenant->branding->support_phone) }}">Llamar a soporte</a>@endif @if($tenant->branding?->support_email)<a class="z-btn z-btn--outline" href="mailto:{{ $tenant->branding->support_email }}">Enviar email</a>@endif</div>@unless($tenant->branding?->support_phone||$tenant->branding?->support_email)<p class="z-muted">Solicita a tu administrador los canales de soporte operativo.</p>@endunless</section>
+<section class="z-card driver-support"><div class="z-eyebrow">Soporte ZIGO</div><h2>Plataforma</h2><p>Acceso · Aplicación · Error técnico · Cuenta Driver</p><p class="z-muted">Los canales de atención ZIGO se habilitarán desde configuración central. No se crean tickets ni chats en esta fase.</p></section>
+<section class="z-card"><h2>Mensajes controlados · Future</h2><ul><li>Estoy en camino</li><li>Llegué al domicilio</li><li>No encuentro el acceso</li><li>¿Puede salir a recibir?</li></ul><p class="z-muted">El canal futuro podrá ser in-app, SMS o proveedor autorizado. No se expone el teléfono en esta foundation.</p></section>
+@endsection

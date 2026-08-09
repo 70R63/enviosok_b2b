@@ -15,6 +15,11 @@ class UseZigoPortalSessionCookie
 
     public function handle(Request $request, Closure $next)
     {
+        if (hash_equals((string) config('zigo_driver.host'), strtolower($request->getHost()))) {
+            $baseName = (string) config('session.cookie', 'zigo_session');
+            if (! str_ends_with($baseName, '_driver')) $baseName .= '_driver';
+            config(['session.cookie' => $baseName, 'session.domain' => null]);
+        }
         if ($this->domainResolver->currentPortal($request->getHost()) === 'devops') {
             $baseName = (string) config('session.cookie', 'zigo_session');
             if (!str_ends_with($baseName, '_devops')) {

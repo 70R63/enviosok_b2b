@@ -1,0 +1,6 @@
+@extends('tenant.driver.layout')
+@section('title','Selecciona operación')
+@section('content')
+<header class="z-page-header"><div><div class="z-eyebrow">Contexto operacional</div><h1>Selecciona operación / empresa</h1><p class="z-muted">Sólo aparecen operaciones donde tu perfil Driver está activo.</p></div></header>
+<div class="z-stack">@forelse($profiles as $profile)<form class="z-card" method="POST" action="{{ route('driver.workspaces.select') }}">@csrf<input type="hidden" name="profile" value="{{ $profile->uuid }}"><div class="driver-status-line"><div class="driver-tenant">@if($profile->tenant->branding?->logo_path)<img class="driver-tenant__logo" src="{{ Storage::disk('public')->url($profile->tenant->branding->logo_path) }}" alt="">@else<span class="driver-tenant__logo" aria-hidden="true">{{ mb_strtoupper(mb_substr($profile->tenant->branding?->brand_name??$profile->tenant->name,0,1)) }}</span>@endif<div><strong>{{ $profile->tenant->branding?->brand_name??$profile->tenant->name }}</strong><div class="z-muted">Código {{ $profile->code }}</div></div></div><button class="z-btn">Entrar</button></div></form>@empty<div class="z-empty"><div class="z-empty__icon">!</div><h2>Sin operaciones disponibles</h2><p>No encontramos un perfil Driver operativo para tu cuenta.</p></div>@endforelse</div>
+@endsection

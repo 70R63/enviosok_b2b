@@ -31,6 +31,7 @@ final class DriverAuthController extends Controller
 
     public function destroy(Request $request)
     {
+        $request->session()->forget((string) config('zigo_driver.context_session_key'));
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();

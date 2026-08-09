@@ -21,6 +21,31 @@ final class DriverConsoleController extends Controller
 {
     public function index(Request $request)
     {
+        return view('tenant.driver.dashboard', $this->viewData($request));
+    }
+
+    public function deliveries(Request $request)
+    {
+        return view('tenant.driver.deliveries', $this->viewData($request));
+    }
+
+    public function earnings(Request $request)
+    {
+        return view('tenant.driver.earnings', $this->viewData($request));
+    }
+
+    public function profile(Request $request)
+    {
+        return view('tenant.driver.profile', $this->viewData($request));
+    }
+
+    public function support(Request $request)
+    {
+        return view('tenant.driver.support', $this->viewData($request));
+    }
+
+    private function viewData(Request $request): array
+    {
         $profile = $request->attributes->get('driver_profile');
         $assignments = DriverAssignment::with('shipment')->where('tenant_id', $profile->tenant_id)->where('driver_profile_id', $profile->id)->where('status', 'ACTIVE')
             ->whereHas('shipment', fn ($query) => $query->whereIn('status', ['READY_FOR_PICKUP', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERY_FAILED']))->get();
@@ -43,7 +68,7 @@ final class DriverConsoleController extends Controller
             ->where('driver_profile_id', $profile->id)
             ->first();
 
-        return view('tenant.driver.dashboard', compact('tenant', 'profile', 'assignments', 'delivered', 'earnings', 'policy', 'completedDeliveries', 'completedEarnings'));
+        return compact('tenant', 'profile', 'assignments', 'delivered', 'earnings', 'policy', 'completedDeliveries', 'completedEarnings');
     }
 
     public function show(Request $request, string $shipment)

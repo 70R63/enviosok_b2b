@@ -24,7 +24,37 @@ use App\Http\Controllers\Tenant\TenantHomeController;
 use App\Http\Controllers\Tenant\TenantMemberController;
 use App\Http\Controllers\Tenant\TenantOperationController;
 use App\Http\Controllers\DeliveryEvidenceController;
+use App\Http\Controllers\Driver\CentralDriverAuthController;
+use App\Http\Controllers\Driver\DriverPwaController;
+use App\Http\Controllers\Driver\DriverWorkspaceController;
 use Illuminate\Support\Facades\Route;
+
+Route::domain(config('zigo_driver.host'))->prefix('driver')->name('driver.')->group(function (): void {
+    Route::get('/manifest.webmanifest', [DriverPwaController::class, 'manifest'])->name('manifest');
+    Route::get('/offline', [DriverPwaController::class, 'offline'])->name('offline');
+    Route::get('/service-worker.js', [DriverPwaController::class, 'serviceWorker'])->name('service-worker');
+    Route::get('/login', [CentralDriverAuthController::class, 'create'])->name('login');
+    Route::post('/login', [CentralDriverAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
+    Route::middleware('auth')->group(function (): void {
+        Route::get('/workspaces', [DriverWorkspaceController::class, 'index'])->name('workspaces.index');
+        Route::post('/workspaces', [DriverWorkspaceController::class, 'select'])->name('workspaces.select');
+        Route::post('/logout', [CentralDriverAuthController::class, 'destroy'])->name('logout');
+        Route::middleware(['driver.central.context', 'driver.private'])->group(function (): void {
+            Route::get('/', [DriverConsoleController::class, 'index'])->name('dashboard');
+            Route::get('/deliveries', [DriverConsoleController::class, 'deliveries'])->name('deliveries');
+            Route::get('/earnings', [DriverConsoleController::class, 'earnings'])->name('earnings');
+            Route::get('/profile', [DriverConsoleController::class, 'profile'])->name('profile');
+            Route::get('/support', [DriverConsoleController::class, 'support'])->name('support');
+            Route::post('/availability', [DriverConsoleController::class, 'availability'])->name('availability');
+            Route::get('/shipments/{shipment}', [DriverConsoleController::class, 'show'])->name('shipments.show');
+            Route::post('/shipments/{shipment}/transition', [DriverConsoleController::class, 'transition'])->name('shipments.transition');
+            Route::get('/shipments/{shipment}/proof', [DriverConsoleController::class, 'proofForm'])->name('shipments.proof');
+            Route::post('/shipments/{shipment}/proof', [DriverConsoleController::class, 'storeProof'])->name('shipments.proof.store');
+            Route::get('/shipments/{shipment}/failure', [DriverConsoleController::class, 'failureForm'])->name('shipments.failure');
+            Route::post('/shipments/{shipment}/failure', [DriverConsoleController::class, 'storeFailure'])->name('shipments.failure.store');
+        });
+    });
+});
 
 Route::prefix('network')->name('network.')->group(function (): void {
     Route::get('/login', [NetworkAuthController::class, 'create'])->name('login');
@@ -130,9 +160,13 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
 Route::middleware('tenant.resolve')->prefix('driver')->name('tenant.driver.')->group(function (): void {
     Route::get('/login', [DriverAuthController::class, 'create'])->name('login');
     Route::post('/login', [DriverAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
-    Route::middleware(['tenant.driver', 'tenant.subscription', 'tenant.entitlement:DRIVER'])->group(function (): void {
+    Route::middleware(['tenant.driver', 'tenant.subscription', 'tenant.entitlement:DRIVER', 'driver.private'])->group(function (): void {
         Route::post('/logout', [DriverAuthController::class, 'destroy'])->name('logout');
         Route::get('/', [DriverConsoleController::class, 'index'])->name('dashboard');
+        Route::get('/deliveries', [DriverConsoleController::class, 'deliveries'])->name('deliveries');
+        Route::get('/earnings', [DriverConsoleController::class, 'earnings'])->name('earnings');
+        Route::get('/profile', [DriverConsoleController::class, 'profile'])->name('profile');
+        Route::get('/support', [DriverConsoleController::class, 'support'])->name('support');
         Route::post('/availability', [DriverConsoleController::class, 'availability'])->name('availability');
         Route::get('/shipments/{shipment}', [DriverConsoleController::class, 'show'])->name('shipments.show');
         Route::post('/shipments/{shipment}/transition', [DriverConsoleController::class, 'transition'])->name('shipments.transition');

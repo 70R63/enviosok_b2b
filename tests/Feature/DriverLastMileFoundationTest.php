@@ -668,6 +668,46 @@ final class DriverLastMileFoundationTest extends TestCase
         $this->assertFalse(Schema::hasTable('local_delivery_failed_attempts'));
     }
 
+    public function test_central_driver_host_auto_selects_single_operational_context_and_renders_surfaces(): void
+    {
+        [$tenant, $user, $profile] = $this->driverTenant('central-single');
+        $host = config('zigo_driver.host');
+        $this->actingAs($user)->get("http://{$host}/driver")
+            ->assertOk()->assertSee('ZIGO DRIVER')->assertSee('Operando para')->assertSee($tenant->name)
+            ->assertHeader('Cache-Control', 'must-revalidate, no-cache, no-store, private');
+        $this->assertSame($profile->uuid, session(config('zigo_driver.context_session_key')));
+        foreach (['deliveries' => 'Entregas', 'earnings' => 'Mis ganancias', 'profile' => 'Perfil', 'support' => 'Ayuda y soporte'] as $path => $copy) {
+            $this->get("http://{$host}/driver/{$path}")->assertOk()->assertSee($copy);
+        }
+    }
+
+    public function test_central_driver_context_rejects_arbitrary_profile_and_allows_only_owned_workspace(): void
+    {
+        [$first, $user, $firstProfile] = $this->driverTenant('central-first');
+        $second = $this->tenant('central-second');
+        $second->memberships()->create(['user_id' => $user->id, 'role' => 'driver', 'status' => 'active']);
+        $secondProfile = DriverProfile::create(['tenant_id' => $second->id, 'user_id' => $user->id, 'code' => 'CENTRAL-2', 'status' => 'ACTIVE']);
+        $host = config('zigo_driver.host');
+
+        $this->actingAs($user)->withSession([config('zigo_driver.context_session_key') => (string) \Illuminate\Support\Str::uuid()])
+            ->get("http://{$host}/driver")->assertRedirect(route('driver.workspaces.index'));
+        $this->get("http://{$host}/driver/workspaces")->assertOk()->assertSee($first->name)->assertSee($second->name);
+        $this->post("http://{$host}/driver/workspaces", ['profile' => (string) \Illuminate\Support\Str::uuid()])->assertNotFound();
+        $this->post("http://{$host}/driver/workspaces", ['profile' => $secondProfile->uuid])->assertRedirect(route('driver.dashboard'));
+        $this->assertSame($secondProfile->uuid, session(config('zigo_driver.context_session_key')));
+        $this->assertNotSame($firstProfile->uuid, session(config('zigo_driver.context_session_key')));
+    }
+
+    public function test_central_driver_logout_clears_active_workspace(): void
+    {
+        [, $user, $profile] = $this->driverTenant('central-logout');
+        $host = config('zigo_driver.host');
+        $this->actingAs($user)->withSession([config('zigo_driver.context_session_key') => $profile->uuid])
+            ->post("http://{$host}/driver/logout")->assertRedirect(route('driver.login'));
+        $this->assertGuest();
+        $this->assertNull(session(config('zigo_driver.context_session_key')));
+    }
+
     private function driverTenant(string $slug, bool $entitlement = true, string $subscriptionStatus = 'active'): array
     {
         $tenant = $this->tenant($slug, $entitlement, $subscriptionStatus);
