@@ -85,7 +85,10 @@ final class CustomerJourneyController extends Controller
     {
         $item = $this->checkout($request, $context, $checkout);
         if ($item->expires_at?->isPast() && $item->status !== 'PAID') { $item->update(['status' => 'EXPIRED']); $item->refresh(); }
-        return view('tenant.customer.journey.payment', ['tenant' => $context->tenant()->load('branding'), 'checkout' => $item]);
+        $hasPayments = \Illuminate\Support\Facades\Schema::hasTable('tenant_payment_connections');
+        $connection = $hasPayments ? \App\Domain\Payments\Models\TenantPaymentConnection::where('tenant_id', $context->id())->where('provider', 'MERCADO_PAGO')->first() : null;
+        $attempt = $hasPayments && \Illuminate\Support\Facades\Schema::hasTable('tenant_payment_attempts') ? \App\Domain\Payments\Models\TenantPaymentAttempt::where('checkout_id', $item->id)->latest('id')->first() : null;
+        return view('tenant.customer.journey.payment', ['tenant' => $context->tenant()->load('branding'), 'checkout' => $item, 'connection' => $connection, 'attempt' => $attempt]);
     }
 
     public function pickup(Request $request, string $shipment, TenantContext $context, LocalTrackingService $tracking, \App\Domain\Shipping\LastMile\DriverDispatchService $dispatch)

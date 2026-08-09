@@ -5,6 +5,8 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Schema;
 use App\Domain\Network\Tenancy\TenantContext;
+use App\Domain\Payments\Contracts\PaymentProvider;
+use App\Domain\Payments\MercadoPagoPaymentProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -16,6 +18,7 @@ class AppServiceProvider extends ServiceProvider
     public function register()
     {
         $this->app->scoped(TenantContext::class, fn () => new TenantContext());
+        $this->app->bind(PaymentProvider::class, MercadoPagoPaymentProvider::class);
     }
 
     /**

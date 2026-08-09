@@ -31,6 +31,9 @@ use App\Http\Controllers\Driver\CentralDriverAuthController;
 use App\Http\Controllers\Driver\DriverPwaController;
 use App\Http\Controllers\Driver\DriverWorkspaceController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Tenant\TenantPaymentConnectionController;
+use App\Http\Controllers\Tenant\CustomerPaymentController;
+use App\Http\Controllers\Network\NetworkPaymentController;
 
 Route::domain(config('zigo_driver.host'))->prefix('driver')->name('driver.')->group(function (): void {
     Route::get('/manifest.webmanifest', [DriverPwaController::class, 'manifest'])->name('manifest');
@@ -58,6 +61,9 @@ Route::domain(config('zigo_driver.host'))->prefix('driver')->name('driver.')->gr
         });
     });
 });
+
+Route::get('/payments/mercado-pago/oauth/callback', [TenantPaymentConnectionController::class, 'callback'])
+    ->middleware('throttle:10,1')->name('payments.mercado-pago.oauth.callback');
 
 Route::prefix('network')->name('network.')->group(function (): void {
     Route::get('/login', [NetworkAuthController::class, 'create'])->name('login');
@@ -104,6 +110,7 @@ Route::middleware(['network.auth', 'network.superadmin'])
         Route::get('/plans/{plan}/edit', [PlanController::class, 'edit'])->name('plans.edit');
         Route::match(['put', 'patch'], '/plans/{plan}', [PlanController::class, 'update'])->name('plans.update');
         Route::get('/local-shipping', [LocalShippingController::class, 'index'])->name('local-shipping.index');
+        Route::get('/payments', NetworkPaymentController::class)->name('payments.index');
         Route::get('/delivery-proofs/{proof}/{kind}', [DeliveryEvidenceController::class, 'network'])->name('delivery-proofs.evidence');
         Route::post('/local-shipping/zones', [LocalShippingController::class, 'storeZone'])->name('local-shipping.zones.store');
         Route::post('/local-shipping/zones/{zone}/postal-codes', [LocalShippingController::class, 'storePostalCode'])->name('local-shipping.postal-codes.store');
@@ -140,6 +147,8 @@ Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:
         Route::get('/checkout/{checkout}/resumen', [CustomerJourneyController::class, 'summary'])->name('checkout.summary');
         Route::post('/checkout/{checkout}/continuar', [CustomerJourneyController::class, 'continuePayment'])->name('checkout.continue');
         Route::get('/checkout/{checkout}/pago', [CustomerJourneyController::class, 'payment'])->name('checkout.payment');
+        Route::post('/checkout/{checkout}/pago/mercado-pago', [CustomerPaymentController::class, 'create'])->middleware('throttle:6,1')->name('checkout.mercado-pago.create');
+        Route::get('/checkout/{checkout}/pago/retorno/{result}', [CustomerPaymentController::class, 'returned'])->middleware('throttle:20,1')->name('checkout.mercado-pago.return');
         Route::post('/envios/{shipment}/recoleccion', [CustomerJourneyController::class, 'pickup'])->name('shipments.pickup');
     });
 });
@@ -162,6 +171,9 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
             Route::get('/configuracion', [TenantConfigurationController::class, 'edit'])->name('configuration.edit');
             Route::patch('/configuracion', [TenantConfigurationController::class, 'update'])->name('configuration.update');
             Route::get('/configuracion/entregas', [TenantDeliveryProofOptionController::class, 'index'])->name('delivery-proof-options.index');
+            Route::get('/configuracion/pagos', [TenantPaymentConnectionController::class, 'index'])->name('payments.index');
+            Route::get('/configuracion/pagos/mercado-pago/conectar', [TenantPaymentConnectionController::class, 'connect'])->middleware('throttle:5,1')->name('payments.mercado-pago.connect');
+            Route::delete('/configuracion/pagos/mercado-pago', [TenantPaymentConnectionController::class, 'disconnect'])->middleware('throttle:5,1')->name('payments.mercado-pago.disconnect');
             Route::post('/configuracion/entregas', [TenantDeliveryProofOptionController::class, 'store'])->name('delivery-proof-options.store');
             Route::put('/configuracion/entregas/{option}', [TenantDeliveryProofOptionController::class, 'update'])->name('delivery-proof-options.update');
             Route::get('/operations', [TenantOperationController::class, 'index'])->middleware('tenant.entitlement:B2C')->name('operations.index');
