@@ -25,6 +25,7 @@ use App\Http\Controllers\Tenant\TenantMemberController;
 use App\Http\Controllers\Tenant\TenantOperationController;
 use App\Http\Controllers\Tenant\CustomerAuthController;
 use App\Http\Controllers\Tenant\CustomerPortalController;
+use App\Http\Controllers\Tenant\CustomerJourneyController;
 use App\Http\Controllers\DeliveryEvidenceController;
 use App\Http\Controllers\Driver\CentralDriverAuthController;
 use App\Http\Controllers\Driver\DriverPwaController;
@@ -132,6 +133,14 @@ Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:
         Route::patch('/perfil', [CustomerPortalController::class, 'updateProfile'])->name('profile.update');
         Route::get('/ayuda', [CustomerPortalController::class, 'support'])->name('support');
         Route::get('/evidencia', [CustomerPortalController::class, 'proofOptions'])->name('evidence');
+        Route::get('/envio/nuevo', [CustomerJourneyController::class, 'shipping'])->name('journey.shipping');
+        Route::post('/envio/nuevo', [CustomerJourneyController::class, 'storeShipping'])->name('journey.shipping.store');
+        Route::get('/envio/evidencia', [CustomerJourneyController::class, 'evidence'])->name('journey.evidence');
+        Route::post('/envio/evidencia', [CustomerJourneyController::class, 'storeEvidence'])->name('journey.evidence.store');
+        Route::get('/checkout/{checkout}/resumen', [CustomerJourneyController::class, 'summary'])->name('checkout.summary');
+        Route::post('/checkout/{checkout}/continuar', [CustomerJourneyController::class, 'continuePayment'])->name('checkout.continue');
+        Route::get('/checkout/{checkout}/pago', [CustomerJourneyController::class, 'payment'])->name('checkout.payment');
+        Route::post('/envios/{shipment}/recoleccion', [CustomerJourneyController::class, 'pickup'])->name('shipments.pickup');
     });
 });
 

@@ -63,6 +63,19 @@ final class DeliveryRequirementService
         ]);
     }
 
+    public function snapshotFromContract(LocalShipment $shipment, array $snapshot): LocalShipmentDeliveryRequirement
+    {
+        return LocalShipmentDeliveryRequirement::firstOrCreate(['local_shipment_id' => $shipment->id], [
+            'tenant_id' => $shipment->tenant_id, 'proof_option_code_snapshot' => (string) ($snapshot['code'] ?? 'CHECKOUT'),
+            'proof_option_name_snapshot' => (string) ($snapshot['name'] ?? 'Modalidad contratada'),
+            'require_receiver_name' => (bool) ($snapshot['require_receiver_name'] ?? false), 'require_receiver_type' => (bool) ($snapshot['require_receiver_type'] ?? false),
+            'require_signature' => (bool) ($snapshot['require_signature'] ?? false), 'require_photo' => (bool) ($snapshot['require_photo'] ?? false),
+            'require_gps' => (bool) ($snapshot['require_gps'] ?? false), 'receiver_policy' => (string) ($snapshot['receiver_policy'] ?? 'ANY_PERSON_AT_ADDRESS'),
+            'max_delivery_attempts' => (int) ($snapshot['max_delivery_attempts'] ?? 1), 'surcharge_amount_snapshot' => (float) ($snapshot['surcharge_amount'] ?? 0),
+            'currency_snapshot' => (string) ($snapshot['currency'] ?? 'MXN'), 'created_at' => now(),
+        ]);
+    }
+
     public function forShipment(LocalShipment $shipment): LocalShipmentDeliveryRequirement
     {
         $existing = LocalShipmentDeliveryRequirement::where('local_shipment_id', $shipment->id)->first();

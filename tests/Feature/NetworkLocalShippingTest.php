@@ -81,7 +81,7 @@ final class NetworkLocalShippingTest extends TestCase
         $this->assertDatabaseCount('network_usage_events', 1);
         $this->assertDatabaseCount('local_shipments', 1);
         $this->assertDatabaseCount('local_tracking_events', 2);
-        $this->assertSame('https://rapidgo.zigo.local/tracking/'.$shipment->tracking_number, app(LocalGuideService::class)->trackingUrl($shipment, 'rapidgo.zigo.local'));
+        $this->assertSame('https://rapidgo.zigo.local/rastreo/'.$shipment->tracking_number, app(LocalGuideService::class)->trackingUrl($shipment, 'rapidgo.zigo.local'));
         $this->assertArrayNotHasKey('pricing', $shipment->guide_snapshot);
     }
 

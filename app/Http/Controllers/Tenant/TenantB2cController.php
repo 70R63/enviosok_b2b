@@ -60,10 +60,12 @@ final class TenantB2cController extends Controller
             $profile = TenantCustomerProfile::where('tenant_id', $context->id())->where('user_id', auth()->id())->where('status', 'active')->first();
             if ($profile) {
                 $operation->update(['customer_profile_id' => $profile->id, 'created_by_user_id' => auth()->id()]);
-                return redirect('/app')->with('success', 'Servicio seleccionado. Tu cotización quedó guardada para continuar.');
+                $request->session()->put('tenant_customer.active_operation', $operation->uuid);
+                return redirect('/app/envio/nuevo')->with('success', 'Servicio seleccionado. Completa los datos del envío.');
             }
         }
         $request->session()->put('tenant_customer.pending_quote', ['tenant_id' => $context->id(), 'operation_uuid' => $operation->uuid]);
+        $request->session()->put('url.intended', '/app/envio/nuevo');
         return redirect('/login')->with('status', 'Inicia sesión o crea tu cuenta para continuar con este servicio.');
     }
 

@@ -62,7 +62,9 @@ final class TenantB2cQuoteService
                 'source_type' => B2cCotizacion::class, 'source_id' => $quote->id,
                 'provider' => $publicOptions[0]['provider'] ?? null,
                 'service_code' => $publicOptions[0]['service_code'] ?? null,
-                'metadata' => ['origin_postal_code' => $data['cp_origen'], 'destination_postal_code' => $data['cp_destino'], 'package_type' => $data['tipo_envio'], 'final_price' => $publicOptions[0]['price'], 'currency' => 'MXN'],
+                'metadata' => ['origin_postal_code' => $data['cp_origen'], 'destination_postal_code' => $data['cp_destino'], 'package_type' => $data['tipo_envio'],
+                    'quoted_package' => ['type' => $data['tipo_envio'], 'weight' => (float) $data['peso'], 'billable_weight' => $weight, 'length' => $data['length'] ?? null, 'width' => $data['width'] ?? null, 'height' => $data['height'] ?? null],
+                    'final_price' => $publicOptions[0]['price'], 'currency' => 'MXN'],
             ]);
 
             return ['operation' => $operation, 'options' => $publicOptions];

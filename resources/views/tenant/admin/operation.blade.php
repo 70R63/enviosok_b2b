@@ -3,6 +3,7 @@
 @section('content')
 <div class="eyebrow">OPERACIÓN</div><h1>{{ $operation->uuid }}</h1>
 <div class="card"><p><strong>Provider:</strong> {{ $operation->provider }}</p><p><strong>Servicio:</strong> {{ $operation->service_code }}</p><p><strong>Estado:</strong> {{ strtoupper($operation->status) }}</p></div>
+@if($operation->customerCheckout)<div class="card"><h2>Checkout customer</h2><p><strong>Customer:</strong> {{ $operation->customerProfile?->display_name ?: $operation->customerProfile?->user?->email }}</p><p><strong>Checkout:</strong> {{ $operation->customerCheckout->uuid }}</p><p><strong>Estado:</strong> {{ $operation->customerCheckout->status }}</p><p><strong>Pago:</strong> {{ $operation->customerCheckout->payment_status }}</p><p><strong>Total:</strong> ${{ number_format((float)$operation->customerCheckout->total_amount,2) }} {{ $operation->customerCheckout->currency }}</p></div>@endif
 @if($shipment)
 <div class="card"><h2>Envío local</h2><p><strong>Tracking:</strong> <code>{{ $shipment->tracking_number }}</code></p><p><strong>Servicio:</strong> {{ $shipment->service_code }}</p><p><strong>Estado:</strong> {{ $shipment->status }}</p>
 @if($shipment->status === 'CREATED')<form method="POST" action="{{ route('tenant.admin.operations.pickup-request',$operation->uuid) }}">@csrf<button class="btn">Solicitar recolección</button></form>

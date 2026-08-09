@@ -22,4 +22,5 @@ final class TenantCustomerProfile extends Model
     public function tenant(): BelongsTo { return $this->belongsTo(Tenant::class); }
     public function user(): BelongsTo { return $this->belongsTo(User::class); }
     public function operations(): HasMany { return $this->hasMany(TenantOperation::class, 'customer_profile_id'); }
+    public function checkouts(): HasMany { return $this->hasMany(TenantCustomerCheckout::class, 'customer_profile_id'); }
 }

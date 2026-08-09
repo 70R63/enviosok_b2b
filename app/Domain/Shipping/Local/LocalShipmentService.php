@@ -28,7 +28,8 @@ final class LocalShipmentService
                 if (Schema::hasTable('local_shipment_delivery_requirements')) $this->requirements->forShipment($existing);
                 return $existing;
             }
-            $proofOption = Schema::hasTable('tenant_delivery_proof_options') ? $this->requirements->option($tenant, $data['delivery_proof_option_uuid'] ?? null) : null;
+            $contractRequirement = $data['delivery_requirement_snapshot'] ?? null;
+            $proofOption = ! $contractRequirement && Schema::hasTable('tenant_delivery_proof_options') ? $this->requirements->option($tenant, $data['delivery_proof_option_uuid'] ?? null) : null;
             $branding = $tenant->loadMissing('branding')->branding;
             $tracking = $this->trackingNumber();
             $guide = [
@@ -45,9 +46,10 @@ final class LocalShipmentService
                 'pricing_snapshot' => $data['pricing'], 'guide_snapshot' => $guide, 'created_by_user_id' => $userId,
             ]);
             $shipment->events()->create(['status' => 'CREATED', 'event_code' => 'SHIPMENT_CREATED', 'occurred_at' => now(), 'created_by_user_id' => $userId]);
-            if ($proofOption) $this->requirements->snapshot($shipment, $proofOption);
+            if ($contractRequirement) $this->requirements->snapshotFromContract($shipment, $contractRequirement);
+            elseif ($proofOption) $this->requirements->snapshot($shipment, $proofOption);
 
-            return $proofOption ? $shipment->load('deliveryRequirement') : $shipment;
+            return ($proofOption || $contractRequirement) ? $shipment->load('deliveryRequirement') : $shipment;
         });
     }
 

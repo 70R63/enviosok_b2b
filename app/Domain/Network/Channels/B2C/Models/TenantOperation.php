@@ -27,4 +27,5 @@ final class TenantOperation extends Model
     public function subscription(): BelongsTo { return $this->belongsTo(Subscription::class); }
     public function localShipment(): HasOne { return $this->hasOne(LocalShipment::class, 'tenant_operation_id'); }
     public function customerProfile(): BelongsTo { return $this->belongsTo(TenantCustomerProfile::class, 'customer_profile_id'); }
+    public function customerCheckout(): HasOne { return $this->hasOne(TenantCustomerCheckout::class, 'tenant_operation_id'); }
 }

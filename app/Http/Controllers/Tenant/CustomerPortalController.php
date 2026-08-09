@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Tenant;
 
-use App\Domain\Network\Channels\B2C\Models\TenantOperation;
+use App\Domain\Network\Channels\B2C\Models\{TenantOperation, TenantCustomerCheckout};
 use App\Domain\Network\Tenancy\TenantContext;
 use App\Domain\Shipping\LastMile\Models\TenantDeliveryProofOption;
 use App\Domain\Shipping\Local\LocalGuideService;
@@ -22,6 +22,7 @@ final class CustomerPortalController extends Controller
             'activeCount' => (clone $shipments)->whereNotIn('local_shipments.status', ['DELIVERED', 'CANCELED'])->count(),
             'deliveredCount' => (clone $shipments)->where('local_shipments.status', 'DELIVERED')->count(),
             'shipments' => $shipments->latest('local_shipments.created_at')->limit(5)->get(),
+            'pendingCheckouts' => Schema::hasTable('tenant_customer_checkouts') ? TenantCustomerCheckout::where('tenant_id', $context->id())->where('customer_profile_id', $profile->id)->whereIn('status', ['DRAFT','PENDING_PAYMENT'])->latest()->limit(5)->get() : collect(),
         ]);
     }
 

@@ -5,6 +5,9 @@ namespace Tests\Feature;
 use App\Domain\Network\Billing\Models\{Entitlement, Subscription};
 use App\Domain\Network\Catalog\Models\{Module, Plan};
 use App\Domain\Network\Channels\B2C\Models\{TenantCustomerProfile, TenantOperation};
+use App\Domain\Network\Channels\B2C\Models\TenantCustomerCheckout;
+use App\Domain\Network\Channels\B2C\CustomerCheckoutService;
+use App\Domain\Shipping\LastMile\Models\TenantDeliveryProofOption;
 use App\Domain\Network\Tenancy\Models\Tenant;
 use App\Domain\Shipping\Local\Models\LocalShipment;
 use App\Models\User;
@@ -55,6 +58,14 @@ final class ZigoCustomerPortalTest extends TestCase
         $this->get($this->url($a, '/network'))->assertRedirect('/network/login');
     }
 
+    public function test_anonymous_selected_quote_survives_registration_without_duplicate_operation(): void
+    {
+        $tenant=$this->tenant('anonymous-journey');
+        $operation=TenantOperation::create(['tenant_id'=>$tenant->id,'subscription_id'=>$tenant->subscriptions()->first()->id,'channel'=>'b2c','status'=>'quoted','provider'=>'ZIGO_LOCAL','service_code'=>'LOCAL','metadata'=>['selected_quote'=>['service'=>'Local','price'=>100],'quoted_package'=>['type'=>'sobre','weight'=>1]]]);
+        $this->withSession(['tenant_customer.pending_quote'=>['tenant_id'=>$tenant->id,'operation_uuid'=>$operation->uuid]])->post($this->url($tenant,'/registro'),['name'=>'Nuevo','email'=>'new-journey@example.test','password'=>'Password!123','password_confirmation'=>'Password!123','terms'=>'1'])->assertRedirect('/app/envio/nuevo')->assertSessionHas('tenant_customer.active_operation',$operation->uuid);
+        $this->assertDatabaseCount('network_tenant_operations',1); $this->assertNotNull($operation->fresh()->customer_profile_id);
+    }
+
     public function test_customer_dashboard_and_shipments_only_show_owned_records(): void
     {
         $tenant = $this->tenant('ownership');
@@ -82,7 +93,7 @@ final class ZigoCustomerPortalTest extends TestCase
         $tenant = $this->tenant('selection'); $profile = $this->customer($tenant, 'select@example.test');
         $operation = TenantOperation::create(['tenant_id' => $tenant->id, 'subscription_id' => $tenant->subscriptions()->first()->id, 'channel' => 'b2c', 'status' => 'quoted', 'metadata' => ['final_price' => 100]]);
         $session = ['tenant_customer.quote_result' => ['tenant_id' => $tenant->id, 'operation_uuid' => $operation->uuid, 'options' => [['provider' => 'ZIGO_LOCAL', 'service_code' => 'LOCAL', 'service' => 'Mismo día', 'price' => 120]]]];
-        $this->actingAs($profile->user)->withSession($session)->post($this->url($tenant, '/app/cotizar/seleccionar'), ['operation_uuid' => $operation->uuid, 'option' => 0])->assertRedirect('/app');
+        $this->actingAs($profile->user)->withSession($session)->post($this->url($tenant, '/app/cotizar/seleccionar'), ['operation_uuid' => $operation->uuid, 'option' => 0])->assertRedirect('/app/envio/nuevo');
         $this->assertSame($profile->id, $operation->fresh()->customer_profile_id);
         $this->assertSame('LOCAL', $operation->fresh()->service_code);
         $this->assertDatabaseCount('network_usage_events', 0);
@@ -98,6 +109,42 @@ final class ZigoCustomerPortalTest extends TestCase
         $tenant = $this->tenant('logout'); $profile = $this->customer($tenant, 'logout@example.test');
         $this->actingAs($profile->user)->post($this->url($tenant, '/logout'))->assertRedirect('/');
         $this->assertGuest();
+    }
+
+    public function test_checkout_amounts_are_server_calculated_and_duplicate_submit_is_idempotent(): void
+    {
+        $tenant = $this->tenant('checkout'); $profile = $this->customer($tenant, 'checkout@example.test');
+        $operation = TenantOperation::create(['tenant_id'=>$tenant->id,'subscription_id'=>$tenant->subscriptions()->first()->id,'customer_profile_id'=>$profile->id,'channel'=>'b2c','status'=>'quoted','provider'=>'ZIGO_LOCAL','service_code'=>'LOCAL','metadata'=>[
+            'origin_postal_code'=>'64000','destination_postal_code'=>'64000','quoted_package'=>['type'=>'sobre','weight'=>1],
+            'selected_quote'=>['service'=>'Mismo día','price'=>120,'currency'=>'MXN'],'final_price'=>999999,
+            'shipping_data'=>['sender'=>['name'=>'A','phone'=>'1','address'=>'A','postal_code'=>'64000'],'recipient'=>['name'=>'B','phone'=>'2','address'=>'B','postal_code'=>'64000'],'package'=>['type'=>'sobre','weight'=>1]],
+        ]]);
+        $proof = TenantDeliveryProofOption::create(['tenant_id'=>$tenant->id,'code'=>'SIGN','name'=>'Firma','require_receiver_name'=>true,'require_receiver_type'=>false,'require_signature'=>true,'require_photo'=>false,'require_gps'=>false,'receiver_policy'=>'RECIPIENT_ONLY','max_delivery_attempts'=>2,'surcharge_amount'=>15,'currency'=>'MXN','is_default'=>true,'is_active'=>true,'sort_order'=>1]);
+        $service = app(CustomerCheckoutService::class);
+        $first = $service->create($tenant,$profile,$operation,$proof); $second = $service->create($tenant,$profile,$operation,$proof);
+        $this->assertTrue($first->is($second)); $this->assertSame('120.00',$first->shipping_amount); $this->assertSame('15.00',$first->evidence_amount); $this->assertSame('135.00',$first->total_amount);
+        $this->assertSame('sobre',$first->quote_snapshot['package']['type']); $this->assertDatabaseCount('tenant_customer_checkouts',1);
+    }
+
+    public function test_pending_checkout_has_no_usage_shipment_or_guide_and_is_customer_scoped(): void
+    {
+        $tenant=$this->tenant('gate'); $owner=$this->customer($tenant,'gate-owner@example.test'); $other=$this->customer($tenant,'gate-other@example.test');
+        $operation=TenantOperation::create(['tenant_id'=>$tenant->id,'subscription_id'=>$tenant->subscriptions()->first()->id,'customer_profile_id'=>$owner->id,'channel'=>'b2c','status'=>'quoted','provider'=>'ZIGO_LOCAL','service_code'=>'LOCAL','metadata'=>['selected_quote'=>['service'=>'Local','price'=>100,'currency'=>'MXN'],'quoted_package'=>['type'=>'sobre','weight'=>1],'shipping_data'=>['sender'=>[],'recipient'=>[],'package'=>['type'=>'sobre','weight'=>1]]]]);
+        $proof=TenantDeliveryProofOption::create(['tenant_id'=>$tenant->id,'code'=>'SIMPLE','name'=>'Simple','receiver_policy'=>'ANY_PERSON_AT_ADDRESS','max_delivery_attempts'=>2,'surcharge_amount'=>0,'currency'=>'MXN','is_active'=>true,'sort_order'=>1]);
+        $checkout=app(CustomerCheckoutService::class)->pending(app(CustomerCheckoutService::class)->create($tenant,$owner,$operation,$proof));
+        $this->assertSame('PENDING_PAYMENT',$checkout->status); $this->assertSame('quoted',$operation->fresh()->status);
+        $this->assertDatabaseCount('network_usage_events',0); $this->assertDatabaseCount('local_shipments',0);
+        $this->actingAs($other->user)->get($this->url($tenant,'/app/checkout/'.$checkout->uuid.'/pago'))->assertNotFound();
+        $this->actingAs($owner->user)->get($this->url($tenant,'/app'))->assertOk()->assertSee('Pago pendiente')->assertDontSee('ZL');
+    }
+
+    public function test_expired_checkout_never_creates_shipment(): void
+    {
+        $tenant=$this->tenant('expired'); $profile=$this->customer($tenant,'expired@example.test');
+        $operation=TenantOperation::create(['tenant_id'=>$tenant->id,'subscription_id'=>$tenant->subscriptions()->first()->id,'customer_profile_id'=>$profile->id,'channel'=>'b2c','status'=>'quoted','metadata'=>[]]);
+        $checkout=TenantCustomerCheckout::create(['tenant_id'=>$tenant->id,'customer_profile_id'=>$profile->id,'tenant_operation_id'=>$operation->id,'status'=>'PENDING_PAYMENT','payment_status'=>'PENDING','currency'=>'MXN','shipping_amount'=>100,'evidence_amount'=>0,'total_amount'=>100,'quote_snapshot'=>[],'shipping_data_snapshot'=>[],'proof_option_snapshot'=>[],'expires_at'=>now()->subMinute()]);
+        $this->actingAs($profile->user)->get($this->url($tenant,'/app/checkout/'.$checkout->uuid.'/pago'))->assertOk()->assertSee('Esta cotización expiró');
+        $this->assertSame('EXPIRED',$checkout->fresh()->status); $this->assertDatabaseCount('local_shipments',0); $this->assertDatabaseCount('network_usage_events',0);
     }
 
     private function customer(Tenant $tenant, string $email): TenantCustomerProfile
@@ -139,6 +186,7 @@ final class ZigoCustomerPortalTest extends TestCase
         Schema::create('network_entitlements', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->unsignedBigInteger('subscription_id'),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('module_id'),$t->string('code'),$t->boolean('is_enabled'),$t->unsignedInteger('limit_value')->nullable(),$t->string('source'),$t->timestamps()]));
         Schema::create('network_usage_events', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->nullable(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('subscription_id')->nullable(),$t->string('metric'),$t->unsignedInteger('quantity'),$t->string('idempotency_key')->nullable(),$t->timestamp('occurred_at'),$t->json('metadata')->nullable(),$t->timestamp('created_at')->nullable()]));
         Schema::create('tenant_customer_profiles', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('user_id'),$t->string('status'),$t->string('display_name')->nullable(),$t->string('phone')->nullable(),$t->timestamps(),$t->unique(['tenant_id','user_id'])]));
+        Schema::create('tenant_customer_checkouts', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('customer_profile_id'),$t->unsignedBigInteger('tenant_operation_id')->unique(),$t->string('status'),$t->string('payment_status'),$t->string('currency'),$t->decimal('shipping_amount',12,2),$t->decimal('evidence_amount',12,2),$t->decimal('total_amount',12,2),$t->json('quote_snapshot'),$t->json('shipping_data_snapshot'),$t->json('proof_option_snapshot'),$t->string('payment_provider')->nullable(),$t->string('payment_reference')->nullable(),$t->timestamp('expires_at')->nullable(),$t->timestamp('paid_at')->nullable(),$t->timestamps()]));
         Schema::create('network_tenant_operations', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('subscription_id')->nullable(),$t->string('channel'),$t->string('status'),$t->string('source_type')->nullable(),$t->unsignedBigInteger('source_id')->nullable(),$t->string('provider')->nullable(),$t->string('service_code')->nullable(),$t->string('external_reference')->nullable(),$t->unsignedBigInteger('created_by_user_id')->nullable(),$t->unsignedBigInteger('customer_profile_id')->nullable(),$t->json('metadata')->nullable(),$t->timestamps()]));
         Schema::create('local_shipments', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('tenant_operation_id'),$t->string('tracking_number')->unique(),$t->string('service_code'),$t->string('status'),$t->json('sender_snapshot'),$t->json('recipient_snapshot'),$t->json('package_snapshot'),$t->json('pricing_snapshot'),$t->json('guide_snapshot'),$t->unsignedBigInteger('created_by_user_id')->nullable(),$t->timestamps()]));
         Schema::create('local_tracking_events', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->unsignedBigInteger('local_shipment_id'),$t->string('status'),$t->string('event_code'),$t->text('description')->nullable(),$t->timestamp('occurred_at'),$t->unsignedBigInteger('created_by_user_id')->nullable(),$t->json('metadata')->nullable(),$t->timestamp('created_at')->nullable()]));

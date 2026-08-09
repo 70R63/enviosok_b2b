@@ -41,6 +41,8 @@ final class TenantOperationController extends Controller
     {
         $this->authorizeOperator($context);
         $item = TenantOperation::where('tenant_id', $context->tenant()->id)->where('uuid', $operation)->firstOrFail();
+        if (Schema::hasTable('tenant_customer_checkouts')) $item->load(['customerProfile.user','customerCheckout']);
+        else $item->setRelation('customerCheckout', null);
 
         $relations = ['activeDriverAssignment.driverProfile.user', 'deliveryRequirement'];
         $podEnabled = Schema::hasTable('local_delivery_proofs');

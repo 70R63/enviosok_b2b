@@ -68,6 +68,8 @@ final class NetworkTenantB2cTest extends TestCase
         $this->assertSame('quoted', $operation->status);
         $this->assertDatabaseCount('network_usage_events', 0);
         $this->assertSame('64000', $operation->metadata['origin_postal_code']);
+        $this->assertSame('sobre', $operation->metadata['quoted_package']['type']);
+        $this->assertEquals(1.0, $operation->metadata['quoted_package']['weight']);
     }
 
     public function test_fallback_only_quote_returns_controlled_error_preserves_input_and_rolls_back(): void

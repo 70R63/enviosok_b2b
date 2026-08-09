@@ -68,8 +68,8 @@ final class CustomerAuthController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
         $request->attributes->set('customer_profile', $profile);
-        $this->claimPendingQuote($request, $context, $profile);
-        return redirect('/app');
+        $claimed = $this->claimPendingQuote($request, $context, $profile);
+        return redirect($claimed ? '/app/envio/nuevo' : '/app');
     }
 
     public function destroy(Request $request)
@@ -86,14 +86,19 @@ final class CustomerAuthController extends Controller
         return TenantCustomerProfile::where('tenant_id', $context->id())->where('user_id', auth()->id())->where('status', 'active')->first();
     }
 
-    private function claimPendingQuote(Request $request, TenantContext $context, ?TenantCustomerProfile $profile = null): void
+    private function claimPendingQuote(Request $request, TenantContext $context, ?TenantCustomerProfile $profile = null): bool
     {
         $pending = $request->session()->pull('tenant_customer.pending_quote');
-        if (! is_array($pending) || (int) ($pending['tenant_id'] ?? 0) !== $context->id()) return;
+        if (! is_array($pending) || (int) ($pending['tenant_id'] ?? 0) !== $context->id()) return false;
         $profile ??= $this->profile($context);
-        if (! $profile) return;
-        \App\Domain\Network\Channels\B2C\Models\TenantOperation::where('tenant_id', $context->id())
+        if (! $profile) return false;
+        $updated = \App\Domain\Network\Channels\B2C\Models\TenantOperation::where('tenant_id', $context->id())
             ->where('uuid', (string) ($pending['operation_uuid'] ?? ''))->whereNull('customer_profile_id')
             ->update(['customer_profile_id' => $profile->id, 'created_by_user_id' => auth()->id()]);
+        if ($updated || \App\Domain\Network\Channels\B2C\Models\TenantOperation::where('tenant_id', $context->id())->where('uuid', (string) ($pending['operation_uuid'] ?? ''))->where('customer_profile_id', $profile->id)->exists()) {
+            $request->session()->put('tenant_customer.active_operation', (string) $pending['operation_uuid']);
+            return true;
+        }
+        return false;
     }
 }
