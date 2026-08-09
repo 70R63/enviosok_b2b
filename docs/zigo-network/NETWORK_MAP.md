@@ -47,8 +47,13 @@ WhatsApp → AI Conversational → AI Vision → dirección → datos faltantes 
 ## AI Vision
 Address OCR, Document AI y Dimension AI. Una fotografía arbitraria no garantiza medidas exactas: se requerirán referencia conocida, varias tomas, AR/depth cuando exista, confidence score y confirmación humana.
 
-## Comercio
-Marketplace interno ZIGO de cajas, cinta, sobres, etiquetas y embalaje; no otra plataforma Laravel.
+## Commerce — FUTURE
+Commerce se redefine como un SaaS e-commerce white-label rentable para tenants, no como una tienda interna ni como otra plataforma Laravel. Su alcance futuro incluye Storefront, Branding, Domain/Subdomain, Catalog, Categories, Products, Images, Pricing, Inventory, Cart, Checkout, Payments, Orders, Shipping, Guide Generation, Pickup y Tracking.
+
+Topología futura: `Commerce → Checkout → Shipping → Shipment/Guide → Pickup → Driver/Carrier → Tracking`.
+
+## ZIGO Supplies — FUTURE
+ZIGO Supplies será la tienda propia de empaques e insumos logísticos, construida preferentemente sobre el mismo ZIGO Commerce Engine para validar el producto white-label sobre una operación real de ZIGO.
 
 ## Marketing
 Evolución de landings/prospectos hacia campañas, redes, promociones y crecimiento tenant.
@@ -60,7 +65,24 @@ Plataforma externa o futura integración; no módulo propio actual.
 Futuro: recepción, inventario, fulfillment, preparación, despacho y cross docking.
 
 ## ZIGO Local
-Proveedor propio en foundation: cobertura por zonas/CP, catálogo de servicios, cotización, shipment, guía y tracking básico. Driver, POD y GPS siguen planeados.
+Proveedor propio en foundation: cobertura por zonas/CP, catálogo de servicios, cotización, shipment, guía y tracking básico.
+
+## Driver / Last Mile
+Capacidad CURRENT en desarrollo: `Tenant -> Shipping -> Driver / Last Mile -> Tracking`. La identidad reutiliza `User` y `TenantMembership(role=driver)` con un perfil operativo tenant-scoped. Las asignaciones son durables, conservan historial y sólo una permanece activa por shipment. El Driver asignado ejecuta exclusivamente transiciones permitidas por `LocalTrackingService`; no genera Usage adicional. POD, fotos, firma, GPS, mapas, push y operación offline permanecen FUTURE.
+
+ZN-07A.2 incorpora presencia con TTL, disponibilidad operacional, auto dispatch por menor carga, navegación mediante URLs oficiales, atribución durable de entrega, políticas de compensación específicas por conductor y un ledger append-only con snapshot monetario inmutable. Ninguna de estas acciones consume una operación adicional.
+
+### DRIVER MARKETPLACE — FUTURE
+Flujo previsto, no implementado: “Quiero ser repartidor” (Public Driver Onboarding) → Verification → Driver Pool → Offers → Assignment → Earnings → Settlement → Payout. La asignación entrega únicamente el acceso mínimo necesario para ejecutar la entrega.
+
+### DRIVER PAYOUTS — FUTURE
+Línea futura: Driver → Earnings → Driver Payouts. Su alcance comprende Earnings, Settlements, Payout Provider y Reconciliation. El ledger actual es únicamente foundation; no existen pagos, bidding ni transferencias en ZN-07A.2.
+
+## Workforce — FUTURE
+Gestión tenant-scoped de Tenant Employees, Operational Roles, Activity, Productivity y Workforce Cost. Su topología aprobada es `Tenant → Employees/Drivers → Deliveries → Earnings/Costs → Operations Analytics`; Workforce también alimentará directamente Operations Analytics.
+
+## Operations Analytics — FUTURE
+La vista Network consolidará Tenant Totals, Guides, Deliveries, Revenues, Costs, Driver Earnings y Margin. La vista Tenant estará estrictamente aislada y mostrará únicamente Own Employees, Own Guides, Productivity, Earnings/Cost y Operational KPIs.
 
 ## Proveedores
 Xperta tiene integración real. Estafeta tiene auth, guía, rastreo y pricing local; auditorías señalan coverage/quote moderno incompleto, por eso es PARTIAL.
@@ -94,7 +116,7 @@ B2C y B2B son canales, no tenants.
 | ZN-04 | Subscription + Entitlements | PLANNED |
 | ZN-05 | Primer canal tenant-aware | COMPLETED |
 | ZN-06 | ZIGO Local | CURRENT |
-| ZN-07 | Driver + Tracking + POD | PLANNED |
+| ZN-07 | Driver + Last Mile foundation | CURRENT / DEVELOPMENT |
 | ZN-08 | Billing SaaS | PLANNED |
 | ZN-09 | B2B V2 Multi-Tenant | PLANNED |
 | ZN-10 | Commerce | PLANNED |

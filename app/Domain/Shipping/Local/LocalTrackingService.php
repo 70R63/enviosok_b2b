@@ -19,9 +19,17 @@ final class LocalTrackingService
     public function transition(LocalShipment $shipment, string $status, ?int $userId = null, ?string $description = null): LocalTrackingEvent
     {
         $status = strtoupper($status);
-        if (! in_array($status, self::TRANSITIONS[$shipment->status] ?? [], true)) throw new DomainException('Transición logística inválida.');
+
         return DB::transaction(function () use ($shipment, $status, $userId, $description) {
+            $shipment = LocalShipment::query()->whereKey($shipment->id)->lockForUpdate()->firstOrFail();
+            if ($shipment->status === $status) {
+                return $shipment->events()->where('status', $status)->latest('id')->firstOrFail();
+            }
+            if (! in_array($status, self::TRANSITIONS[$shipment->status] ?? [], true)) {
+                throw new DomainException('Transición logística inválida.');
+            }
             $shipment->update(['status' => $status]);
+
             return $shipment->events()->create(['status' => $status, 'event_code' => $status, 'description' => $description, 'occurred_at' => now(), 'created_by_user_id' => $userId]);
         });
     }

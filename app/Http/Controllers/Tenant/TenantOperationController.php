@@ -5,12 +5,16 @@ namespace App\Http\Controllers\Tenant;
 use App\Domain\Network\Channels\B2C\Models\TenantOperation;
 use App\Domain\Network\Channels\B2C\TenantOperationService;
 use App\Domain\Network\Tenancy\Models\TenantMembership;
+use App\Domain\Network\Tenancy\TenantAccessService;
 use App\Domain\Network\Tenancy\TenantContext;
+use App\Domain\Shipping\LastMile\Models\DriverProfile;
 use App\Domain\Shipping\Local\LocalGuideService;
 use App\Domain\Shipping\Local\LocalShipmentService;
+use App\Domain\Shipping\Local\LocalTrackingService;
 use App\Domain\Shipping\Local\Models\LocalShipment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 final class TenantOperationController extends Controller
 {
@@ -31,12 +35,38 @@ final class TenantOperationController extends Controller
         return back()->with('success', 'Operación confirmada.');
     }
 
-    public function show(string $operation, TenantContext $context)
+    public function show(string $operation, TenantContext $context, TenantAccessService $access)
     {
         $this->authorizeOperator($context);
         $item = TenantOperation::where('tenant_id', $context->tenant()->id)->where('uuid', $operation)->firstOrFail();
 
-        return view('tenant.admin.operation', ['tenant' => $context->tenant()->load('branding'), 'operation' => $item, 'shipment' => LocalShipment::where('tenant_id', $context->tenant()->id)->where('tenant_operation_id', $item->id)->first()]);
+        $shipment = LocalShipment::with('activeDriverAssignment.driverProfile.user')->where('tenant_id', $context->tenant()->id)->where('tenant_operation_id', $item->id)->first();
+
+        return view('tenant.admin.operation', [
+            'tenant' => $context->tenant()->load('branding'), 'operation' => $item, 'shipment' => $shipment,
+            'drivers' => $shipment && $shipment->status === 'READY_FOR_PICKUP'
+                ? app(\App\Domain\Shipping\LastMile\DriverDispatchService::class)->manualCandidates($context->tenant(), $shipment)
+                : collect(),
+            'canManageDrivers' => $access->hasRole(['owner', 'admin'], auth()->user()),
+        ]);
+    }
+
+    public function requestPickup(string $operation, TenantContext $context, LocalTrackingService $tracking, \App\Domain\Shipping\LastMile\DriverDispatchService $dispatch)
+    {
+        $this->authorizeOperator($context);
+        $item = TenantOperation::where('tenant_id', $context->id())->where('uuid', $operation)->firstOrFail();
+        $shipment = LocalShipment::where('tenant_id', $context->id())->where('tenant_operation_id', $item->id)->firstOrFail();
+        if (! in_array($shipment->status, ['CREATED', 'READY_FOR_PICKUP'], true)) {
+            throw ValidationException::withMessages(['pickup' => 'El envío ya no es elegible para solicitar recolección.']);
+        }
+        try {
+            $tracking->transition($shipment, 'READY_FOR_PICKUP', auth()->id(), 'Recolección solicitada.');
+            $dispatch->autoAssign($context->tenant(), $shipment->fresh(), auth()->id());
+        } catch (\DomainException $exception) {
+            throw ValidationException::withMessages(['pickup' => $exception->getMessage()]);
+        }
+
+        return back()->with('success', 'Recolección solicitada. Estamos asignando un repartidor.');
     }
 
     public function shipment(Request $request, string $operation, TenantContext $context, LocalShipmentService $shipments)

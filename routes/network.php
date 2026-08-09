@@ -12,10 +12,13 @@ use App\Http\Controllers\Network\TenantBrandingController;
 use App\Http\Controllers\Network\TenantController;
 use App\Http\Controllers\Network\TenantDomainController;
 use App\Http\Controllers\Network\TenantMembershipController as NetworkTenantMembershipController;
+use App\Http\Controllers\Tenant\DriverAuthController;
+use App\Http\Controllers\Tenant\DriverConsoleController;
 use App\Http\Controllers\Tenant\TenantAdminController;
 use App\Http\Controllers\Tenant\TenantAuthController;
 use App\Http\Controllers\Tenant\TenantB2cController;
 use App\Http\Controllers\Tenant\TenantConfigurationController;
+use App\Http\Controllers\Tenant\TenantDriverController;
 use App\Http\Controllers\Tenant\TenantHomeController;
 use App\Http\Controllers\Tenant\TenantMemberController;
 use App\Http\Controllers\Tenant\TenantOperationController;
@@ -87,7 +90,7 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
     Route::post('/login', [TenantAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
     Route::middleware('tenant.auth')->group(function (): void {
         Route::post('/logout', [TenantAuthController::class, 'destroy'])->name('logout');
-        Route::middleware('tenant.subscription')->group(function (): void {
+        Route::middleware(['tenant.subscription', 'tenant.admin.access'])->group(function (): void {
             Route::get('/', [TenantAdminController::class, 'dashboard'])->name('dashboard');
             Route::get('/plan', [TenantAdminController::class, 'plan'])->name('plan');
             Route::get('/configuracion', [TenantConfigurationController::class, 'edit'])->name('configuration.edit');
@@ -97,10 +100,33 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
             Route::get('/operations/{operation}', [TenantOperationController::class, 'show'])->middleware('tenant.entitlement:SHIPPING')->name('operations.show');
             Route::post('/operations/{operation}/local-shipment', [TenantOperationController::class, 'shipment'])->middleware('tenant.entitlement:SHIPPING')->name('operations.shipment');
             Route::get('/operations/{operation}/guide.pdf', [TenantOperationController::class, 'guide'])->middleware('tenant.entitlement:SHIPPING')->name('operations.guide');
+            Route::post('/operations/{operation}/pickup-request', [TenantOperationController::class, 'requestPickup'])->middleware('tenant.entitlement:SHIPPING')->name('operations.pickup-request');
+            Route::middleware('tenant.entitlement:DRIVER')->group(function (): void {
+                Route::get('/drivers', [TenantDriverController::class, 'index'])->name('drivers.index');
+                Route::get('/dispatch/pickups', [TenantDriverController::class, 'dispatchQueue'])->name('dispatch.pickups');
+                Route::post('/drivers', [TenantDriverController::class, 'store'])->name('drivers.store');
+                Route::get('/drivers/{driver}', [TenantDriverController::class, 'show'])->name('drivers.show');
+                Route::patch('/drivers/{driver}/toggle', [TenantDriverController::class, 'toggle'])->name('drivers.toggle');
+                Route::put('/drivers/{driver}/compensation', [TenantDriverController::class, 'updateCompensation'])->name('drivers.compensation.update');
+                Route::post('/local-shipments/{shipment}/driver', [TenantDriverController::class, 'assign'])->name('drivers.assign');
+                Route::post('/local-shipments/{shipment}/transition', [TenantDriverController::class, 'transition'])->name('drivers.transition');
+            });
             Route::middleware('tenant.members.manage')->group(function (): void {
                 Route::get('/users', [TenantMemberController::class, 'index'])->name('users.index');
                 Route::patch('/users/{membership}', [TenantMemberController::class, 'update'])->name('users.update');
             });
         });
+    });
+});
+
+Route::middleware('tenant.resolve')->prefix('driver')->name('tenant.driver.')->group(function (): void {
+    Route::get('/login', [DriverAuthController::class, 'create'])->name('login');
+    Route::post('/login', [DriverAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
+    Route::middleware(['tenant.driver', 'tenant.subscription', 'tenant.entitlement:DRIVER'])->group(function (): void {
+        Route::post('/logout', [DriverAuthController::class, 'destroy'])->name('logout');
+        Route::get('/', [DriverConsoleController::class, 'index'])->name('dashboard');
+        Route::post('/availability', [DriverConsoleController::class, 'availability'])->name('availability');
+        Route::get('/shipments/{shipment}', [DriverConsoleController::class, 'show'])->name('shipments.show');
+        Route::post('/shipments/{shipment}/transition', [DriverConsoleController::class, 'transition'])->name('shipments.transition');
     });
 });
