@@ -79,6 +79,7 @@ class Kernel extends HttpKernel
         'tenant.subscription' => \App\Http\Middleware\EnsureTenantSubscriptionAccess::class,
         'tenant.entitlement' => \App\Http\Middleware\EnsureTenantEntitlement::class,
         'tenant.admin.access' => \App\Http\Middleware\EnsureTenantAdminAccess::class,
+        'tenant.support.staff' => \App\Http\Middleware\EnsureTenantSupportStaff::class,
         'tenant.driver' => \App\Http\Middleware\AuthenticateDriver::class,
         'driver.central.context' => \App\Http\Middleware\ResolveCentralDriverContext::class,
         'driver.private' => \App\Http\Middleware\ProtectDriverResponse::class,

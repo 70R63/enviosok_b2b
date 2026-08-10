@@ -1,0 +1,16 @@
+<?php
+namespace App\Domain\Support\Models;
+use App\Domain\Network\Tenancy\Models\Tenant; use App\Models\User; use Illuminate\Database\Eloquent\Model; use Illuminate\Support\Str;
+final class SupportTicket extends Model{
+ public const SCOPES=['TENANT_OPERATIONAL','ZIGO_PLATFORM']; public const STATUSES=['OPEN','IN_PROGRESS','WAITING_CUSTOMER','WAITING_TENANT','WAITING_ZIGO','RESOLVED','CLOSED']; public const PRIORITIES=['LOW','NORMAL','HIGH','URGENT'];
+ public const TENANT_CATEGORIES=['DELIVERY','PICKUP','ADDRESS','RECIPIENT','PACKAGE','DRIVER','TRACKING','OTHER']; public const ZIGO_CATEGORIES=['LOGIN','ACCOUNT','PAYMENTS','BILLING','CONFIGURATION','DRIVER_APP','TECHNICAL_ERROR','API','OTHER'];
+ protected $fillable=['tenant_id','requester_user_id','requester_type','scope','channel','category','priority','status','subject','description','assigned_user_id','assigned_team','related_operation_id','related_shipment_id','related_checkout_id','related_driver_profile_id','first_response_at','resolved_at','closed_at'];
+ protected $casts=['first_response_at'=>'datetime','resolved_at'=>'datetime','closed_at'=>'datetime'];
+ protected static function booted():void{self::creating(function(self$t):void{$t->uuid??=(string)Str::uuid();do{$ref='SUP-'.Str::upper(Str::random(10));}while(self::where('public_reference',$ref)->exists());$t->public_reference??=$ref;});}
+ public function tenant(){return $this->belongsTo(Tenant::class);} public function requester(){return $this->belongsTo(User::class,'requester_user_id');} public function assignee(){return $this->belongsTo(User::class,'assigned_user_id');}
+ public function messages(){return $this->hasMany(SupportTicketMessage::class,'ticket_id');} public function attachments(){return $this->hasMany(SupportTicketAttachment::class,'ticket_id');} public function events(){return $this->hasMany(SupportTicketEvent::class,'ticket_id');}
+ public function relatedOperation(){return$this->belongsTo(\App\Domain\Network\Channels\B2C\Models\TenantOperation::class,'related_operation_id');} public function relatedShipment(){return$this->belongsTo(\App\Domain\Shipping\Local\Models\LocalShipment::class,'related_shipment_id');} public function relatedCheckout(){return$this->belongsTo(\App\Domain\Network\Channels\B2C\Models\TenantCustomerCheckout::class,'related_checkout_id');} public function relatedDriverProfile(){return$this->belongsTo(\App\Domain\Shipping\LastMile\Models\DriverProfile::class,'related_driver_profile_id');}
+ public function statusLabel():string{return['OPEN'=>'Abierto','IN_PROGRESS'=>'En progreso','WAITING_CUSTOMER'=>'Esperando al cliente','WAITING_TENANT'=>'Esperando al tenant','WAITING_ZIGO'=>'Esperando a ZIGO','RESOLVED'=>'Resuelto','CLOSED'=>'Cerrado'][$this->status]??'Actualización';}
+ public function priorityLabel():string{return['LOW'=>'Baja','NORMAL'=>'Normal','HIGH'=>'Alta','URGENT'=>'Urgente'][$this->priority]??'Normal';}
+ public function categoryLabel():string{return['DELIVERY'=>'Entrega','PICKUP'=>'Recolección','ADDRESS'=>'Dirección','RECIPIENT'=>'Destinatario','PACKAGE'=>'Paquete','DRIVER'=>'Driver','TRACKING'=>'Rastreo','LOGIN'=>'Acceso','ACCOUNT'=>'Cuenta','PAYMENTS'=>'Pagos','BILLING'=>'Facturación SaaS','CONFIGURATION'=>'Configuración','DRIVER_APP'=>'ZIGO Driver','TECHNICAL_ERROR'=>'Error técnico','API'=>'API','OTHER'=>'Otro'][$this->category]??'Otro';}
+}

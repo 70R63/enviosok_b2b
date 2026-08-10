@@ -12,7 +12,7 @@
 @media(min-width:768px){.customer-main{padding-bottom:2.5rem}.customer-bottom{display:none}.customer-tracking form{grid-template-columns:1fr auto}.customer-tracking button{min-width:150px}}
 </style>@stack('head')</head><body class="z-app">
 <header class="customer-header"><nav class="z-container customer-nav" aria-label="Navegación principal"><a class="customer-brand" href="/">@if($branding?->logo_path)<img src="{{ Storage::disk('public')->url($branding->logo_path) }}" alt="{{ $brand }}">@else<span>{{ $brand }}</span>@endif</a><div class="customer-links">
-@auth<a class="desktop-link" href="/app">Inicio</a><a class="desktop-link" href="/app/cotizar">Cotizar</a><a class="desktop-link" href="/app/envios">Envíos</a><a class="desktop-link" href="/app/perfil">Perfil</a><form method="POST" action="/logout">@csrf<button class="z-btn z-btn--ghost" type="submit">Salir</button></form>
+@auth<a class="desktop-link" href="/app">Inicio</a><a class="desktop-link" href="/app/cotizar">Cotizar</a><a class="desktop-link" href="/app/envios">Envíos</a><a class="desktop-link" href="/app/ayuda">Ayuda</a><a class="desktop-link" href="/app/perfil">Perfil</a><form method="POST" action="/logout">@csrf<button class="z-btn z-btn--ghost" type="submit">Salir</button></form>
 @else<a class="desktop-link" href="/rastreo">Rastrear</a><a class="z-btn z-btn--outline" href="/login">Iniciar sesión</a><a class="z-btn" href="/registro">Crear cuenta</a>@endauth
 </div></nav></header>
 <main class="z-container customer-main">@if(session('success'))<div class="z-alert z-alert--success" role="status">{{ session('success') }}</div>@endif @if(session('status'))<div class="z-alert" role="status">{{ session('status') }}</div>@endif @yield('content')</main>

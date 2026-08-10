@@ -37,6 +37,7 @@ use App\Http\Controllers\Network\NetworkPaymentController;
 use App\Http\Controllers\Payments\PaymentEdgeHealthController;
 use App\Http\Controllers\Tenant\TenantSaasController;
 use App\Http\Controllers\Network\CommercialCatalogController;
+use App\Http\Controllers\Support\{CustomerSupportController,DriverSupportController,TenantSupportController,NetworkSupportController};
 
 Route::domain(config('zigo_driver.host'))->prefix('driver')->name('driver.')->group(function (): void {
     Route::get('/manifest.webmanifest', [DriverPwaController::class, 'manifest'])->name('manifest');
@@ -53,7 +54,11 @@ Route::domain(config('zigo_driver.host'))->prefix('driver')->name('driver.')->gr
             Route::get('/deliveries', [DriverConsoleController::class, 'deliveries'])->name('deliveries');
             Route::get('/earnings', [DriverConsoleController::class, 'earnings'])->name('earnings');
             Route::get('/profile', [DriverConsoleController::class, 'profile'])->name('profile');
-            Route::get('/support', [DriverConsoleController::class, 'support'])->name('support');
+            Route::get('/support', [DriverSupportController::class, 'index'])->name('support');
+            Route::post('/support/tickets', [DriverSupportController::class, 'store'])->name('support.store');
+            Route::get('/support/tickets/{ticket}', [DriverSupportController::class, 'show'])->name('support.show');
+            Route::post('/support/tickets/{ticket}/respuestas', [DriverSupportController::class, 'reply'])->name('support.reply');
+            Route::get('/support/tickets/{ticket}/adjuntos/{attachment}', [DriverSupportController::class, 'attachment'])->name('support.attachment');
             Route::post('/availability', [DriverConsoleController::class, 'availability'])->name('availability');
             Route::get('/shipments/{shipment}', [DriverConsoleController::class, 'show'])->name('shipments.show');
             Route::post('/shipments/{shipment}/transition', [DriverConsoleController::class, 'transition'])->name('shipments.transition');
@@ -122,6 +127,12 @@ Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superad
         Route::post('/catalog', [CommercialCatalogController::class, 'store'])->name('catalog.store');
         Route::put('/catalog/{product}', [CommercialCatalogController::class, 'update'])->name('catalog.update');
         Route::get('/saas-orders', [CommercialCatalogController::class, 'orders'])->name('saas-orders.index');
+        Route::get('/support', [NetworkSupportController::class, 'index'])->name('support.index');
+        Route::post('/support', [NetworkSupportController::class, 'store'])->name('support.store');
+        Route::get('/support/{ticket}', [NetworkSupportController::class, 'show'])->name('support.show');
+        Route::post('/support/{ticket}/respuestas', [NetworkSupportController::class, 'reply'])->name('support.reply');
+        Route::patch('/support/{ticket}', [NetworkSupportController::class, 'update'])->name('support.update');
+        Route::get('/support/{ticket}/adjuntos/{attachment}', [NetworkSupportController::class, 'attachment'])->name('support.attachment');
         Route::get('/delivery-proofs/{proof}/{kind}', [DeliveryEvidenceController::class, 'network'])->name('delivery-proofs.evidence');
         Route::post('/local-shipping/zones', [LocalShippingController::class, 'storeZone'])->name('local-shipping.zones.store');
         Route::post('/local-shipping/zones/{zone}/postal-codes', [LocalShippingController::class, 'storePostalCode'])->name('local-shipping.postal-codes.store');
@@ -149,7 +160,13 @@ Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:
         Route::get('/envios/{shipment}/guia.pdf', [CustomerPortalController::class, 'guide'])->name('shipments.guide');
         Route::get('/perfil', [CustomerPortalController::class, 'profile'])->name('profile');
         Route::patch('/perfil', [CustomerPortalController::class, 'updateProfile'])->name('profile.update');
-        Route::get('/ayuda', [CustomerPortalController::class, 'support'])->name('support');
+        Route::get('/ayuda', [CustomerSupportController::class, 'index'])->name('support');
+        Route::get('/ayuda/tickets', [CustomerSupportController::class, 'index'])->name('support.tickets');
+        Route::get('/ayuda/tickets/nuevo', [CustomerSupportController::class, 'create'])->name('support.create');
+        Route::post('/ayuda/tickets', [CustomerSupportController::class, 'store'])->name('support.store');
+        Route::get('/ayuda/tickets/{ticket}', [CustomerSupportController::class, 'show'])->name('support.show');
+        Route::post('/ayuda/tickets/{ticket}/respuestas', [CustomerSupportController::class, 'reply'])->name('support.reply');
+        Route::get('/ayuda/tickets/{ticket}/adjuntos/{attachment}', [CustomerSupportController::class, 'attachment'])->name('support.attachment');
         Route::get('/evidencia', [CustomerPortalController::class, 'proofOptions'])->name('evidence');
         Route::get('/envio/nuevo', [CustomerJourneyController::class, 'shipping'])->name('journey.shipping');
         Route::post('/envio/nuevo', [CustomerJourneyController::class, 'storeShipping'])->name('journey.shipping.store');
@@ -185,6 +202,15 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
             Route::get('/compras/{order}/pago', [TenantSaasController::class, 'payment'])->name('saas.payment');
             Route::post('/compras/{order}/pago', [TenantSaasController::class, 'checkout'])->middleware('throttle:6,1')->name('saas.checkout');
             Route::get('/compras/{order}/retorno/{result}', [TenantSaasController::class, 'returned'])->middleware('throttle:20,1')->name('saas.return');
+            Route::middleware('tenant.support.staff')->group(function (): void {
+                Route::get('/soporte', [TenantSupportController::class, 'index'])->name('support.index');
+                Route::get('/soporte/zigo', [TenantSupportController::class, 'zigo'])->name('support.zigo');
+                Route::post('/soporte/zigo', [TenantSupportController::class, 'storeZigo'])->name('support.zigo.store');
+                Route::get('/soporte/{ticket}', [TenantSupportController::class, 'show'])->name('support.show');
+                Route::post('/soporte/{ticket}/respuestas', [TenantSupportController::class, 'reply'])->name('support.reply');
+                Route::patch('/soporte/{ticket}', [TenantSupportController::class, 'update'])->name('support.update');
+                Route::get('/soporte/{ticket}/adjuntos/{attachment}', [TenantSupportController::class, 'attachment'])->name('support.attachment');
+            });
             Route::get('/configuracion', [TenantConfigurationController::class, 'edit'])->name('configuration.edit');
             Route::patch('/configuracion', [TenantConfigurationController::class, 'update'])->name('configuration.update');
             Route::get('/configuracion/entregas', [TenantDeliveryProofOptionController::class, 'index'])->name('delivery-proof-options.index');
@@ -228,7 +254,11 @@ Route::middleware('tenant.resolve')->prefix('driver')->name('tenant.driver.')->g
         Route::get('/deliveries', [DriverConsoleController::class, 'deliveries'])->name('deliveries');
         Route::get('/earnings', [DriverConsoleController::class, 'earnings'])->name('earnings');
         Route::get('/profile', [DriverConsoleController::class, 'profile'])->name('profile');
-        Route::get('/support', [DriverConsoleController::class, 'support'])->name('support');
+        Route::get('/support', [DriverSupportController::class, 'index'])->name('support');
+        Route::post('/support/tickets', [DriverSupportController::class, 'store'])->name('support.store');
+        Route::get('/support/tickets/{ticket}', [DriverSupportController::class, 'show'])->name('support.show');
+        Route::post('/support/tickets/{ticket}/respuestas', [DriverSupportController::class, 'reply'])->name('support.reply');
+        Route::get('/support/tickets/{ticket}/adjuntos/{attachment}', [DriverSupportController::class, 'attachment'])->name('support.attachment');
         Route::post('/availability', [DriverConsoleController::class, 'availability'])->name('availability');
         Route::get('/shipments/{shipment}', [DriverConsoleController::class, 'show'])->name('shipments.show');
         Route::post('/shipments/{shipment}/transition', [DriverConsoleController::class, 'transition'])->name('shipments.transition');
