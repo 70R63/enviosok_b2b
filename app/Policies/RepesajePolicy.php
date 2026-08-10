@@ -6,7 +6,7 @@ use App\Models\Reportes\Repesaje;
 use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
-class RepesajePolicy
+final class RepesajePolicy
 {
     use HandlesAuthorization;
 

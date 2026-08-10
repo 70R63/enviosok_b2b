@@ -14,13 +14,14 @@ class Kernel extends HttpKernel
      * @var array<int, class-string|string>
      */
     protected $middleware = [
-        // \App\Http\Middleware\TrustHosts::class,
+        \App\Http\Middleware\TrustHosts::class,
         \App\Http\Middleware\TrustProxies::class,
         \Illuminate\Http\Middleware\HandleCors::class,
         \App\Http\Middleware\PreventRequestsDuringMaintenance::class,
         \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
         \App\Http\Middleware\TrimStrings::class,
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
+        \App\Http\Middleware\SecurityHeaders::class,
     ];
 
     /**
@@ -77,6 +78,7 @@ class Kernel extends HttpKernel
         'ensure.zigo.portal' => \App\Http\Middleware\EnsureZigoPortalHost::class,
         'network.superadmin' => \App\Http\Middleware\EnsureNetworkSuperAdmin::class,
         'network.auth' => \App\Http\Middleware\AuthenticateNetwork::class,
+        'network.two-factor' => \App\Http\Middleware\EnsureNetworkTwoFactor::class,
         'tenant.resolve' => \App\Http\Middleware\ResolveNetworkTenant::class,
         'tenant.auth' => \App\Http\Middleware\AuthenticateTenant::class,
         'tenant.members.manage' => \App\Http\Middleware\EnsureTenantMemberManager::class,

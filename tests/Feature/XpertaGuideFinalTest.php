@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+
 use App\Models\B2cCotizacion;
 use App\Console\Commands\RecoverXpertaB2cGuide;
 use App\Http\Controllers\API\Payments\MercadoPagoWebhookController;
@@ -45,7 +47,7 @@ final class XpertaGuideFinalTest extends TestCase
         Cache::put($this->cacheKey(), '99|GUIDE-TOKEN', 60);
     }
 
-    /** @dataProvider services */
+    #[DataProvider('services')]
     public function test_exact_url_headers_and_base64_payload(string $service): void
     {
         Http::fake([
@@ -103,7 +105,7 @@ final class XpertaGuideFinalTest extends TestCase
         $this->assertSame(['parcelId' => 4, 'weight' => '3', 'height' => '15', 'length' => '25', 'width' => '20'], $item);
     }
 
-    /** @dataProvider invalidBoxDimensions */
+    #[DataProvider('invalidBoxDimensions')]
     public function test_box_rejects_non_integer_or_more_than_three_digit_dimensions(string $dimensions): void
     {
         $quote = $this->quote();
@@ -179,7 +181,7 @@ final class XpertaGuideFinalTest extends TestCase
         Storage::disk('local')->assertExists($path);
     }
 
-    /** @dataProvider recoverableEnvironments */
+    #[DataProvider('recoverableEnvironments')]
     public function test_recovery_environment_is_allowed(string $environment): void
     {
         config()->set('services.xperta.environment', $environment);

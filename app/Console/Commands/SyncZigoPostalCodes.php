@@ -104,6 +104,6 @@ final class SyncZigoPostalCodes extends Command
 
     private function absolutePath(string $path): string
     {
-        return preg_match('/^(?:[A-Za-z]:[\\\\\/]|[\\\\\/]{2})/', $path) ? $path : base_path($path);
+        return preg_match('/^(?:[A-Za-z]:[\\\\\/]|[\\\\\/]{2}|\/)/', $path) ? $path : base_path($path);
     }
 }

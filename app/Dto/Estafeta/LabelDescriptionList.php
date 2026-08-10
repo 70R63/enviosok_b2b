@@ -5,7 +5,7 @@ use Spatie\DataTransferObject\DataTransferObject;
 
 use App\Dto\Estafeta\OriginInfo;
 use App\Dto\Estafeta\DestinationInfo;
-use App\Dto\Estafeta\Dralternativeinfo;
+use App\Dto\Estafeta\DrAlternativeInfo;
 
 class LabelDescriptionList extends DataTransferObject 
 {

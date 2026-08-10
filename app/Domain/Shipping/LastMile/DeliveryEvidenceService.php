@@ -10,6 +10,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 final class DeliveryEvidenceService
 {
@@ -71,9 +72,30 @@ final class DeliveryEvidenceService
 
     private function storeUpload(UploadedFile $file, string $directory): string
     {
-        $extension = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'][$file->getMimeType()];
+        $mime = $file->getMimeType();
+        $extension = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'][$mime] ?? null;
+        $dimensions = @getimagesize($file->getRealPath());
+        if ($extension === null || $dimensions === false || ($dimensions[0] * $dimensions[1]) > 25000000) {
+            throw ValidationException::withMessages(['photo' => 'La evidencia debe ser una imagen JPEG, PNG o WEBP válida.']);
+        }
+
+        $image = @imagecreatefromstring((string) file_get_contents($file->getRealPath()));
+        if ($image === false) {
+            throw ValidationException::withMessages(['photo' => 'No fue posible procesar la imagen de evidencia.']);
+        }
+
+        ob_start();
+        if ($mime === 'image/jpeg') imagejpeg($image, null, 88);
+        elseif ($mime === 'image/png') imagepng($image, null, 6);
+        else imagewebp($image, null, 88);
+        $normalized = ob_get_clean();
+        imagedestroy($image);
+        if (! is_string($normalized) || $normalized === '') {
+            throw ValidationException::withMessages(['photo' => 'No fue posible normalizar la imagen de evidencia.']);
+        }
+
         $path = $directory.'/'.Str::uuid().'.'.$extension;
-        Storage::disk('local')->putFileAs($directory, $file, basename($path));
+        Storage::disk('local')->put($path, $normalized);
         return $path;
     }
 }

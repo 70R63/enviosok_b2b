@@ -6,8 +6,7 @@ use Tests\TestCase;
 
 class B2cLandingMobileCssContractTest extends TestCase
 {
-    /** @test */
-    public function final_mobile_cascade_overrides_fixed_header_and_six_column_quote_grid(): void
+    public function test_final_mobile_cascade_overrides_fixed_header_and_six_column_quote_grid(): void
     {
         $view = file_get_contents(resource_path('views/index.blade.php'));
         $start = strpos($view, 'B2C_RC05_MOBILE_START');
@@ -27,8 +26,7 @@ class B2cLandingMobileCssContractTest extends TestCase
         $this->assertStringNotContainsString('min-width: 430px', $mobile);
     }
 
-    /** @test */
-    public function landing_mobile_controls_are_full_width_and_navigation_is_accessible(): void
+    public function test_landing_mobile_controls_are_full_width_and_navigation_is_accessible(): void
     {
         $view = file_get_contents(resource_path('views/index.blade.php'));
         foreach (['320', '375', '390', '768', '1366'] as $width) {
@@ -42,8 +40,7 @@ class B2cLandingMobileCssContractTest extends TestCase
         $this->assertStringContainsString('.box-dimensions { display: grid !important;', $view);
     }
 
-    /** @test */
-    public function responsive_guard_does_not_force_a_fixed_mobile_canvas(): void
+    public function test_responsive_guard_does_not_force_a_fixed_mobile_canvas(): void
     {
         $css = file_get_contents(public_path('css/b2c-responsive.css'));
         $this->assertStringNotContainsString('body { min-width: 320px', $css);

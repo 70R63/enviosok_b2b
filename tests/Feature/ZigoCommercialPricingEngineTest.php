@@ -34,8 +34,7 @@ class ZigoCommercialPricingEngineTest extends TestCase
         Schema::create('zigo_client_pricing_rules', function (Blueprint $t) { $t->id(); $t->integer('crm_client_id')->nullable(); $t->integer('api_client_id')->nullable(); $t->integer('user_id')->nullable(); $t->string('name'); $t->string('customer_segment')->nullable(); $t->string('package_type'); $t->string('discount_type'); $t->decimal('discount_value'); $t->integer('used_count')->default(0); $t->integer('max_uses')->nullable(); $t->dateTime('starts_at')->nullable(); $t->dateTime('ends_at')->nullable(); $t->boolean('active'); $t->timestamps(); });
     }
 
-    /** @test */
-    public function calculates_every_concept_then_vat_without_double_sum(): void
+    public function test_calculates_every_concept_then_vat_without_double_sum(): void
     {
         $this->rule('base', 'porcentaje', 20, 10);
         $this->rule('area_extendida', 'porcentaje', 10, 10);
@@ -52,8 +51,7 @@ class ZigoCommercialPricingEngineTest extends TestCase
         $this->assertSame(193.72, $result['customer_total']);
     }
 
-    /** @test */
-    public function priority_wins_and_expired_or_inactive_rules_do_not_apply(): void
+    public function test_priority_wins_and_expired_or_inactive_rules_do_not_apply(): void
     {
         $this->rule('base', 'porcentaje', 99, 50);
         $this->rule('base', 'monto_fijo', 7, 1);
@@ -65,8 +63,7 @@ class ZigoCommercialPricingEngineTest extends TestCase
         $this->assertSame(10.0, $result['commercial_breakdown']['kg_extra']);
     }
 
-    /** @test */
-    public function falls_back_to_existing_base_rule_only_when_concept_rule_is_missing(): void
+    public function test_falls_back_to_existing_base_rule_only_when_concept_rule_is_missing(): void
     {
         ZigoPricingRule::create(['name'=>'Base existente','carrier'=>'ESTAFETA','customer_segment'=>'anonymous','plan'=>null,'package_type'=>'caja','margin_percentage'=>25,'fixed_fee'=>5,'min_price'=>null,'active'=>true]);
         $result = $this->engine()->calculate(['costo'=>100,'costo_ae'=>20], ['carrier'=>'ESTAFETA'], 'diasig', 'anonymous', 'caja', .16);
@@ -79,8 +76,7 @@ class ZigoCommercialPricingEngineTest extends TestCase
         $this->assertSame(30.0, $result['applied_rules']['base']['adjustment_amount']);
     }
 
-    /** @test */
-    public function matches_the_mandatory_uat_example_and_audits_each_rule(): void
+    public function test_matches_the_mandatory_uat_example_and_audits_each_rule(): void
     {
         $this->rule('base', 'monto_fijo', 64, 10);
         $this->rule('area_extendida', 'porcentaje', 10, 10);
@@ -96,8 +92,7 @@ class ZigoCommercialPricingEngineTest extends TestCase
         $this->assertSame(['rule_id','rule_name','concept','adjustment_type','adjustment_value','operational_amount','commercial_amount','adjustment_amount'], array_keys($result['applied_rules']['area_extendida']));
     }
 
-    /** @test */
-    public function extended_area_percentage_above_ten_is_rejected_by_crm(): void
+    public function test_extended_area_percentage_above_ten_is_rejected_by_crm(): void
     {
         $request = Request::create('/crm/pricing/concept-rules', 'POST', [
             'name'=>'Área UAT','carrier'=>'ESTAFETA','service'=>'all','segment'=>'all',

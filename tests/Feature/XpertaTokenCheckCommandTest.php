@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
@@ -157,7 +159,7 @@ class XpertaTokenCheckCommandTest extends TestCase
         $this->assertSecretsAbsent();
     }
 
-    /** @dataProvider forbiddenProvider */
+    #[DataProvider('forbiddenProvider')]
     public function test_403_is_safely_classified(string $message, string $expected): void
     {
         Http::fake(['*' => Http::response(['message' => $message, 'token' => 'leaked-token'], 403)]);

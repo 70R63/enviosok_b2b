@@ -3,7 +3,7 @@ namespace App\Dto\Estafeta;
 
 use Spatie\DataTransferObject\DataTransferObject;
 
-class Dralternativeinfo extends DataTransferObject 
+class DrAlternativeInfo extends DataTransferObject
 {
    
     public string $address1 = "address1";

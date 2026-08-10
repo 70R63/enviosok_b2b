@@ -1,5 +1,5 @@
 <?php
-namespace App\Dto\Dhl;
+namespace App\Dto\DHL;
 
 use Spatie\DataTransferObject\DataTransferObject;
 use Spatie\DataTransferObject\FieldValidator as Validator;

@@ -32,6 +32,10 @@ final class B2cQuoteCheckoutAuthTest extends TestCase
             $table->string('apellido_paterno')->nullable(); $table->unsignedBigInteger('empresa_id')->nullable();
             $table->string('password'); $table->rememberToken(); $table->timestamps();
         });
+        Schema::create('network_tenant_domains', function (Blueprint $table): void {
+            $table->id(); $table->unsignedBigInteger('network_tenant_id');
+            $table->string('domain')->unique(); $table->string('status'); $table->timestamps();
+        });
         Schema::create('roles', function (Blueprint $table): void {
             $table->id(); $table->string('slug'); $table->timestamps();
         });

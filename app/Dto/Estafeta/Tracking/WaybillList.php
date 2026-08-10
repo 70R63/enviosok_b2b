@@ -1,5 +1,5 @@
 <?php
-namespace App\Http\DTO\Estafeta\Tracking;
+namespace App\Dto\Estafeta\Tracking;
 
 use Spatie\DataTransferObject\DataTransferObject;
 use Spatie\DataTransferObject\FieldValidator as Validator;
@@ -24,4 +24,3 @@ class WaybillList extends DataTransferObject
 
     
 }
-

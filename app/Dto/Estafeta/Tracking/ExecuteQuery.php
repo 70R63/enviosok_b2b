@@ -1,12 +1,12 @@
 <?php
-namespace App\Http\DTO\Estafeta\Tracking;
+namespace App\Dto\Estafeta\Tracking;
 
 use Spatie\DataTransferObject\DataTransferObject;
 use Spatie\DataTransferObject\FieldValidator as Validator;
 
 
-use App\Http\DTO\Estafeta\Tracking\SearchType;
-use App\Http\DTO\Estafeta\Tracking\SearchConfiguration;
+use App\Dto\Estafeta\Tracking\SearchType;
+use App\Dto\Estafeta\Tracking\SearchConfiguration;
 
 class ExecuteQuery extends DataTransferObject 
 {
@@ -16,10 +16,10 @@ class ExecuteQuery extends DataTransferObject
     public $suscriberId = "25";
     
      /** @var string */
-    public $password = "1GCvGIu$";
+    public $password = "";
 
      /** @var string */
-    public $login = "Usuario1";
+    public $login = "";
 
     /** @var App\Http\DTO\Estafeta\Tracking\SearchType */
     public SearchType $searchType;

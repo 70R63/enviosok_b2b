@@ -3,6 +3,7 @@
 use App\Http\Controllers\Network\LocalShippingController;
 use App\Http\Controllers\Network\ModuleController;
 use App\Http\Controllers\Network\NetworkAuthController;
+use App\Http\Controllers\Network\NetworkTwoFactorController;
 use App\Http\Controllers\Network\NetworkDashboardController;
 use App\Http\Controllers\Network\NetworkLaunchpadController;
 use App\Http\Controllers\Network\NetworkTopologyController;
@@ -82,14 +83,20 @@ Route::domain(config('zigo_surfaces.payments.host'))->group(function (): void {
 Route::middleware('zigo.surface.host:network')->prefix('network')->name('network.')->group(function (): void {
     Route::get('/login', [NetworkAuthController::class, 'create'])->name('login');
     Route::post('/login', [NetworkAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
+    Route::get('/security/two-factor/enroll', [NetworkTwoFactorController::class, 'enrollment'])->middleware('throttle:10,1')->name('two-factor.enroll');
+    Route::post('/security/two-factor/enroll', [NetworkTwoFactorController::class, 'confirmEnrollment'])->middleware('throttle:5,1')->name('two-factor.enroll.confirm');
+    Route::get('/security/two-factor/challenge', [NetworkTwoFactorController::class, 'challenge'])->middleware('throttle:10,1')->name('two-factor.challenge');
+    Route::post('/security/two-factor/challenge', [NetworkTwoFactorController::class, 'verify'])->middleware('throttle:5,1')->name('two-factor.verify');
 });
 
-Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superadmin'])
+Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superadmin', 'network.two-factor'])
     ->prefix('network')
     ->name('network.')
     ->group(function (): void {
         Route::get('/', NetworkLaunchpadController::class)->name('launchpad');
         Route::post('/logout', [NetworkAuthController::class, 'destroy'])->name('logout');
+        Route::post('/security/two-factor/recovery-codes', [NetworkTwoFactorController::class, 'regenerate'])->middleware('throttle:2,1')->name('two-factor.recovery.regenerate');
+        Route::delete('/security/users/{user}/two-factor', [NetworkTwoFactorController::class, 'reset'])->middleware('throttle:3,1')->name('two-factor.reset');
         Route::get('/topology', NetworkTopologyController::class)->name('topology');
         Route::get('/dashboard', NetworkDashboardController::class)->name('dashboard');
         Route::get('/tenants', [TenantController::class, 'index'])->name('tenants.index');

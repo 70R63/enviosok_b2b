@@ -6,8 +6,7 @@ use Tests\TestCase;
 
 class B2cResponsiveUiTest extends TestCase
 {
-    /** @test */
-    public function responsive_styles_cover_required_release_candidate_widths(): void
+    public function test_responsive_styles_cover_required_release_candidate_widths(): void
     {
         $css = file_get_contents(public_path('css/b2c-responsive.css'));
 
@@ -24,8 +23,7 @@ class B2cResponsiveUiTest extends TestCase
         }
     }
 
-    /** @test */
-    public function active_b2c_flow_views_load_the_responsive_layer(): void
+    public function test_active_b2c_flow_views_load_the_responsive_layer(): void
     {
         foreach ([
             'index.blade.php',
@@ -40,8 +38,7 @@ class B2cResponsiveUiTest extends TestCase
         }
     }
 
-    /** @test */
-    public function shipment_table_has_mobile_card_labels(): void
+    public function test_shipment_table_has_mobile_card_labels(): void
     {
         $view = file_get_contents(resource_path('views/b2c/mis-envios.blade.php'));
 
@@ -54,8 +51,7 @@ class B2cResponsiveUiTest extends TestCase
         }
     }
 
-    /** @test */
-    public function quote_modal_retains_conditional_box_and_envelope_actions(): void
+    public function test_quote_modal_retains_conditional_box_and_envelope_actions(): void
     {
         $view = file_get_contents(resource_path('views/index.blade.php'));
 

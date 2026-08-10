@@ -13,10 +13,10 @@ final class UpdateTenantBrandingRequest extends FormRequest
 
     public function rules(): array
     {
-        return self::validationRules();
+        return self::brandingRules();
     }
 
-    public static function validationRules(): array
+    public static function brandingRules(): array
     {
         $hex = ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'];
 

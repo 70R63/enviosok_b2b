@@ -32,6 +32,11 @@ class Kernel extends ConsoleKernel
             ->command('api-hub:webhooks:deliver --limit=100')
             ->everyMinute()
             ->withoutOverlapping(10);
+
+        $schedule
+            ->command('zigo:security:cleanup-orphan-evidence --delete')
+            ->dailyAt('03:20')
+            ->withoutOverlapping(30);
         
     }
 

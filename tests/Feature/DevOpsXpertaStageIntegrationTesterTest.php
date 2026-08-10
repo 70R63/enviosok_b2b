@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -76,7 +77,7 @@ final class DevOpsXpertaStageIntegrationTesterTest extends TestCase
         Http::assertNothingSent();
     }
 
-    /** @dataProvider readOnlyRoles */
+    #[DataProvider('readOnlyRoles')]
     public function test_admin_and_support_cannot_execute(string $role):void
     {
         $this->authenticateAs($role); $this->expectException(HttpException::class);

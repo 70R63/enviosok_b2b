@@ -16,10 +16,10 @@ class Label extends DataTransferObject
     public $customerNumber = "0000000";
 
      /** @var string */
-    public $password = "lAbeL_K_11";
+public $password = "";
 
      /** @var string */
-    public $login = "prueba1";
+public $login = "";
 
      /** @var boolean */
     public $valid = true;

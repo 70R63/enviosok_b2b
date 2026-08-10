@@ -1,5 +1,5 @@
 <?php
-namespace App\Http\Dto\Estafeta;
+namespace App\Dto\Estafeta;
 
 
 class OriginInfoETL 

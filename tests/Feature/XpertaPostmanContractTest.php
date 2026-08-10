@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+
 use App\Http\Controllers\B2C\CotizacionPublicaController;
 use App\Models\B2cCotizacion;
 use App\Services\Shipping\Data\UnifiedQuoteRequest;
@@ -167,7 +169,7 @@ final class XpertaPostmanContractTest extends TestCase
         $this->assertSame($before, DB::table('b2c_cotizaciones')->count());
     }
 
-    /** @dataProvider oneServiceFailureCases */
+    #[DataProvider('oneServiceFailureCases')]
     public function test_one_failed_service_does_not_discard_the_other(
         string $failedService,
         string $expectedService
@@ -340,7 +342,7 @@ final class XpertaPostmanContractTest extends TestCase
         $this->assertSame('88|GUIDE', base64_decode($payload['token'], true));
     }
 
-    /** @dataProvider providerFailures */
+    #[DataProvider('providerFailures')]
     public function test_provider_failure_is_contained_without_http_500(string $failureType): void
     {
         $provider = \Mockery::mock(ZigoProviderRateService::class);

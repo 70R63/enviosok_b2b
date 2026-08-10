@@ -15,6 +15,6 @@ final class UpdateTenantConfigurationRequest extends FormRequest
 
     public function rules(): array
     {
-        return UpdateTenantBrandingRequest::validationRules();
+        return UpdateTenantBrandingRequest::brandingRules();
     }
 }

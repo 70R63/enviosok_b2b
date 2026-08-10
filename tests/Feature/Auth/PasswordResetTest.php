@@ -3,7 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
+use App\Notifications\ZigoResetPasswordNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
@@ -27,7 +27,7 @@ class PasswordResetTest extends TestCase
 
         $this->post('/forgot-password', ['email' => $user->email]);
 
-        Notification::assertSentTo($user, ResetPassword::class);
+        Notification::assertSentTo($user, ZigoResetPasswordNotification::class);
     }
 
     public function test_reset_password_screen_can_be_rendered()
@@ -38,8 +38,8 @@ class PasswordResetTest extends TestCase
 
         $this->post('/forgot-password', ['email' => $user->email]);
 
-        Notification::assertSentTo($user, ResetPassword::class, function ($notification) {
-            $response = $this->get('/reset-password/'.$notification->token);
+        Notification::assertSentTo($user, ZigoResetPasswordNotification::class, function ($notification) use ($user) {
+            $response = $this->get($notification->toMail($user)->actionUrl);
 
             $response->assertStatus(200);
 
@@ -55,9 +55,11 @@ class PasswordResetTest extends TestCase
 
         $this->post('/forgot-password', ['email' => $user->email]);
 
-        Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($user) {
+        Notification::assertSentTo($user, ZigoResetPasswordNotification::class, function ($notification) use ($user) {
+            $path = parse_url($notification->toMail($user)->actionUrl, PHP_URL_PATH);
+            $token = basename((string) $path);
             $response = $this->post('/reset-password', [
-                'token' => $notification->token,
+                'token' => $token,
                 'email' => $user->email,
                 'password' => 'password',
                 'password_confirmation' => 'password',

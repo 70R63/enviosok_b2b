@@ -22,15 +22,15 @@ final class NormalizeXpertaB2cGuide extends Command
     public function handle(XpertaGuideResponseNormalizer $normalizer): int
     {
         $cotizacion = B2cCotizacion::query()->find($this->argument('cotizacion_id'));
-        if (!$cotizacion) return $this->fail('Cotización no encontrada.');
+        if (!$cotizacion) return $this->commandFailure('Cotización no encontrada.');
         if ($cotizacion->hasGeneratedGuide()) {
             $this->info('La guía ya está generada; no se modificó la cotización.');
             return self::SUCCESS;
         }
-        if ($cotizacion->payment_status !== 'approved') return $this->fail('La cotización no tiene pago approved.');
+        if ($cotizacion->payment_status !== 'approved') return $this->commandFailure('La cotización no tiene pago approved.');
         $snapshot = (array) $cotizacion->guia_response_snapshot;
         $normalized = $normalizer->normalize($snapshot);
-        if (!$normalizer->isRecoverable($normalized)) return $this->fail('El snapshot no contiene una guía Xperta exitosa recuperable.');
+        if (!$normalizer->isRecoverable($normalized)) return $this->commandFailure('El snapshot no contiene una guía Xperta exitosa recuperable.');
 
         $this->line('WayBill: ' . $normalized['waybill']);
         $this->line('Tracking: ' . $normalized['tracking']);
@@ -39,7 +39,7 @@ final class NormalizeXpertaB2cGuide extends Command
             $this->info('Dry-run completado; cero llamadas HTTP y cero modificaciones.');
             return self::SUCCESS;
         }
-        if (!$this->option('confirm')) return $this->fail('Agrega --confirm para normalizar la guía.');
+        if (!$this->option('confirm')) return $this->commandFailure('Agrega --confirm para normalizar la guía.');
 
         $documentPath = $this->storePdf($cotizacion, $normalized);
 
@@ -74,7 +74,7 @@ final class NormalizeXpertaB2cGuide extends Command
         return self::SUCCESS;
     }
 
-    private function fail(string $message): int
+    private function commandFailure(string $message): int
     {
         $this->error($message);
         return self::FAILURE;

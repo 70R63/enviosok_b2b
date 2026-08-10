@@ -1,12 +1,12 @@
 <?php
-namespace App\Http\DTO\Estafeta\Tracking;
+namespace App\Dto\Estafeta\Tracking;
 
 use Spatie\DataTransferObject\DataTransferObject;
 use Spatie\DataTransferObject\FieldValidator as Validator;
 
 
-use App\Http\DTO\Estafeta\Tracking\WaybillRange;
-use App\Http\DTO\Estafeta\Tracking\WaybillList;
+use App\Dto\Estafeta\Tracking\WaybillRange;
+use App\Dto\Estafeta\Tracking\WaybillList;
 
 class SearchType extends DataTransferObject 
 {
@@ -28,4 +28,3 @@ class SearchType extends DataTransferObject
 
     
 }
-

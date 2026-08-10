@@ -1,11 +1,11 @@
 <?php
-namespace App\Http\DTO\Estafeta\Tracking;
+namespace App\Dto\Estafeta\Tracking;
 
 use Spatie\DataTransferObject\DataTransferObject;
 use Spatie\DataTransferObject\FieldValidator as Validator;
 
-use App\Http\DTO\Estafeta\Tracking\HistoryConfiguration;
-use App\Http\DTO\Estafeta\Tracking\FilterType;
+use App\Dto\Estafeta\Tracking\HistoryConfiguration;
+use App\Dto\Estafeta\Tracking\FilterType;
 
 class SearchConfiguration extends DataTransferObject 
 {
@@ -58,4 +58,3 @@ class SearchConfiguration extends DataTransferObject
 
     
 }
-

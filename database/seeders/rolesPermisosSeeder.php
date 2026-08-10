@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Roles\Roles;
 use App\Models\Roles\Permisos;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 
 
 
@@ -21,14 +22,14 @@ class rolesPermisosSeeder extends Seeder
     {
 //TRUNCAR TABLAS PARA CREAR TODO DESDE CERO
 
-        DB::statement("SET foreign_key_checks=0");
+        Schema::disableForeignKeyConstraints();
             DB::table('users_roles')->truncate();
             DB::table('users_permisos')->truncate();
             DB::table('roles_permisos')->truncate();
             Permisos::truncate();
             Roles::truncate();
             User::truncate();
-       DB::statement("SET foreign_key_checks=1");
+       Schema::enableForeignKeyConstraints();
 
 //CREAR USUARIO SYSADMIN
 
