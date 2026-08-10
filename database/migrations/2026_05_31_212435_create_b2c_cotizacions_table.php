@@ -1,8 +1,6 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -13,10 +11,10 @@ return new class extends Migration
      */
     public function up()
     {
-        Schema::create('b2c_cotizacions', function (Blueprint $table) {
-            $table->id();
-            $table->timestamps();
-        });
+        // Historical no-op. This migration originally created the misspelled
+        // legacy table b2c_cotizacions and was superseded by
+        // 2026_05_31_213836_create_b2c_cotizaciones_table. It is intentionally
+        // retained to preserve migration ordering without creating obsolete schema.
     }
 
     /**
@@ -26,6 +24,7 @@ return new class extends Migration
      */
     public function down()
     {
-        Schema::dropIfExists('b2c_cotizacions');
+        // Historical no-op. Neither the legacy nor canonical table may be
+        // removed because historical installations can contain data in either.
     }
 };
