@@ -1,0 +1,3 @@
+<?php
+namespace App\Console\Commands;use App\Domain\ApiHub\ApiWebhookDeliveryService;use App\Domain\ApiHub\Models\TenantApiWebhookDelivery;use Illuminate\Console\Command;
+final class DeliverTenantApiWebhooks extends Command{protected $signature='zigo:api-v1-deliver-webhooks {--limit=100}';protected $description='Entrega webhooks pendientes de API Hub V1';public function handle(ApiWebhookDeliveryService$s):int{TenantApiWebhookDelivery::whereIn('status',['PENDING','RETRY'])->where(fn($q)=>$q->whereNull('next_retry_at')->orWhere('next_retry_at','<=',now()))->orderBy('id')->limit((int)$this->option('limit'))->get()->each(fn($d)=>$s->deliver($d));return self::SUCCESS;}}

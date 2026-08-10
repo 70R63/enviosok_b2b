@@ -1,0 +1,3 @@
+<?php
+namespace App\Http\Controllers\API\Hub\V1;use App\Services\ZigoPostalCodeService;use Illuminate\Http\Request;
+final class PostalController extends ApiV1Controller{public function show(Request$r,string$postalCode,ZigoPostalCodeService$s){$result=$s->lookup($postalCode);$status=$result['status'];if($status!==200)return$this->error($r,$status===404?'RESOURCE_NOT_FOUND':'VALIDATION_ERROR',$result['message'],$status);return$this->ok($r,['postal_code'=>$result['codigo_postal'],'state'=>$result['estado'],'municipality'=>$result['municipio'],'city'=>$result['ciudad'],'settlements'=>array_map(fn($x)=>['name'=>$x['nombre'],'type'=>$x['tipo_asentamiento'],'zone'=>$x['zona']],$result['colonias'])]);}}

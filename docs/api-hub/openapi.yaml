@@ -1,0 +1,65 @@
+openapi: 3.1.0
+info:
+  title: ZIGO API Hub
+  version: 1.0.0
+  description: API tenant-aware para integraciones ERP/TMS. Las API keys representan al tenant, no a customers finales.
+servers:
+  - url: https://api-stage.zigo-envios.com/api/hub/v1
+    description: Stage
+security:
+  - bearerApiKey: []
+paths:
+  /postal-codes/{postalCode}:
+    get:
+      summary: Consulta catálogo postal ZIGO
+      x-zigo-scope: postal:read
+      parameters: [{name: postalCode, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: Resultado postal}, '401': {description: API key inválida}, '403': {description: Scope o entitlement insuficiente}, '429': {description: Cuota excedida}}
+  /quotes:
+    post:
+      summary: Cotiza servicios disponibles
+      x-zigo-scope: quotes:write
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/QuoteRequest'}}}}
+      responses: {'201': {description: Cotización creada}, '409': {description: Conflicto de idempotencia}, '422': {description: Validación}, '503': {description: Provider no disponible}}
+  /shipments:
+    post:
+      summary: Confirma una cotización y crea shipment/guía contra el contrato del tenant
+      x-zigo-scope: shipments:write
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ShipmentRequest'}}}}
+      responses: {'201': {description: Shipment creado}, '409': {description: Conflicto}, '422': {description: Quote/proof inválido}}
+  /shipments/{shipment}:
+    get:
+      summary: Consulta shipment propio del API Client
+      x-zigo-scope: shipments:read
+      parameters: [{$ref: '#/components/parameters/Shipment'}]
+      responses: {'200': {description: Shipment}, '404': {description: No encontrado}}
+  /shipments/{shipment}/guide:
+    get:
+      summary: Descarga privada de guía PDF
+      x-zigo-scope: guides:read
+      parameters: [{$ref: '#/components/parameters/Shipment'}]
+      responses: {'200': {description: PDF}, '404': {description: No encontrado}}
+  /shipments/{shipment}/pickup:
+    post:
+      summary: Solicita recolección semántica
+      x-zigo-scope: pickups:write
+      parameters: [{$ref: '#/components/parameters/Shipment'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      responses: {'202': {description: Recolección solicitada}, '409': {description: Estado incompatible}}
+  /tracking/{tracking}:
+    get:
+      summary: Tracking tenant-safe
+      x-zigo-scope: tracking:read
+      parameters: [{name: tracking, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: Timeline sin POD o datos Driver}, '404': {description: No encontrado}}
+components:
+  securitySchemes:
+    bearerApiKey: {type: http, scheme: bearer, bearerFormat: ZIGO_API_KEY}
+  parameters:
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 160}}
+    Shipment: {name: shipment, in: path, required: true, schema: {type: string, format: uuid}}
+  schemas:
+    Address: {type: object, required: [name, phone, address, postal_code], properties: {name: {type: string}, phone: {type: string}, address: {type: string}, postal_code: {type: string}}}
+    QuoteRequest: {type: object, required: [origin_postal_code, destination_postal_code, package], properties: {origin_postal_code: {type: string}, destination_postal_code: {type: string}, external_reference: {type: string}, package: {type: object}}}
+    ShipmentRequest: {type: object, required: [quote_id, option_id, sender, recipient], properties: {quote_id: {type: string, format: uuid}, option_id: {type: string, format: uuid}, sender: {$ref: '#/components/schemas/Address'}, recipient: {$ref: '#/components/schemas/Address'}, proof_option_uuid: {type: string, format: uuid}}}

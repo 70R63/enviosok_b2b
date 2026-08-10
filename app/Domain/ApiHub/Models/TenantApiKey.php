@@ -1,0 +1,3 @@
+<?php
+namespace App\Domain\ApiHub\Models;use Illuminate\Database\Eloquent\Model;use Illuminate\Support\Str;
+final class TenantApiKey extends Model{public const SCOPES=['postal:read','quotes:write','shipments:write','shipments:read','guides:read','tracking:read','pickups:write','webhooks:manage'];protected $fillable=['tenant_id','api_client_id','key_prefix','key_hash','last_four','name','scopes','expires_at','last_used_at','revoked_at'];protected $hidden=['key_hash'];protected $casts=['scopes'=>'array','expires_at'=>'datetime','last_used_at'=>'datetime','revoked_at'=>'datetime'];protected static function booted():void{self::creating(fn(self$m)=>$m->uuid??=(string)Str::uuid());}public function client(){return$this->belongsTo(TenantApiClient::class,'api_client_id');}}

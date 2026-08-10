@@ -1,0 +1,2 @@
+<?php
+return ['enabled'=>(bool)env('ZIGO_API_ENABLED',false),'host'=>env('ZIGO_API_HOST','api.zigo.local'),'url'=>env('ZIGO_API_URL','http://api.zigo.local'),'key_prefix'=>env('ZIGO_API_KEY_PREFIX','zg_stage'),'default_monthly_limit'=>(int)env('ZIGO_API_DEFAULT_MONTHLY_LIMIT',10000),'default_rate_limit'=>(int)env('ZIGO_API_DEFAULT_RATE_LIMIT',60),'webhook_max_attempts'=>(int)env('ZIGO_API_WEBHOOK_MAX_ATTEMPTS',6)];

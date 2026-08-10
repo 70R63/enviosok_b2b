@@ -37,6 +37,8 @@ use App\Http\Controllers\Network\NetworkPaymentController;
 use App\Http\Controllers\Payments\PaymentEdgeHealthController;
 use App\Http\Controllers\Tenant\TenantSaasController;
 use App\Http\Controllers\Network\CommercialCatalogController;
+use App\Http\Controllers\Network\NetworkApiHubController;
+use App\Http\Controllers\Tenant\TenantApiHubController;
 use App\Http\Controllers\Support\{CustomerSupportController,DriverSupportController,TenantSupportController,NetworkSupportController};
 
 Route::domain(config('zigo_driver.host'))->prefix('driver')->name('driver.')->group(function (): void {
@@ -131,6 +133,7 @@ Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superad
         Route::post('/support', [NetworkSupportController::class, 'store'])->name('support.store');
         Route::get('/support/{ticket}', [NetworkSupportController::class, 'show'])->name('support.show');
         Route::post('/support/{ticket}/respuestas', [NetworkSupportController::class, 'reply'])->name('support.reply');
+        Route::get('/api-hub', NetworkApiHubController::class)->name('api-hub.index');
         Route::patch('/support/{ticket}', [NetworkSupportController::class, 'update'])->name('support.update');
         Route::get('/support/{ticket}/adjuntos/{attachment}', [NetworkSupportController::class, 'attachment'])->name('support.attachment');
         Route::get('/delivery-proofs/{proof}/{kind}', [DeliveryEvidenceController::class, 'network'])->name('delivery-proofs.evidence');
@@ -202,6 +205,13 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
             Route::get('/compras/{order}/pago', [TenantSaasController::class, 'payment'])->name('saas.payment');
             Route::post('/compras/{order}/pago', [TenantSaasController::class, 'checkout'])->middleware('throttle:6,1')->name('saas.checkout');
             Route::get('/compras/{order}/retorno/{result}', [TenantSaasController::class, 'returned'])->middleware('throttle:20,1')->name('saas.return');
+            Route::get('/api', [TenantApiHubController::class, 'index'])->name('api-hub.index');
+            Route::post('/api/clients', [TenantApiHubController::class, 'client'])->name('api-hub.clients.store');
+            Route::post('/api/clients/{client}/keys', [TenantApiHubController::class, 'key'])->name('api-hub.keys.store');
+            Route::delete('/api/clients/{client}/keys/{key}', [TenantApiHubController::class, 'revoke'])->name('api-hub.keys.revoke');
+            Route::post('/api/clients/{client}/webhooks', [TenantApiHubController::class, 'webhook'])->name('api-hub.webhooks.store');
+            Route::post('/api/webhooks/{webhook}/rotate', [TenantApiHubController::class, 'rotateWebhook'])->name('api-hub.webhooks.rotate');
+            Route::patch('/api/webhooks/{webhook}', [TenantApiHubController::class, 'webhookStatus'])->name('api-hub.webhooks.update');
             Route::middleware('tenant.support.staff')->group(function (): void {
                 Route::get('/soporte', [TenantSupportController::class, 'index'])->name('support.index');
                 Route::get('/soporte/zigo', [TenantSupportController::class, 'zigo'])->name('support.zigo');

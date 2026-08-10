@@ -4,6 +4,8 @@ namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Throwable;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class Handler extends ExceptionHandler
 {
@@ -45,6 +47,14 @@ class Handler extends ExceptionHandler
     {
         $this->reportable(function (Throwable $e) {
             //
+        });
+        $this->renderable(function (ValidationException $e, $request) {
+            if (! $request->is('api/hub/v1/*')) return null;
+            return response()->json(['error'=>['code'=>'VALIDATION_ERROR','message'=>'La solicitud contiene datos inválidos.','details'=>$e->errors()],'meta'=>['request_id'=>$request->attributes->get('zigo_request_id')]],422);
+        });
+        $this->renderable(function (ModelNotFoundException $e, $request) {
+            if (! $request->is('api/hub/v1/*')) return null;
+            return response()->json(['error'=>['code'=>'RESOURCE_NOT_FOUND','message'=>'El recurso no existe o no está autorizado.'],'meta'=>['request_id'=>$request->attributes->get('zigo_request_id')]],404);
         });
     }
 }

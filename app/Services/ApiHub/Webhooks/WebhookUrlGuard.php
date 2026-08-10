@@ -74,11 +74,7 @@ class WebhookUrlGuard
 
     private function privateUrlsAllowed(): bool
     {
-        return (app()->environment('local') || app()->environment('testing'))
-            || (bool) config(
-                'services.zigo_webhooks.allow_private_urls',
-                false
-            );
+        return app()->environment('local') || app()->environment('testing');
     }
 
     private function resolveAddresses(string $host): array

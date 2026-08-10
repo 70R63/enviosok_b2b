@@ -1,0 +1,3 @@
+<?php
+namespace App\Domain\ApiHub\Models;use App\Domain\Network\Channels\B2C\Models\TenantOperation;use App\Domain\Shipping\Local\Models\LocalShipment;use Illuminate\Database\Eloquent\Model;use Illuminate\Support\Str;
+final class TenantApiOperationLink extends Model{protected $fillable=['tenant_id','api_client_id','tenant_operation_id','local_shipment_id','external_reference','quote_snapshot','expires_at'];protected $casts=['quote_snapshot'=>'array','expires_at'=>'datetime'];protected static function booted():void{self::creating(fn(self$m)=>$m->uuid??=(string)Str::uuid());}public function operation(){return$this->belongsTo(TenantOperation::class,'tenant_operation_id');}public function shipment(){return$this->belongsTo(LocalShipment::class,'local_shipment_id');}}

@@ -1,5 +1,13 @@
 # ZN-08A.1 — Stage / Mercado Pago Sandbox Runbook
 
+## API Hub V1 · ZN-10
+
+- Host Stage: `api-stage.zigo-envios.com`; producción futura: `api.zigo-envios.com`.
+- Mismo Laravel y document root `/public`; no copiar código por superficie.
+- Configurar `ZIGO_API_ENABLED=true`, `ZIGO_API_HOST=api-stage.zigo-envios.com`, `ZIGO_API_URL=https://api-stage.zigo-envios.com` y `ZIGO_API_KEY_PREFIX=zg_stage`.
+- HTTPS obligatorio y cookies no compartidas con Customer, Driver, Network o Payments.
+- Smoke: V1 sin Bearer responde `INVALID_API_KEY`; `/api/hub/cp/{cp}` conserva el contrato legacy.
+
 ## A. Stage host architecture
 
 All hosts point to the same Laravel release and the same `/public` document root. Code is not copied per tenant.

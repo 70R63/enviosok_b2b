@@ -30,6 +30,7 @@ use App\Http\Controllers\API\Hub\PostalCodeController;
 use App\Http\Controllers\API\Hub\BillingInvoiceController;
 use App\Http\Controllers\API\Payments\MercadoPagoWebhookController;
 use App\Http\Middleware\ValidateZigoApiKey;
+use App\Http\Controllers\API\Hub\V1\{PostalController as V1PostalController,QuoteController as V1QuoteController,ShipmentController as V1ShipmentController,TrackingController as V1TrackingController};
 
 use App\Http\Controllers\API\DEV\GuiaController as DevGuiaController ;
 
@@ -427,6 +428,18 @@ Route::middleware(['zigo.portal:api', 'zigo.api'])->prefix('hub')->group(functio
                 ->name('invoices.documents');
         });
 });
+
+Route::domain(config('zigo_api_hub.host'))->prefix('hub/v1')->name('api.hub.v1.')
+    ->middleware(['zigo.api.v1.request','zigo.api.v1.auth','zigo.api.v1.meter'])
+    ->group(function (): void {
+        Route::get('/postal-codes/{postalCode}', [V1PostalController::class, 'show'])->middleware('zigo.api.v1.scope:postal:read')->where('postalCode','[0-9]{5}')->name('postal.show');
+        Route::post('/quotes', [V1QuoteController::class, 'store'])->middleware('zigo.api.v1.scope:quotes:write')->name('quotes.store');
+        Route::post('/shipments', [V1ShipmentController::class, 'store'])->middleware('zigo.api.v1.scope:shipments:write')->name('shipments.store');
+        Route::get('/shipments/{shipment}', [V1ShipmentController::class, 'show'])->middleware('zigo.api.v1.scope:shipments:read')->name('shipments.show');
+        Route::get('/shipments/{shipment}/guide', [V1ShipmentController::class, 'guide'])->middleware('zigo.api.v1.scope:guides:read')->name('shipments.guide');
+        Route::get('/tracking/{tracking}', [V1TrackingController::class, 'show'])->middleware('zigo.api.v1.scope:tracking:read')->name('tracking.show');
+        Route::post('/shipments/{shipment}/pickup', [V1ShipmentController::class, 'pickup'])->middleware('zigo.api.v1.scope:pickups:write')->name('shipments.pickup');
+    });
 
 if (app()->environment('local') || app()->environment('testing')) {
     Route::post('/hub/testing/webhook-receiver', function (Request $request) {
