@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use App\Domain\Network\Onboarding\Models\SaasOnboardingApplication;
+use Illuminate\Support\Facades\Schema;
 
 final class CustomerAuthController extends Controller
 {
@@ -52,7 +54,11 @@ final class CustomerAuthController extends Controller
             $user = User::whereRaw('LOWER(email) = ?', [mb_strtolower($data['email'])])->lockForUpdate()->first();
             $created = false;
             if (! $user) {
-                $user = User::create(['name' => $data['name'], 'email' => mb_strtolower($data['email']), 'password' => Hash::make($data['password']), 'empresa_id' => 1]);
+                $user = User::create([
+                    'name' => $data['name'], 'email' => mb_strtolower($data['email']),
+                    'password' => Hash::make($data['password']),
+                    'empresa_id' => $this->legacyEmpresaId($context),
+                ]);
                 $created = true;
             } elseif (! Hash::check($data['password'], $user->password)) {
                 throw ValidationException::withMessages(['email' => 'No fue posible crear la cuenta con estos datos.']);
@@ -100,5 +106,18 @@ final class CustomerAuthController extends Controller
             return true;
         }
         return false;
+    }
+
+    private function legacyEmpresaId(TenantContext $context): int
+    {
+        $empresaId = Schema::hasTable('saas_onboarding_applications')
+            ? SaasOnboardingApplication::where('tenant_id', $context->id())
+                ->where('status', SaasOnboardingApplication::ACTIVE)->value('legacy_empresa_id')
+            : null;
+        $empresaId ??= $context->tenant()->memberships()->where('role', 'owner')->where('status', 'active')
+            ->join('users', 'users.id', '=', 'network_tenant_memberships.user_id')
+            ->value('users.empresa_id');
+        abort_unless($empresaId, 409, 'El tenant no tiene empresa legacy vinculada.');
+        return (int) $empresaId;
     }
 }

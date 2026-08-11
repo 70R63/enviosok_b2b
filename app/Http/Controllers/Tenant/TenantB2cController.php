@@ -66,7 +66,7 @@ final class TenantB2cController extends Controller
         }
         $request->session()->put('tenant_customer.pending_quote', ['tenant_id' => $context->id(), 'operation_uuid' => $operation->uuid]);
         $request->session()->put('url.intended', '/app/envio/nuevo');
-        return redirect('/login')->with('status', 'Inicia sesión o crea tu cuenta para continuar con este servicio.');
+        return redirect('/ingresar')->with('status', 'Inicia sesión o crea tu cuenta para continuar con este servicio.');
     }
 
     public function tracking(TenantContext $context)

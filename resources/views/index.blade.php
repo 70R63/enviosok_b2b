@@ -970,7 +970,7 @@
                 </div>
             </a>
             <button type="button" class="mobile-nav-toggle" aria-label="Abrir menú" aria-controls="main-navigation" aria-expanded="false">☰</button>
-            <nav class="main-nav" id="main-navigation"><a href="{{ route('public.nosotros') }}">Nosotros</a><a href="{{ route('public.paqueteria') }}">Paquetería</a><a href="{{ route('public.faqs') }}">FAQ'S</a><a href="{{ url('/login') }}" class="nav-login">Iniciar sesión</a><a href="{{ route('b2c.register') }}" class="nav-register">Registro</a></nav>
+            <nav class="main-nav" id="main-navigation"><a href="{{ route('public.nosotros') }}">Nosotros</a><a href="{{ route('public.paqueteria') }}">Paquetería</a><a href="{{ route('public.faqs') }}">FAQ'S</a><a href="{{ route('zigo-platform.landing', [], false) }}">ZIGO Platform</a><a href="{{ url('/login') }}" class="nav-login">Iniciar sesión</a><a href="{{ route('b2c.register') }}" class="nav-register">Registro</a></nav>
         </div>
     </header>
 

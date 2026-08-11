@@ -18,7 +18,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\{DB, Hash, Http, Queue, Schema};
 use Tests\TestCase;
 
-final class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
+class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -217,9 +217,9 @@ final class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
         $this->assertStringNotContainsString('rapidgo', strtolower($events));
     }
 
-    private function pending(string $key, bool $withExtras = false, ?string $email = null): array
+    protected function pending(string $key, bool $withExtras = false, ?string $email = null, bool $withB2c = false): array
     {
-        [$plan, $planOffer, $apiOffer, $opsOffer] = $this->catalog($key);
+        [$plan, $planOffer, $apiOffer, $opsOffer] = $this->catalog($key, $withB2c);
         $application = app(OnboardingApplicationService::class)->createOrRecover([
             'contact_name' => 'Owner', 'contact_last_name' => 'Test',
             'contact_email' => $email ?? $key.'@example.test', 'contact_phone' => '5551234567',
@@ -252,30 +252,32 @@ final class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
         return [$application, $attempt];
     }
 
-    private function catalog(string $suffix): array
+    protected function catalog(string $suffix, bool $withB2c = false): array
     {
         $shipping = Module::firstOrCreate(['code' => 'SHIPPING'], ['name'=>'Shipping','type'=>'core','is_active'=>true,'sort_order'=>1]);
         $api = Module::firstOrCreate(['code' => 'API'], ['name'=>'API','type'=>'addon','is_active'=>true,'sort_order'=>2]);
+        $b2c = Module::firstOrCreate(['code' => 'B2C'], ['name'=>'B2C','type'=>'channel','is_active'=>true,'sort_order'=>3]);
         $plan = Plan::create(['code'=>'PLAN-'.$suffix,'name'=>'Plan '.$suffix,'status'=>'active','monthly_price'=>'999.00','currency'=>'MXN','included_operations'=>100]);
         $plan->modules()->attach($shipping, ['is_included'=>true,'limit_value'=>null]);
+        if ($withB2c) $plan->modules()->attach($b2c, ['is_included'=>true,'limit_value'=>null]);
         $planOffer = NetworkCommercialProduct::create(['code'=>'OFFER-'.$suffix,'name'=>'Offer','type'=>'PLAN','billing_type'=>'MONTHLY','price'=>'100.00','currency'=>'MXN','plan_id'=>$plan->id,'is_active'=>true]);
         $apiOffer = NetworkCommercialProduct::create(['code'=>'API-'.$suffix,'name'=>'API','type'=>'MODULE','billing_type'=>'MONTHLY','price'=>'20.00','currency'=>'MXN','module_id'=>$api->id,'is_active'=>true,'metadata'=>['api_monthly_request_limit'=>10000,'api_rate_limit_per_minute'=>60]]);
         $opsOffer = NetworkCommercialProduct::create(['code'=>'OPS-'.$suffix,'name'=>'Operations','type'=>'OPERATION_PACK','billing_type'=>'ONE_TIME','price'=>'50.00','currency'=>'MXN','included_operations'=>500,'is_active'=>true]);
         return [$plan, $planOffer, $apiOffer, $opsOffer];
     }
 
-    private function sendWebhook(PlatformPaymentAttempt $attempt, string $paymentId, string $status, ?string $requestId = null)
+    protected function sendWebhook(PlatformPaymentAttempt $attempt, string $paymentId, string $status, ?string $requestId = null)
     {
         return $this->sendWebhookResponse($attempt, $this->payment($attempt, $paymentId, $status), $requestId ?? 'request-'.$paymentId);
     }
 
-    private function sendWebhookResponse(PlatformPaymentAttempt $attempt, array $payment, string $requestId)
+    protected function sendWebhookResponse(PlatformPaymentAttempt $attempt, array $payment, string $requestId)
     {
         Http::fake(['https://api.mercadopago.com/v1/payments/*' => Http::response($payment)]);
         return $this->signedPost($attempt, (string) $payment['id'], $requestId);
     }
 
-    private function signedPost(PlatformPaymentAttempt $attempt, string $paymentId, string $requestId)
+    protected function signedPost(PlatformPaymentAttempt $attempt, string $paymentId, string $requestId)
     {
         $timestamp = (string) time();
         $manifest = 'id:'.strtolower($paymentId).';request-id:'.$requestId.';ts:'.$timestamp.';';
@@ -284,25 +286,25 @@ final class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
             ->postJson($this->webhookUrl($attempt, $paymentId), ['type'=>'payment','data'=>['id'=>$paymentId]]);
     }
 
-    private function webhookUrl(PlatformPaymentAttempt $attempt, string $paymentId): string
+    protected function webhookUrl(PlatformPaymentAttempt $attempt, string $paymentId): string
     {
         return 'http://payments.zigo.local/api/payments/mercado-pago/webhook?onboarding_attempt='
             .$attempt->uuid.'&data[id]='.$paymentId;
     }
 
-    private function payment(PlatformPaymentAttempt $attempt, string $id, string $status): array
+    protected function payment(PlatformPaymentAttempt $attempt, string $id, string $status): array
     {
         return ['id'=>$id,'status'=>$status,'external_reference'=>$attempt->external_reference,'transaction_amount'=>(string)$attempt->amount,'currency_id'=>$attempt->currency,'collector_id'=>'123456'];
     }
 
-    private function assertOperationalCounts(int $expected): void
+    protected function assertOperationalCounts(int $expected): void
     {
         foreach (['network_tenants','users','network_tenant_memberships','network_subscriptions','network_tenant_brandings','network_tenant_domains'] as $table) {
             $this->assertSame($expected, DB::table($table)->count(), $table);
         }
     }
 
-    private function schema(): void
+    protected function schema(): void
     {
         foreach (['tenant_api_quota_policies','tenant_operation_allowances','platform_payment_events','platform_payment_attempts','tenant_saas_orders','saas_onboarding_events','saas_onboarding_applications','network_subscription_events','network_entitlements','network_subscriptions','network_tenant_memberships','network_tenant_brandings','network_tenant_domains','network_commercial_products','network_plan_modules','network_tenants','network_plans','network_modules','users','empresas'] as $table) Schema::dropIfExists($table);
         Schema::create('empresas',function(Blueprint$t){$t->id();$t->timestamps();$t->boolean('estatus')->default(1);$t->string('contacto',50);$t->string('nombre',50);$t->string('email')->nullable()->unique();$t->string('telefono',10);});

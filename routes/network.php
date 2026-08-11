@@ -162,8 +162,11 @@ Route::get('/', [TenantHomeController::class, 'home'])->middleware(['tenant.reso
 Route::get('/white-label', [TenantHomeController::class, 'home'])->middleware(['tenant.resolve', 'tenant.subscription'])->name('tenant.home');
 
 Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:B2C'])->name('tenant.customer.')->group(function (): void {
+    Route::get('/ingresar', [CustomerAuthController::class, 'create'])->name('login');
+    Route::post('/ingresar', [CustomerAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
     Route::get('/registro', [CustomerAuthController::class, 'registration'])->name('register');
     Route::post('/registro', [CustomerAuthController::class, 'register'])->middleware('throttle:5,1')->name('register.store');
+    Route::post('/salir', [CustomerAuthController::class, 'destroy'])->name('logout');
     Route::post('/cotizar/seleccionar', [TenantB2cController::class, 'select'])->name('quote.select');
     Route::get('/rastreo', [TenantB2cController::class, 'tracking'])->middleware('tenant.entitlement:TRACKING')->name('tracking');
     Route::get('/rastreo/{tracking}', [TenantB2cController::class, 'track'])->middleware('tenant.entitlement:TRACKING')->name('tracking.show');
@@ -177,7 +180,7 @@ Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:
         Route::get('/envios/{shipment}/guia.pdf', [CustomerPortalController::class, 'guide'])->name('shipments.guide');
         Route::get('/perfil', [CustomerPortalController::class, 'profile'])->name('profile');
         Route::patch('/perfil', [CustomerPortalController::class, 'updateProfile'])->name('profile.update');
-        Route::get('/ayuda', [CustomerSupportController::class, 'index'])->name('support');
+        Route::get('/ayuda', [CustomerPortalController::class, 'support'])->name('support');
         Route::get('/ayuda/tickets', [CustomerSupportController::class, 'index'])->name('support.tickets');
         Route::get('/ayuda/tickets/nuevo', [CustomerSupportController::class, 'create'])->name('support.create');
         Route::post('/ayuda/tickets', [CustomerSupportController::class, 'store'])->name('support.store');

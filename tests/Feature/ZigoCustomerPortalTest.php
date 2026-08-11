@@ -15,12 +15,12 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\{DB, Hash, Schema};
 use Tests\TestCase;
 
-final class ZigoCustomerPortalTest extends TestCase
+class ZigoCustomerPortalTest extends TestCase
 {
     protected function setUp(): void
     {
         parent::setUp();
-        if (DB::connection()->getDriverName() !== 'sqlite' || DB::connection()->getDatabaseName() !== ':memory:') $this->markTestSkipped('Requires SQLite :memory:.');
+        if (config('database.default') !== 'sqlite' || config('database.connections.sqlite.database') !== ':memory:') $this->markTestSkipped('Requires SQLite :memory:.');
         $this->schema();
     }
 
@@ -49,9 +49,9 @@ final class ZigoCustomerPortalTest extends TestCase
         $a = $this->tenant('customer-a'); $b = $this->tenant('customer-b');
         $user = User::create(['name' => 'Customer', 'email' => 'customer@example.test', 'password' => Hash::make('secret-pass'), 'empresa_id' => 1]);
         TenantCustomerProfile::create(['tenant_id' => $a->id, 'user_id' => $user->id, 'status' => 'active']);
-        $this->post($this->url($b, '/login'), ['email' => $user->email, 'password' => 'secret-pass'])->assertSessionHasErrors('email');
+        $this->post($this->url($b, '/ingresar'), ['email' => $user->email, 'password' => 'secret-pass'])->assertSessionHasErrors('email');
         $this->assertGuest();
-        $this->post($this->url($a, '/login'), ['email' => $user->email, 'password' => 'secret-pass'])->assertRedirect('/app');
+        $this->post($this->url($a, '/ingresar'), ['email' => $user->email, 'password' => 'secret-pass'])->assertRedirect('/app');
         $this->get($this->url($b, '/app'))->assertForbidden();
         $this->get($this->url($a, '/admin'))->assertRedirect();
         $this->get($this->url($a, '/driver'))->assertRedirect('/driver/login');
@@ -107,7 +107,7 @@ final class ZigoCustomerPortalTest extends TestCase
     public function test_customer_logout_invalidates_session(): void
     {
         $tenant = $this->tenant('logout'); $profile = $this->customer($tenant, 'logout@example.test');
-        $this->actingAs($profile->user)->post($this->url($tenant, '/logout'))->assertRedirect('/');
+        $this->actingAs($profile->user)->post($this->url($tenant, '/salir'))->assertRedirect('/');
         $this->assertGuest();
     }
 
@@ -147,7 +147,7 @@ final class ZigoCustomerPortalTest extends TestCase
         $this->assertSame('EXPIRED',$checkout->fresh()->status); $this->assertDatabaseCount('local_shipments',0); $this->assertDatabaseCount('network_usage_events',0);
     }
 
-    private function customer(Tenant $tenant, string $email): TenantCustomerProfile
+    protected function customer(Tenant $tenant, string $email): TenantCustomerProfile
     {
         $user = User::create(['name' => 'Customer', 'email' => $email, 'password' => Hash::make('secret-pass'), 'empresa_id' => 1]);
         return TenantCustomerProfile::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'status' => 'active', 'display_name' => 'Customer']);
@@ -161,17 +161,19 @@ final class ZigoCustomerPortalTest extends TestCase
         return $shipment;
     }
 
-    private function tenant(string $slug): Tenant
+    protected function tenant(string $slug): Tenant
     {
         $plan = Plan::create(['code' => strtoupper($slug), 'name' => $slug, 'status' => 'active', 'currency' => 'MXN']);
         $tenant = Tenant::create(['name' => $slug, 'slug' => $slug, 'status' => 'active']);
         $tenant->domains()->create(['domain' => $slug.'.zigo.local', 'type' => 'subdomain', 'environment' => 'local', 'is_primary' => true, 'status' => 'verified', 'verified_at' => now()]);
         $subscription = Subscription::create(['tenant_id' => $tenant->id, 'plan_id' => $plan->id, 'status' => 'active', 'started_at' => now(), 'current_period_start' => now(), 'current_period_end' => now()->addMonth()]);
+        $legacyOwner = User::create(['name'=>'Legacy owner','email'=>'owner-'.$slug.'@example.test','password'=>Hash::make('secret-pass'),'empresa_id'=>1000+$tenant->id]);
+        $tenant->memberships()->create(['user_id'=>$legacyOwner->id,'role'=>'owner','status'=>'active']);
         foreach (['B2C','SHIPPING','TRACKING'] as $code) { $module = Module::create(['code' => $code.$tenant->id, 'name' => $code, 'type' => 'addon', 'is_active' => true, 'sort_order' => 1]); Entitlement::create(['subscription_id' => $subscription->id, 'tenant_id' => $tenant->id, 'module_id' => $module->id, 'code' => $code, 'is_enabled' => true, 'source' => 'plan']); }
         return $tenant;
     }
 
-    private function url(Tenant $tenant, string $path): string { return 'http://'.$tenant->primaryDomain()->value('domain').$path; }
+    protected function url(Tenant $tenant, string $path): string { return 'http://'.$tenant->primaryDomain()->value('domain').$path; }
 
     private function schema(): void
     {

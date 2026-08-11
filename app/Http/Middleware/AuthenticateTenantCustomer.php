@@ -11,7 +11,7 @@ final class AuthenticateTenantCustomer
 {
     public function handle(Request $request, Closure $next)
     {
-        if (! auth()->check()) return redirect()->guest('/login');
+        if (! auth()->check()) return redirect()->guest('/ingresar');
         $tenantId = app(TenantContext::class)->id();
         $profile = TenantCustomerProfile::query()->where('tenant_id', $tenantId)
             ->where('user_id', auth()->id())->where('status', 'active')->first();
