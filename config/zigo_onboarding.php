@@ -8,6 +8,7 @@ return [
         env('ZIGO_ONBOARDING_MANAGED_SUBDOMAINS_VERIFIED', true),
         FILTER_VALIDATE_BOOLEAN
     ),
+    'tenant_admin_scheme' => env('ZIGO_ONBOARDING_TENANT_SCHEME', 'https'),
     'reserved_subdomains' => [
         'www', 'api', 'admin', 'network', 'payments', 'payment', 'support',
         'soporte', 'crm', 'driver', 'mail', 'stage', 'staging', 'sandbox',

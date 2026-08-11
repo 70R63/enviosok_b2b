@@ -39,7 +39,9 @@ final class SaasOnboardingApplication extends Model
         'reserved_subdomain_key', 'subdomain_reserved_until', 'purchase_key',
         'paid_at', 'provisioning_started_at', 'activated_at', 'failed_at',
         'cancelled_at', 'expired_at', 'tenant_id', 'owner_user_id',
-        'legacy_empresa_id', 'failure_code', 'failure_context_json', 'lock_version',
+        'legacy_empresa_id', 'owner_is_new', 'owner_activation_sent_at',
+        'owner_activation_completed_at', 'setup_started_at', 'setup_completed_at',
+        'failure_code', 'failure_context_json', 'lock_version',
     ];
 
     protected $casts = [
@@ -57,6 +59,11 @@ final class SaasOnboardingApplication extends Model
         'failed_at' => 'datetime',
         'cancelled_at' => 'datetime',
         'expired_at' => 'datetime',
+        'owner_is_new' => 'boolean',
+        'owner_activation_sent_at' => 'datetime',
+        'owner_activation_completed_at' => 'datetime',
+        'setup_started_at' => 'datetime',
+        'setup_completed_at' => 'datetime',
         'lock_version' => 'integer',
     ];
 

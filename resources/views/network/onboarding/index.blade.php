@@ -1,0 +1,9 @@
+@extends('network.layout')
+@section('title','Onboarding SaaS - ZIGO Network')
+@section('content')
+<div class="eyebrow">OPERACIÓN COMERCIAL</div><div class="title">Onboarding SaaS</div><div class="subtitle">Pago y provisioning se muestran como estados independientes.</div>
+<div class="card"><form method="GET"><label>Estado <select name="status"><option value="">Todos</option>@foreach(\App\Domain\Network\Onboarding\Models\SaasOnboardingApplication::STATUSES as $status)<option value="{{ $status }}" @selected(request('status')===$status)>{{ $status }}</option>@endforeach</select></label><button class="btn">Filtrar</button></form></div>
+<div class="card"><div class="table-wrap"><table><thead><tr><th>UUID</th><th>Empresa</th><th>Email</th><th>Onboarding</th><th>Payment</th><th>Subdominio</th><th>Plan</th><th>Creado</th><th>Pagado</th><th>Activado</th><th>Fallo</th></tr></thead><tbody>
+@forelse($applications as $application) @php($payment=$attempts->get($application->id))<tr><td><a href="{{ route('network.onboarding.show',$application->uuid) }}">{{ substr($application->uuid,0,8) }}</a></td><td>{{ $application->company_name }}</td><td>{{ $application->contact_email }}</td><td><span class="badge">{{ $application->status }}</span></td><td>{{ $payment?->status ?? 'SIN INTENTO' }}</td><td>{{ $application->requested_subdomain }}</td><td>{{ $application->commercial_snapshot_json['plan']['name'] ?? $application->plan?->name }}</td><td>{{ $application->created_at?->format('Y-m-d H:i') }}</td><td>{{ $application->paid_at?->format('Y-m-d H:i') ?? '—' }}</td><td>{{ $application->activated_at?->format('Y-m-d H:i') ?? '—' }}</td><td>{{ $application->failure_code ?? '—' }}</td></tr>@empty<tr><td colspan="11">No hay solicitudes.</td></tr>@endforelse
+</tbody></table></div>{{ $applications->links() }}</div>
+@endsection

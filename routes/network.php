@@ -4,6 +4,7 @@ use App\Http\Controllers\Network\LocalShippingController;
 use App\Http\Controllers\Network\ModuleController;
 use App\Http\Controllers\Network\NetworkAuthController;
 use App\Http\Controllers\Network\NetworkTwoFactorController;
+use App\Http\Controllers\Network\NetworkOnboardingController;
 use App\Http\Controllers\Network\NetworkDashboardController;
 use App\Http\Controllers\Network\NetworkLaunchpadController;
 use App\Http\Controllers\Network\NetworkTopologyController;
@@ -17,6 +18,8 @@ use App\Http\Controllers\Tenant\DriverAuthController;
 use App\Http\Controllers\Tenant\DriverConsoleController;
 use App\Http\Controllers\Tenant\TenantAdminController;
 use App\Http\Controllers\Tenant\TenantAuthController;
+use App\Http\Controllers\Tenant\OwnerActivationController;
+use App\Http\Controllers\Tenant\TenantSetupController;
 use App\Http\Controllers\Tenant\TenantB2cController;
 use App\Http\Controllers\Tenant\TenantConfigurationController;
 use App\Http\Controllers\Tenant\TenantDeliveryProofOptionController;
@@ -99,6 +102,10 @@ Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superad
         Route::delete('/security/users/{user}/two-factor', [NetworkTwoFactorController::class, 'reset'])->middleware('throttle:3,1')->name('two-factor.reset');
         Route::get('/topology', NetworkTopologyController::class)->name('topology');
         Route::get('/dashboard', NetworkDashboardController::class)->name('dashboard');
+        Route::get('/onboarding', [NetworkOnboardingController::class, 'index'])->name('onboarding.index');
+        Route::get('/onboarding/{uuid}', [NetworkOnboardingController::class, 'show'])->name('onboarding.show');
+        Route::post('/onboarding/{uuid}/retry', [NetworkOnboardingController::class, 'retry'])
+            ->middleware('throttle:10,1')->name('onboarding.retry');
         Route::get('/tenants', [TenantController::class, 'index'])->name('tenants.index');
         Route::get('/tenants/create', [TenantController::class, 'create'])->name('tenants.create');
         Route::post('/tenants', [TenantController::class, 'store'])->name('tenants.store');
@@ -201,10 +208,16 @@ Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:
 Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->group(function (): void {
     Route::get('/login', [TenantAuthController::class, 'create'])->name('login');
     Route::post('/login', [TenantAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
+    Route::get('/activate/{applicationToken}/{token}', [OwnerActivationController::class, 'create'])
+        ->middleware('throttle:10,1')->name('activation.create');
+    Route::post('/activate/{applicationToken}', [OwnerActivationController::class, 'store'])
+        ->middleware('throttle:10,1')->name('activation.store');
     Route::middleware('tenant.auth')->group(function (): void {
         Route::post('/logout', [TenantAuthController::class, 'destroy'])->name('logout');
         Route::middleware(['tenant.subscription', 'tenant.admin.access'])->group(function (): void {
             Route::get('/', [TenantAdminController::class, 'dashboard'])->name('dashboard');
+            Route::get('/setup', [TenantSetupController::class, 'show'])->name('setup');
+            Route::post('/setup', [TenantSetupController::class, 'store'])->name('setup.store');
             Route::get('/plan', [TenantAdminController::class, 'plan'])->name('plan');
             Route::get('/marketplace', [TenantSaasController::class, 'marketplace'])->name('marketplace');
             Route::post('/marketplace/contratar', [TenantSaasController::class, 'purchase'])->middleware('throttle:8,1')->name('marketplace.purchase');

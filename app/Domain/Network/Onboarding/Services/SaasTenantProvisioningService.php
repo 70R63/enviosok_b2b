@@ -23,6 +23,7 @@ final class SaasTenantProvisioningService
         private OnboardingMetadataSanitizer $sanitizer,
         private OnboardingSubdomainService $subdomains,
         private LegacyEmpresaAdapter $legacyCompanies,
+        private OwnerActivationService $ownerActivations,
     ) {}
 
     public function provision(SaasOnboardingApplication|int $application): SaasOnboardingApplication
@@ -31,6 +32,7 @@ final class SaasTenantProvisioningService
             ? $application->fresh()
             : SaasOnboardingApplication::findOrFail($application);
         if ($application->status === SaasOnboardingApplication::ACTIVE) {
+            $this->ownerActivations->sendIfNeeded($application);
             return $application;
         }
         if ($application->status === SaasOnboardingApplication::PROVISIONING) {
@@ -50,7 +52,7 @@ final class SaasTenantProvisioningService
         );
 
         try {
-            return DB::transaction(function () use ($application): SaasOnboardingApplication {
+            $active = DB::transaction(function () use ($application): SaasOnboardingApplication {
                 $onboarding = SaasOnboardingApplication::query()
                     ->whereKey($application->id)->lockForUpdate()->firstOrFail();
                 if ($onboarding->status === SaasOnboardingApplication::ACTIVE) return $onboarding;
@@ -82,10 +84,16 @@ final class SaasTenantProvisioningService
                         'password' => Hash::make(Str::random(64)),
                     ]);
                     $this->audit($onboarding, 'OWNER_CREATED');
+                    if (Schema::hasColumn('saas_onboarding_applications', 'owner_is_new')) {
+                        $onboarding->update(['owner_is_new' => true]);
+                    }
                 } elseif ((int) $owner->empresa_id !== (int) $legacyCompany->id) {
                     throw new OnboardingProvisioningException('OWNER_EMAIL_CONFLICT');
                 } else {
                     $this->audit($onboarding, 'OWNER_REUSED');
+                    if (Schema::hasColumn('saas_onboarding_applications', 'owner_is_new')) {
+                        $onboarding->update(['owner_is_new' => false]);
+                    }
                 }
                 $onboarding->update(['owner_user_id' => $owner->id]);
 
@@ -118,6 +126,8 @@ final class SaasTenantProvisioningService
                 );
                 return $active;
             });
+            $this->ownerActivations->sendIfNeeded($active);
+            return $active;
         } catch (Throwable $exception) {
             $fresh = SaasOnboardingApplication::findOrFail($application->id);
             if ($fresh->status === SaasOnboardingApplication::PROVISIONING) {
