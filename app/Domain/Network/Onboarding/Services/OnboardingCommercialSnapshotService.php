@@ -42,12 +42,14 @@ final class OnboardingCommercialSnapshotService
         $currency = strtoupper((string) ($planOffer?->currency ?? $plan->currency));
 
         $selectedModuleIds = collect($selectedModuleIds)->map(fn ($id) => (int) $id)->unique()->values()->all();
-        $modules = Module::query()->whereIn('id', $selectedModuleIds)->where('is_active', true)->get();
-        if ($modules->count() !== count($selectedModuleIds)) {
+        $selectedModules = Module::query()->whereIn('id', $selectedModuleIds)->where('is_active', true)->get();
+        if ($selectedModules->count() !== count($selectedModuleIds)) {
             throw ValidationException::withMessages(['selected_modules' => 'Uno o más módulos no están disponibles.']);
         }
 
-        $includedIds = $plan->modules()->wherePivot('is_included', true)->pluck('network_modules.id');
+        $includedModules = $plan->modules()->wherePivot('is_included', true)->get();
+        $includedIds = $includedModules->pluck('id');
+        $modules = $includedModules->concat($selectedModules)->unique('id')->values();
         $moduleLines = $this->moduleLines($modules, $includedIds, $billingPeriod, $currency);
         $operationLine = $this->operationLine($requestedOperations, $operationOfferUuid, $currency);
 
@@ -68,6 +70,9 @@ final class OnboardingCommercialSnapshotService
                 'name' => $plan->name,
                 'billing_period' => $billingPeriod,
                 'commercial_code' => $planOffer?->code,
+                'commercial_product_id' => $planOffer?->id,
+                'commercial_product_uuid' => $planOffer?->uuid,
+                'included_operations' => $plan->included_operations,
                 'amount' => $this->money((string) $planAmount),
             ],
             'modules' => $moduleLines->values()->all(),
@@ -93,6 +98,8 @@ final class OnboardingCommercialSnapshotService
                 return [
                     'id' => $module->id, 'code' => $module->code, 'name' => $module->name,
                     'included' => true, 'commercial_code' => null, 'amount' => '0.00',
+                    'limit_value' => $module->pivot?->limit_value,
+                    'api_monthly_request_limit' => null, 'api_rate_limit_per_minute' => null,
                 ];
             }
 
@@ -114,6 +121,9 @@ final class OnboardingCommercialSnapshotService
                 'id' => $module->id, 'code' => $module->code, 'name' => $module->name,
                 'included' => false, 'commercial_code' => $product->code,
                 'amount' => $this->money((string) $product->price),
+                'limit_value' => $product->metadata['limit_value'] ?? null,
+                'api_monthly_request_limit' => $product->metadata['api_monthly_request_limit'] ?? null,
+                'api_rate_limit_per_minute' => $product->metadata['api_rate_limit_per_minute'] ?? null,
             ];
         });
     }

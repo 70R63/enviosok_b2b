@@ -1,0 +1,330 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Domain\Network\Catalog\Models\{Module, Plan};
+use App\Domain\Network\Commerce\Models\{
+    NetworkCommercialProduct, PlatformPaymentAttempt, PlatformPaymentEvent,
+    TenantOperationAllowance, TenantSaasOrder
+};
+use App\Domain\Network\Onboarding\Models\SaasOnboardingApplication;
+use App\Domain\Network\Onboarding\Services\{
+    OnboardingApplicationService, OnboardingStateService, OnboardingSubdomainService,
+    SaasTenantProvisioningService
+};
+use App\Jobs\ProvisionSaasOnboardingJob;
+use App\Models\{Empresa, User};
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\{DB, Hash, Http, Queue, Schema};
+use Tests\TestCase;
+
+final class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
+{
+    protected function setUp(): void
+    {
+        parent::setUp();
+        if (DB::connection()->getDriverName() !== 'sqlite' || DB::connection()->getDatabaseName() !== ':memory:') {
+            $this->markTestSkipped('Requires isolated SQLite :memory:.');
+        }
+        $this->schema();
+        config([
+            'zigo_surfaces.payments.host' => 'payments.zigo.local',
+            'zigo_onboarding.subdomain_base' => 'zigo-envios.com',
+            'zigo_onboarding.managed_subdomains_are_verified' => true,
+            'zigo_payments.platform.account_id' => '123456',
+            'zigo_payments.platform.access_token' => 'platform-token',
+            'zigo_payments.platform.webhook_secret' => 'webhook-secret',
+            'zigo_payments.providers.mercado_pago.api_url' => 'https://api.mercadopago.com',
+            'zigo_payments.providers.mercado_pago.webhook_tolerance_seconds' => 300,
+        ]);
+    }
+
+    public function test_invalid_signature_is_unauthorized_and_pending_or_rejected_never_pay_or_provision(): void
+    {
+        [$pending, $pendingAttempt] = $this->pending('pending-case');
+        $this->postJson($this->webhookUrl($pendingAttempt, 'p-1'), ['data' => ['id' => 'p-1']])
+            ->assertUnauthorized();
+        $this->assertSame('PENDING_PAYMENT', $pending->fresh()->status);
+
+        Queue::fake();
+        [$rejected, $rejectedAttempt] = $this->pending('rejected-case');
+        Http::fakeSequence()
+            ->push($this->payment($pendingAttempt, 'p-2', 'pending'))
+            ->push($this->payment($rejectedAttempt, 'p-3', 'rejected'));
+        $this->signedPost($pendingAttempt, 'p-2', 'request-p-2')->assertOk();
+        $this->assertSame('PENDING_PAYMENT', $pending->fresh()->status);
+        $this->assertSame('PENDING', $pendingAttempt->fresh()->status);
+
+        $this->signedPost($rejectedAttempt, 'p-3', 'request-p-3')->assertOk();
+        $this->assertSame('PENDING_PAYMENT', $rejected->fresh()->status);
+        $this->assertSame('REJECTED', $rejectedAttempt->fresh()->status);
+        Queue::assertNothingPushed();
+        $this->assertOperationalCounts(0);
+    }
+
+    public function test_all_provider_mismatches_leave_onboarding_unpaid(): void
+    {
+        foreach (['amount', 'currency', 'collector', 'reference'] as $case) {
+            [$application, $attempt] = $this->pending('mismatch-'.$case);
+            $payment = $this->payment($attempt, 'mismatch-'.$case, 'approved');
+            if ($case === 'amount') $payment['transaction_amount'] = '999.00';
+            if ($case === 'currency') $payment['currency_id'] = 'USD';
+            if ($case === 'collector') $payment['collector_id'] = 'other-account';
+            if ($case === 'reference') $payment['external_reference'] = 'wrong-reference';
+            $this->sendWebhookResponse($attempt, $payment, 'request-'.$case)->assertOk();
+            $this->assertSame('PENDING_PAYMENT', $application->fresh()->status);
+            $this->assertNull($application->paid_at);
+        }
+        $this->assertSame(4, PlatformPaymentEvent::where('status', 'INCONSISTENT')->count());
+        $this->assertOperationalCounts(0);
+    }
+
+    public function test_approved_commits_paid_dispatches_afterward_and_duplicate_is_noop(): void
+    {
+        Queue::fake();
+        [$application, $attempt] = $this->pending('approved-case');
+        $this->sendWebhook($attempt, 'approved-1', 'approved', 'same-request')->assertOk();
+
+        $this->assertSame('PAID', $application->fresh()->status);
+        $this->assertNotNull($application->fresh()->paid_at);
+        $this->assertSame('APPROVED', $attempt->fresh()->status);
+        $this->assertSame('approved-1', $attempt->fresh()->provider_payment_id);
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+
+        $this->sendWebhook($attempt, 'approved-1', 'approved', 'same-request')->assertOk();
+        $this->assertSame(1, PlatformPaymentEvent::count());
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+        $this->assertOperationalCounts(0);
+    }
+
+    public function test_inconsistent_event_can_be_reprocessed_and_late_expired_payment_becomes_paid(): void
+    {
+        Queue::fake();
+        [$application, $attempt] = $this->pending('retry-event');
+        [$expired, $expiredAttempt] = $this->pending('late-payment');
+        Http::fakeSequence()
+            ->pushStatus(500)
+            ->push($this->payment($attempt, 'retry-payment', 'approved'))
+            ->push($this->payment($expiredAttempt, 'late-approved', 'approved'));
+        $this->signedPost($attempt, 'retry-payment', 'retry-request')->assertOk();
+        $this->assertSame('INCONSISTENT', PlatformPaymentEvent::first()->status);
+        $this->signedPost($attempt, 'retry-payment', 'retry-request')->assertOk();
+        $this->assertSame('PROCESSED', PlatformPaymentEvent::first()->fresh()->status);
+        $this->assertSame('PAID', $application->fresh()->status);
+
+        $expired = app(OnboardingStateService::class)->transition($expired, 'EXPIRED', 'CHECKOUT_EXPIRED');
+        $this->signedPost($expiredAttempt, 'late-approved', 'request-late-approved')->assertOk();
+        $this->assertSame('PAID', $expired->fresh()->status);
+        $this->assertNotNull($expired->fresh()->paid_at);
+    }
+
+    public function test_failed_provisioning_preserves_payment_and_retry_completes_every_invariant(): void
+    {
+        Queue::fake();
+        [$application, $attempt] = $this->pending('provision-all', true);
+        $this->sendWebhook($attempt, 'paid-provision', 'approved')->assertOk();
+        config(['zigo_onboarding.managed_subdomains_are_verified' => false]);
+        $failed = app(SaasTenantProvisioningService::class)->provision($application->fresh());
+
+        $this->assertSame('FAILED', $failed->status);
+        $this->assertNotNull($failed->paid_at);
+        $this->assertSame('APPROVED', $attempt->fresh()->status);
+        $this->assertOperationalCounts(0);
+
+        config(['zigo_onboarding.managed_subdomains_are_verified' => true]);
+        $active = app(SaasTenantProvisioningService::class)->provision($failed);
+        $this->assertSame('ACTIVE', $active->status);
+        $this->assertNotNull($active->tenant_id);
+        $this->assertNotNull($active->owner_user_id);
+        $this->assertNotNull($active->legacy_empresa_id);
+        $this->assertSame(1, DB::table('empresas')->count());
+        $this->assertSame($active->legacy_empresa_id, User::findOrFail($active->owner_user_id)->empresa_id);
+        $this->assertOperationalCounts(1);
+        $this->assertSame(2, DB::table('network_entitlements')->count());
+        $this->assertSame(1, TenantOperationAllowance::count());
+        $this->assertSame(1, DB::table('tenant_api_quota_policies')->count());
+        $this->assertSame(1, TenantSaasOrder::where('onboarding_application_id', $active->id)->count());
+        $this->assertSame('active', DB::table('network_tenants')->value('status'));
+
+        $ids = [$active->tenant_id, $active->owner_user_id, $active->legacy_empresa_id];
+        $again = app(SaasTenantProvisioningService::class)->provision($active);
+        $this->assertSame($ids, [$again->tenant_id, $again->owner_user_id, $again->legacy_empresa_id]);
+        $this->assertOperationalCounts(1);
+        $this->assertDatabaseHas('saas_onboarding_events', ['event' => 'PROVISIONING_RETRIED']);
+        $this->assertDatabaseHas('saas_onboarding_events', ['event' => 'PROVISIONING_COMPLETED']);
+    }
+
+    public function test_existing_compatible_owner_is_reused_but_conflict_never_reassigns_company(): void
+    {
+        Queue::fake();
+        $company = Empresa::withoutGlobalScopes()->create([
+            'estatus' => 1, 'contacto' => 'Existing', 'nombre' => 'Existing Co',
+            'email' => 'compatible@example.test', 'telefono' => '5555555555',
+        ]);
+        $owner = User::create([
+            'name' => 'Existing', 'email' => 'compatible@example.test',
+            'empresa_id' => $company->id, 'password' => Hash::make('existing-secret'),
+        ]);
+        [$compatible, $attempt] = $this->pending('compatible', false, 'compatible@example.test');
+        [$conflict, $conflictAttempt] = $this->pending('conflict', false, 'conflict@example.test');
+        Http::fakeSequence()
+            ->push($this->payment($attempt, 'compatible-paid', 'approved'))
+            ->push($this->payment($conflictAttempt, 'conflict-paid', 'approved'));
+        $this->signedPost($attempt, 'compatible-paid', 'request-compatible-paid')->assertOk();
+        $result = app(SaasTenantProvisioningService::class)->provision($compatible->fresh());
+        $this->assertSame('ACTIVE', $result->status);
+        $this->assertSame($owner->id, $result->owner_user_id);
+        $this->assertSame($company->id, $result->legacy_empresa_id);
+
+        $otherCompany = Empresa::withoutGlobalScopes()->create([
+            'estatus' => 1, 'contacto' => 'Other', 'nombre' => 'Other Co',
+            'email' => 'company@example.test', 'telefono' => '5555555555',
+        ]);
+        $conflicting = User::create([
+            'name' => 'Conflict', 'email' => 'conflict@example.test',
+            'empresa_id' => $otherCompany->id, 'password' => Hash::make('existing-secret'),
+        ]);
+        $this->signedPost($conflictAttempt, 'conflict-paid', 'request-conflict-paid')->assertOk();
+        $failed = app(SaasTenantProvisioningService::class)->provision($conflict->fresh());
+        $this->assertSame('FAILED', $failed->status);
+        $this->assertSame('OWNER_EMAIL_CONFLICT', $failed->failure_code);
+        $this->assertSame($otherCompany->id, $conflicting->fresh()->empresa_id);
+    }
+
+    public function test_reconciler_processes_paid_and_active_is_safe_noop(): void
+    {
+        Queue::fake();
+        [$application, $attempt] = $this->pending('command-case');
+        $this->sendWebhook($attempt, 'command-paid', 'approved')->assertOk();
+        $this->artisan('zigo:onboarding:reconcile', ['--uuid' => $application->uuid])
+            ->assertExitCode(0);
+        $this->assertSame('ACTIVE', $application->fresh()->status);
+        $this->artisan('zigo:onboarding:reconcile', ['--uuid' => $application->uuid])
+            ->assertExitCode(0);
+        $this->assertOperationalCounts(1);
+    }
+
+    public function test_audit_metadata_never_contains_passwords_or_tokens(): void
+    {
+        Queue::fake();
+        [$application, $attempt] = $this->pending('audit-safe');
+        $this->sendWebhook($attempt, 'audit-paid', 'approved')->assertOk();
+        app(SaasTenantProvisioningService::class)->provision($application->fresh());
+        $events = DB::table('saas_onboarding_events')->pluck('metadata_json')->implode(' ');
+        $this->assertStringNotContainsString('platform-token', $events);
+        $this->assertStringNotContainsString('webhook-secret', $events);
+        $this->assertStringNotContainsString('password', strtolower($events));
+        $this->assertStringNotContainsString('rapidgo', strtolower($events));
+    }
+
+    private function pending(string $key, bool $withExtras = false, ?string $email = null): array
+    {
+        [$plan, $planOffer, $apiOffer, $opsOffer] = $this->catalog($key);
+        $application = app(OnboardingApplicationService::class)->createOrRecover([
+            'contact_name' => 'Owner', 'contact_last_name' => 'Test',
+            'contact_email' => $email ?? $key.'@example.test', 'contact_phone' => '5551234567',
+            'company_name' => 'Company '.$key, 'company_legal_name' => 'Company '.$key.' SA de CV',
+            'selected_plan_id' => $plan->id, 'billing_period' => 'monthly',
+        ], 'purchase-'.$key);
+        $moduleIds = $withExtras ? [$apiOffer->module_id] : [];
+        $application = app(OnboardingApplicationService::class)->updateDraft($application, [
+            'selected_plan_id' => $plan->id, 'billing_period' => 'monthly',
+            'selected_modules_json' => [
+                'plan_offer_uuid' => $planOffer->uuid, 'module_ids' => $moduleIds,
+                'operations_offer_uuid' => $withExtras ? $opsOffer->uuid : null,
+            ],
+            'requested_operations' => $withExtras ? 500 : null,
+        ], 'SOLUTION_SELECTED');
+        $application = app(OnboardingSubdomainService::class)->reserve($application, $key);
+        $selection = $application->selected_modules_json;
+        $application = app(OnboardingApplicationService::class)->freezeCommercialSnapshot(
+            $application, $moduleIds, $application->requested_operations, '0.00',
+            $selection['plan_offer_uuid'], $selection['operations_offer_uuid'],
+        );
+        $application = app(OnboardingStateService::class)->transition(
+            $application, 'PENDING_PAYMENT', 'READY_FOR_CHECKOUT', 'public_session'
+        );
+        $attempt = PlatformPaymentAttempt::create([
+            'onboarding_application_id' => $application->id, 'provider' => 'MERCADO_PAGO',
+            'status' => 'PENDING', 'external_reference' => 'ref-'.$key,
+            'amount' => $application->total, 'currency' => $application->currency,
+        ]);
+        return [$application, $attempt];
+    }
+
+    private function catalog(string $suffix): array
+    {
+        $shipping = Module::firstOrCreate(['code' => 'SHIPPING'], ['name'=>'Shipping','type'=>'core','is_active'=>true,'sort_order'=>1]);
+        $api = Module::firstOrCreate(['code' => 'API'], ['name'=>'API','type'=>'addon','is_active'=>true,'sort_order'=>2]);
+        $plan = Plan::create(['code'=>'PLAN-'.$suffix,'name'=>'Plan '.$suffix,'status'=>'active','monthly_price'=>'999.00','currency'=>'MXN','included_operations'=>100]);
+        $plan->modules()->attach($shipping, ['is_included'=>true,'limit_value'=>null]);
+        $planOffer = NetworkCommercialProduct::create(['code'=>'OFFER-'.$suffix,'name'=>'Offer','type'=>'PLAN','billing_type'=>'MONTHLY','price'=>'100.00','currency'=>'MXN','plan_id'=>$plan->id,'is_active'=>true]);
+        $apiOffer = NetworkCommercialProduct::create(['code'=>'API-'.$suffix,'name'=>'API','type'=>'MODULE','billing_type'=>'MONTHLY','price'=>'20.00','currency'=>'MXN','module_id'=>$api->id,'is_active'=>true,'metadata'=>['api_monthly_request_limit'=>10000,'api_rate_limit_per_minute'=>60]]);
+        $opsOffer = NetworkCommercialProduct::create(['code'=>'OPS-'.$suffix,'name'=>'Operations','type'=>'OPERATION_PACK','billing_type'=>'ONE_TIME','price'=>'50.00','currency'=>'MXN','included_operations'=>500,'is_active'=>true]);
+        return [$plan, $planOffer, $apiOffer, $opsOffer];
+    }
+
+    private function sendWebhook(PlatformPaymentAttempt $attempt, string $paymentId, string $status, ?string $requestId = null)
+    {
+        return $this->sendWebhookResponse($attempt, $this->payment($attempt, $paymentId, $status), $requestId ?? 'request-'.$paymentId);
+    }
+
+    private function sendWebhookResponse(PlatformPaymentAttempt $attempt, array $payment, string $requestId)
+    {
+        Http::fake(['https://api.mercadopago.com/v1/payments/*' => Http::response($payment)]);
+        return $this->signedPost($attempt, (string) $payment['id'], $requestId);
+    }
+
+    private function signedPost(PlatformPaymentAttempt $attempt, string $paymentId, string $requestId)
+    {
+        $timestamp = (string) time();
+        $manifest = 'id:'.strtolower($paymentId).';request-id:'.$requestId.';ts:'.$timestamp.';';
+        $signature = hash_hmac('sha256', $manifest, 'webhook-secret');
+        return $this->withHeaders(['x-request-id'=>$requestId,'x-signature'=>'ts='.$timestamp.',v1='.$signature])
+            ->postJson($this->webhookUrl($attempt, $paymentId), ['type'=>'payment','data'=>['id'=>$paymentId]]);
+    }
+
+    private function webhookUrl(PlatformPaymentAttempt $attempt, string $paymentId): string
+    {
+        return 'http://payments.zigo.local/api/payments/mercado-pago/webhook?onboarding_attempt='
+            .$attempt->uuid.'&data[id]='.$paymentId;
+    }
+
+    private function payment(PlatformPaymentAttempt $attempt, string $id, string $status): array
+    {
+        return ['id'=>$id,'status'=>$status,'external_reference'=>$attempt->external_reference,'transaction_amount'=>(string)$attempt->amount,'currency_id'=>$attempt->currency,'collector_id'=>'123456'];
+    }
+
+    private function assertOperationalCounts(int $expected): void
+    {
+        foreach (['network_tenants','users','network_tenant_memberships','network_subscriptions','network_tenant_brandings','network_tenant_domains'] as $table) {
+            $this->assertSame($expected, DB::table($table)->count(), $table);
+        }
+    }
+
+    private function schema(): void
+    {
+        foreach (['tenant_api_quota_policies','tenant_operation_allowances','platform_payment_events','platform_payment_attempts','tenant_saas_orders','saas_onboarding_events','saas_onboarding_applications','network_subscription_events','network_entitlements','network_subscriptions','network_tenant_memberships','network_tenant_brandings','network_tenant_domains','network_commercial_products','network_plan_modules','network_tenants','network_plans','network_modules','users','empresas'] as $table) Schema::dropIfExists($table);
+        Schema::create('empresas',function(Blueprint$t){$t->id();$t->timestamps();$t->boolean('estatus')->default(1);$t->string('contacto',50);$t->string('nombre',50);$t->string('email')->nullable()->unique();$t->string('telefono',10);});
+        Schema::create('users',function(Blueprint$t){$t->id();$t->string('name');$t->string('apellido_paterno')->nullable();$t->string('apellido_materno')->nullable();$t->string('rfc')->nullable();$t->string('email')->unique();$t->timestamp('email_verified_at')->nullable();$t->string('password');$t->unsignedBigInteger('empresa_id');$t->rememberToken();$t->timestamps();});
+        Schema::create('network_modules',function(Blueprint$t){$t->id();$t->string('code')->unique();$t->string('name');$t->text('description')->nullable();$t->string('type');$t->boolean('is_active');$t->unsignedSmallInteger('sort_order');$t->timestamps();});
+        Schema::create('network_plans',function(Blueprint$t){$t->id();$t->string('code')->unique();$t->string('name');$t->text('description')->nullable();$t->string('status');$t->decimal('monthly_price',12,2)->nullable();$t->decimal('annual_price',12,2)->nullable();$t->char('currency',3);$t->unsignedInteger('included_operations')->nullable();$t->timestamps();});
+        Schema::create('network_tenants',function(Blueprint$t){$t->id();$t->uuid('uuid')->unique();$t->string('name');$t->string('slug')->unique();$t->string('status');$t->unsignedBigInteger('current_plan_id')->nullable();$t->timestamps();});
+        Schema::create('network_plan_modules',function(Blueprint$t){$t->id();$t->unsignedBigInteger('plan_id');$t->unsignedBigInteger('module_id');$t->boolean('is_included');$t->unsignedInteger('limit_value')->nullable();$t->timestamps();$t->unique(['plan_id','module_id']);});
+        Schema::create('network_tenant_domains',function(Blueprint$t){$t->id();$t->unsignedBigInteger('tenant_id');$t->string('domain')->unique();$t->string('type');$t->string('environment');$t->boolean('is_primary');$t->string('status');$t->timestamp('verified_at')->nullable();$t->timestamps();});
+        Schema::create('network_tenant_brandings',function(Blueprint$t){$t->id();$t->unsignedBigInteger('tenant_id')->unique();$t->string('brand_name')->nullable();$t->string('logo_path')->nullable();$t->string('primary_color',7)->nullable();$t->string('secondary_color',7)->nullable();$t->string('accent_color',7)->nullable();$t->string('favicon_path')->nullable();$t->string('support_email')->nullable();$t->string('support_phone')->nullable();$t->timestamps();});
+        Schema::create('network_tenant_memberships',function(Blueprint$t){$t->id();$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('user_id');$t->string('role');$t->string('status');$t->timestamps();$t->unique(['tenant_id','user_id']);});
+        Schema::create('network_subscriptions',function(Blueprint$t){$t->id();$t->uuid('uuid')->unique();$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('plan_id');$t->string('status');$t->unsignedInteger('operations_limit')->nullable();foreach(['started_at','current_period_start','current_period_end','trial_ends_at','grace_ends_at','canceled_at','ended_at']as$c)$t->timestamp($c)->nullable();$t->timestamps();});
+        Schema::create('network_entitlements',function(Blueprint$t){$t->id();$t->unsignedBigInteger('subscription_id');$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('module_id');$t->string('code');$t->boolean('is_enabled');$t->unsignedInteger('limit_value')->nullable();$t->string('source');$t->timestamps();$t->unique(['subscription_id','module_id']);$t->unique(['subscription_id','code']);});
+        Schema::create('network_subscription_events',function(Blueprint$t){$t->id();$t->unsignedBigInteger('subscription_id');$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('actor_user_id')->nullable();$t->string('event');$t->string('from_status')->nullable();$t->string('to_status')->nullable();$t->json('metadata')->nullable();$t->timestamp('created_at')->nullable();});
+        Schema::create('network_commercial_products',function(Blueprint$t){$t->id();$t->uuid('uuid')->unique();$t->string('code')->unique();$t->string('name');$t->text('description')->nullable();$t->string('type');$t->string('billing_type');$t->decimal('price',12,2);$t->char('currency',3);$t->unsignedBigInteger('module_id')->nullable();$t->unsignedBigInteger('plan_id')->nullable();$t->unsignedInteger('included_operations')->nullable();$t->boolean('is_active');$t->unsignedInteger('sort_order')->default(0);$t->json('metadata')->nullable();$t->timestamps();});
+        (require database_path('migrations/2026_08_19_100000_create_saas_onboarding_applications.php'))->up();
+        (require database_path('migrations/2026_08_19_100100_create_saas_onboarding_events.php'))->up();
+        Schema::table('saas_onboarding_applications',function(Blueprint$t){$t->unsignedBigInteger('legacy_empresa_id')->nullable();});
+        Schema::create('tenant_saas_orders',function(Blueprint$t){$t->id();$t->uuid('uuid')->unique();$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('onboarding_application_id')->nullable()->unique();$t->unsignedBigInteger('commercial_product_id');$t->unsignedBigInteger('created_by_user_id');$t->string('purchase_key');$t->string('status');$t->string('payment_status');$t->unsignedInteger('quantity');$t->decimal('unit_amount',12,2);$t->decimal('subtotal',12,2);$t->decimal('tax_amount',12,2);$t->decimal('total_amount',12,2);$t->char('currency',3);$t->json('purchase_snapshot');$t->string('payment_provider')->nullable();$t->string('payment_reference')->nullable();$t->timestamp('expires_at')->nullable();$t->timestamp('paid_at')->nullable();$t->timestamp('activated_at')->nullable();$t->timestamps();});
+        Schema::create('platform_payment_attempts',function(Blueprint$t){$t->id();$t->uuid('uuid')->unique();$t->unsignedBigInteger('tenant_id')->nullable();$t->unsignedBigInteger('saas_order_id')->nullable();$t->unsignedBigInteger('onboarding_application_id')->nullable();$t->string('provider');$t->string('status');$t->string('provider_preference_id')->nullable();$t->string('provider_payment_id')->nullable();$t->string('external_reference')->unique();$t->decimal('amount',12,2);$t->char('currency',3);$t->text('init_point')->nullable();$t->timestamp('approved_at')->nullable();$t->timestamp('rejected_at')->nullable();$t->timestamps();$t->unique(['provider','provider_payment_id']);});
+        Schema::create('platform_payment_events',function(Blueprint$t){$t->id();$t->string('provider');$t->string('event_key');$t->unsignedBigInteger('platform_payment_attempt_id')->nullable();$t->string('provider_payment_id')->nullable();$t->string('status');$t->string('error_code')->nullable();$t->timestamp('received_at');$t->timestamp('processed_at')->nullable();$t->timestamps();$t->unique(['provider','event_key']);});
+        Schema::create('tenant_operation_allowances',function(Blueprint$t){$t->id();$t->uuid('uuid')->unique();$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('subscription_id');$t->unsignedBigInteger('saas_order_id')->unique();$t->unsignedInteger('operations');$t->timestamp('starts_at');$t->timestamp('expires_at');$t->timestamps();});
+        Schema::create('tenant_api_quota_policies',function(Blueprint$t){$t->id();$t->unsignedBigInteger('tenant_id');$t->unsignedInteger('monthly_request_limit');$t->unsignedInteger('rate_limit_per_minute');$t->timestamp('valid_from');$t->timestamp('valid_until')->nullable();$t->unsignedBigInteger('source_saas_order_id')->nullable();$t->timestamps();});
+    }
+}

@@ -39,7 +39,7 @@ final class SaasOnboardingApplication extends Model
         'reserved_subdomain_key', 'subdomain_reserved_until', 'purchase_key',
         'paid_at', 'provisioning_started_at', 'activated_at', 'failed_at',
         'cancelled_at', 'expired_at', 'tenant_id', 'owner_user_id',
-        'failure_code', 'failure_context_json', 'lock_version',
+        'legacy_empresa_id', 'failure_code', 'failure_context_json', 'lock_version',
     ];
 
     protected $casts = [
