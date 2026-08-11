@@ -5,7 +5,7 @@ final class EnsureConfiguredSurfaceHost
 {
     public function handle(Request $request, Closure $next, string $surface)
     {
-        if (! config('zigo_domains.routing_enabled') || ! app()->environment(['staging', 'production'])) return $next($request);
+        if (! config('zigo_domains.routing_enabled') || ! app()->environment(['stage', 'staging', 'production'])) return $next($request);
         $expected = strtolower((string) config("zigo_surfaces.{$surface}.host"));
         abort_unless($expected !== '' && hash_equals($expected, strtolower($request->getHost())), 404);
         return $next($request);
