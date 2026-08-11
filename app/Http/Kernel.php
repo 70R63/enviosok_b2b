@@ -92,5 +92,6 @@ class Kernel extends HttpKernel
         'tenant.customer' => \App\Http\Middleware\AuthenticateTenantCustomer::class,
         'zigo.surface.host' => \App\Http\Middleware\EnsureConfiguredSurfaceHost::class,
         'payments.edge.headers' => \App\Http\Middleware\SecurePaymentEdgeHeaders::class,
+        'zigo.corporate.host' => \App\Http\Middleware\EnsureCorporateSurfaceHost::class,
     ];
 }

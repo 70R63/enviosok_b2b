@@ -34,6 +34,7 @@ use App\Http\Controllers\CRM\CrmDevOpsController;
 use App\Http\Controllers\DevOps\DevOpsAuthController;
 use App\Http\Controllers\DevOps\XpertaIntegrationController;
 use App\Models\B2cCotizacion;
+use App\Http\Controllers\Onboarding\ZigoPlatformController;
 
 /*
 |--------------------------------------------------------------------------
@@ -45,6 +46,20 @@ use App\Models\B2cCotizacion;
 | contains the "web" middleware group. Now create something great!
 |
 */
+
+Route::middleware('zigo.corporate.host')->prefix('zigo-platform')->name('zigo-platform.')->group(function (): void {
+    Route::get('/', [ZigoPlatformController::class, 'landing'])->name('landing');
+    Route::get('/precios', [ZigoPlatformController::class, 'pricing'])->name('pricing');
+    Route::get('/comenzar', [ZigoPlatformController::class, 'start'])->name('start');
+    Route::post('/comenzar', [ZigoPlatformController::class, 'storeStart'])->middleware('throttle:8,1')->name('start.store');
+    Route::get('/solicitud/{token}/solucion', [ZigoPlatformController::class, 'solution'])->name('onboarding.solution');
+    Route::patch('/solicitud/{token}/solucion', [ZigoPlatformController::class, 'storeSolution'])->middleware('throttle:12,1')->name('onboarding.solution.store');
+    Route::get('/solicitud/{token}/plataforma', [ZigoPlatformController::class, 'platform'])->name('onboarding.platform');
+    Route::patch('/solicitud/{token}/plataforma', [ZigoPlatformController::class, 'storePlatform'])->middleware('throttle:12,1')->name('onboarding.platform.store');
+    Route::get('/solicitud/{token}/resumen', [ZigoPlatformController::class, 'summary'])->name('onboarding.summary');
+    Route::post('/solicitud/{token}/checkout', [ZigoPlatformController::class, 'checkout'])->middleware('throttle:5,1')->name('onboarding.checkout');
+    Route::get('/solicitud/{token}/retorno/{result}', [ZigoPlatformController::class, 'returned'])->middleware('throttle:20,1')->name('onboarding.return');
+});
 
 
 Route::domain(config('zigo_domains.portals.b2c.host'))
