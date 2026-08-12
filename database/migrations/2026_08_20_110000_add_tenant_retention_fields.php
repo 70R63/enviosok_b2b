@@ -1,0 +1,3 @@
+<?php
+use Illuminate\Database\Migrations\Migration;use Illuminate\Database\Schema\Blueprint;use Illuminate\Support\Facades\Schema;
+return new class extends Migration{public function up():void{Schema::table('network_tenants',function(Blueprint$t):void{$t->timestamp('archived_at')->nullable()->after('status');$t->string('archive_reason',500)->nullable()->after('archived_at');$t->index(['status','archived_at'],'network_tenants_retention_idx');});}public function down():void{Schema::table('network_tenants',function(Blueprint$t):void{$t->dropIndex('network_tenants_retention_idx');$t->dropColumn(['archived_at','archive_reason']);});}};

@@ -9,6 +9,7 @@ use App\Domain\Network\Billing\Models\Subscription;
 use Illuminate\Support\Facades\Schema;
 use App\Domain\Network\Onboarding\Models\SaasOnboardingApplication;
 use App\Domain\Network\Commerce\Models\PlatformPaymentAttempt;
+use App\Domain\Network\Commerce\Models\TenantSaasOrder;
 use App\Domain\Support\Models\SupportTicket;
 class NetworkDashboardController extends Controller
 {
@@ -29,6 +30,11 @@ class NetworkDashboardController extends Controller
             'recentApprovedPayments'=>Schema::hasTable('platform_payment_attempts')?PlatformPaymentAttempt::where('status','APPROVED')->where('approved_at','>=',now()->subDays(7))->count():0,
             'approvedFailed'=>Schema::hasTable('platform_payment_attempts')?PlatformPaymentAttempt::where('status','APPROVED')->whereHas('onboarding',fn($q)=>$q->where('status','FAILED'))->count():0,
             'openTickets'=>Schema::hasTable('support_tickets')?SupportTicket::whereNotIn('status',['RESOLVED','CLOSED'])->count():0,
+            'expiringSubscriptions'=>Schema::hasTable('network_subscriptions')?Subscription::whereIn('status',['active','trial','past_due','grace'])->whereBetween('current_period_end',[now(),now()->addDays(max(config('zigo_billing.reminder_days',[30])))])->count():0,
+            'expiredSubscriptions'=>Schema::hasTable('network_subscriptions')?Subscription::whereIn('status',['active','trial','past_due','grace'])->where('current_period_end','<',now())->count():0,
+            'pendingRenewals'=>Schema::hasTable('tenant_saas_orders')?TenantSaasOrder::where('purchase_key','like','renewal:%')->whereIn('status',['DRAFT','PENDING_PAYMENT'])->count():0,
+            'paidRenewals'=>Schema::hasTable('tenant_saas_orders')?TenantSaasOrder::where('purchase_key','like','renewal:%')->whereIn('status',['PAID','ACTIVATED'])->count():0,
+            'confirmedSaasRevenue'=>Schema::hasTable('platform_payment_attempts')?PlatformPaymentAttempt::where('status','APPROVED')->sum('amount'):0,
         ]);
     }
 }

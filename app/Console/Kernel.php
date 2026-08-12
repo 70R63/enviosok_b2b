@@ -37,6 +37,7 @@ class Kernel extends ConsoleKernel
             ->command('zigo:security:cleanup-orphan-evidence --delete')
             ->dailyAt('03:20')
             ->withoutOverlapping(30);
+        $schedule->command('zigo:subscriptions:billing-cycle --notify --suspend')->dailyAt('04:10')->withoutOverlapping(60);
         
     }
 

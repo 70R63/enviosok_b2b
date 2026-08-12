@@ -147,6 +147,11 @@ Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superad
         Route::get('/subscriptions', [NetworkOperationsController::class, 'subscriptions'])->name('subscriptions.index');
         Route::get('/subscriptions/{subscription}', [NetworkOperationsController::class, 'subscription'])->name('subscriptions.show');
         Route::patch('/subscriptions/{subscription}/status', [NetworkOperationsController::class, 'subscriptionStatus'])->name('subscriptions.status');
+        Route::post('/subscriptions/{subscription}/reminder', [NetworkOperationsController::class, 'subscriptionReminder'])->name('subscriptions.reminder');
+        Route::post('/subscriptions/{subscription}/renewal', [NetworkOperationsController::class, 'subscriptionRenewal'])->name('subscriptions.renewal');
+        Route::post('/subscriptions/{subscription}/suspend-expired', [NetworkOperationsController::class, 'subscriptionSuspend'])->name('subscriptions.suspend-expired');
+        Route::post('/tenants/{tenant}/archive', [NetworkOperationsController::class, 'tenantArchive'])->name('tenants.archive');
+        Route::delete('/tenants/{tenant}', [NetworkOperationsController::class, 'tenantDelete'])->name('tenants.destroy');
         Route::get('/local-shipping', [LocalShippingController::class, 'index'])->name('local-shipping.index');
         Route::get('/payments', [NetworkOperationsController::class, 'payments'])->name('payments.index');
         Route::get('/payments/{attempt}', [NetworkOperationsController::class, 'payment'])->name('payments.show');

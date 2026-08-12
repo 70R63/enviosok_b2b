@@ -9,7 +9,7 @@ use App\Models\{Roles\Roles,User};
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\{DB,Hash,Schema};
 
-final class ZigoNetworkOperationsConsoleTest extends ZigoNetworkOnboardingOperationsTest
+class ZigoNetworkOperationsConsoleTest extends ZigoNetworkOnboardingOperationsTest
 {
  private string $networkHost='https://network.zigo.local';
  protected function setUp():void
@@ -27,6 +27,7 @@ final class ZigoNetworkOperationsConsoleTest extends ZigoNetworkOnboardingOperat
   Schema::create('tenant_saas_orders',fn(Blueprint$t)=>[$t->id(),$t->uuid('uuid'),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('commercial_product_id'),$t->unsignedBigInteger('created_by_user_id'),$t->string('purchase_key'),$t->string('status'),$t->string('payment_status'),$t->unsignedInteger('quantity'),$t->decimal('unit_amount',12,2),$t->decimal('subtotal',12,2),$t->decimal('tax_amount',12,2),$t->decimal('total_amount',12,2),$t->char('currency',3),$t->json('purchase_snapshot'),$t->timestamps()]);
   Schema::create('tenant_operation_allowances',fn(Blueprint$t)=>[$t->id(),$t->uuid('uuid'),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('subscription_id'),$t->unsignedBigInteger('saas_order_id'),$t->unsignedInteger('operations'),$t->timestamp('starts_at'),$t->timestamp('expires_at'),$t->timestamps()]);
   Schema::create('support_tickets',fn(Blueprint$t)=>[$t->id(),$t->uuid('uuid'),$t->unsignedBigInteger('tenant_id')->nullable(),$t->unsignedBigInteger('requester_user_id'),$t->string('requester_type'),$t->string('scope'),$t->string('channel'),$t->string('category'),$t->string('priority'),$t->string('status'),$t->string('subject'),$t->text('description'),$t->unsignedBigInteger('assigned_user_id')->nullable(),$t->string('assigned_team')->nullable(),$t->unsignedBigInteger('related_operation_id')->nullable(),$t->unsignedBigInteger('related_shipment_id')->nullable(),$t->unsignedBigInteger('related_checkout_id')->nullable(),$t->unsignedBigInteger('related_driver_profile_id')->nullable(),$t->string('public_reference'),$t->timestamp('first_response_at')->nullable(),$t->timestamp('resolved_at')->nullable(),$t->timestamp('closed_at')->nullable(),$t->timestamps()]);
+  (require database_path('migrations/2026_08_17_100000_create_tenant_api_hub_v1.php'))->up();
  }
  public function test_catalog_publication_drives_public_pricing_and_used_plan_archives():void
  {
@@ -51,6 +52,21 @@ final class ZigoNetworkOperationsConsoleTest extends ZigoNetworkOnboardingOperat
   $this->asNetwork($admin)->get($this->networkHost.'/network/payments/'.$attempt->id)->assertOk()->assertSee('PAGO CONFIRMADO — ACTIVACIÓN FALLIDA')->assertDontSee('opaque-very-secret-ref');
   app()->detectEnvironment(fn()=>'staging');config(['zigo_domains.routing_enabled'=>true]);$this->asNetwork($admin)->get('https://wrong.test/network/payments')->assertNotFound();app()->detectEnvironment(fn()=>'testing');
   $owner=User::create(['name'=>'Tenant','email'=>'tenant@test.local','password'=>Hash::make('x'),'empresa_id'=>9]);$this->actingAs($owner)->get($this->networkHost.'/network/payments')->assertForbidden();
+ }
+ public function test_api_hub_renders_zero_one_and_multiple_error_counts_without_shadowing_error_bag():void
+ {
+  $admin=$this->admin();$url=$this->networkHost.'/network/api-hub';
+  $this->asNetwork($admin)->get($url)->assertOk()->assertSee('Errores')->assertSee('0');
+  $tenant=Tenant::create(['name'=>'API Tenant','slug'=>'api-tenant','status'=>'active','current_plan_id'=>1]);$client=DB::table('tenant_api_clients')->insertGetId(['uuid'=>(string)\Illuminate\Support\Str::uuid(),'tenant_id'=>$tenant->id,'name'=>'Test','environment'=>'STAGE','status'=>'ACTIVE','created_by_user_id'=>$admin->id,'created_at'=>now(),'updated_at'=>now()]);$key=DB::table('tenant_api_keys')->insertGetId(['uuid'=>(string)\Illuminate\Support\Str::uuid(),'tenant_id'=>$tenant->id,'api_client_id'=>$client,'key_prefix'=>'zg_test','key_hash'=>hash('sha256','test-key'),'last_four'=>'test','name'=>'Test','scopes'=>'[]','created_at'=>now(),'updated_at'=>now()]);
+  foreach([500,422] as$index=>$status)DB::table('tenant_api_usage_events')->insert(['tenant_id'=>$tenant->id,'api_client_id'=>$client,'api_key_id'=>$key,'request_id'=>(string)\Illuminate\Support\Str::uuid(),'endpoint_code'=>'test-'.$index,'http_status'=>$status,'units'=>1,'duration_ms'=>1,'occurred_at'=>now(),'created_at'=>now()]);
+  $this->asNetwork($admin)->get($url)->assertOk()->assertSee('2');
+ }
+ public function test_pre_stage_network_navigation_smoke_has_no_dead_or_duplicate_links():void
+ {
+  $admin=$this->admin();foreach(['/network','/network/dashboard','/network/tenants','/network/users','/network/plans','/network/modules','/network/commercial-products','/network/subscriptions','/network/payments','/network/onboarding','/network/api-hub','/network/support','/network/audit']as$path)$this->asNetwork($admin)->get($this->networkHost.$path)->assertOk()->assertDontSee('href="#"',false);
+  $tenant=Tenant::create(['name'=>'Tenant 360','slug'=>'tenant-360','status'=>'inactive','current_plan_id'=>1]);$this->asNetwork($admin)->get($this->networkHost.'/network/tenants/'.$tenant->id)->assertOk()->assertSee('Resumen')->assertSee('Facturación')->assertSee('Zona de peligro')->assertDontSee('href="#"',false);
+  $layout=file_get_contents(resource_path('views/network/layout.blade.php'));$this->assertSame(0,substr_count($layout,'>Launchpad</a>'));$this->assertSame(0,substr_count($layout,'>Mapa Network</a>'));$this->assertSame(1,substr_count($layout,'>Dashboard</a>'));$this->assertSame(1,substr_count($layout,'>Onboarding</a>'));$this->assertStringNotContainsString('>Consumo</a>',$layout);$dashboard=file_get_contents(resource_path('views/network/dashboard.blade.php'));$this->assertSame(1,substr_count($dashboard,'>Launchpad</a>'));$this->assertSame(1,substr_count($dashboard,'>Mapa Network</a>'));
+  app()->detectEnvironment(fn()=>'staging');config(['zigo_domains.routing_enabled'=>true]);$this->asNetwork($admin)->get('https://wrong.test/network/api-hub')->assertNotFound();app()->detectEnvironment(fn()=>'testing');
  }
  private function admin():User{$u=User::create(['name'=>'Network','email'=>uniqid().'@network.test','password'=>Hash::make('x'),'empresa_id'=>1]);$r=Roles::firstOrCreate(['slug'=>'sysadmin'],['name'=>'sysadmin']);$u->roles()->attach($r);return$u;}
  private function asNetwork(User$u):self{return$this->actingAs($u)->withSession(['network.2fa_user_id'=>$u->id,'network.2fa_verified_at'=>now()->timestamp]);}

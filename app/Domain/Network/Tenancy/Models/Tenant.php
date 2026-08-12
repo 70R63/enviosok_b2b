@@ -17,13 +17,13 @@ class Tenant extends Model
 {
     use HasFactory;
 
-    public const STATUSES = ['active', 'inactive', 'suspended'];
+    public const STATUSES = ['active', 'inactive', 'suspended', 'archived'];
 
     protected $table = 'network_tenants';
 
-    protected $fillable = ['name', 'slug', 'status', 'current_plan_id'];
+    protected $fillable = ['name', 'slug', 'status', 'current_plan_id', 'archived_at', 'archive_reason'];
 
-    protected $casts = ['current_plan_id' => 'integer'];
+    protected $casts = ['current_plan_id' => 'integer', 'archived_at' => 'datetime'];
 
     /** Current commercial plan assignment; deliberately not a subscription. */
     public function currentPlan(): BelongsTo
