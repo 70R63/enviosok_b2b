@@ -2,7 +2,6 @@
 @section('title','Dashboard - ZIGO Network')
 @section('content')
 <div class="eyebrow">OPERACIÓN NETWORK</div><div class="title">Dashboard</div><div class="subtitle">Estado verificable del ecosistema. Sin métricas operativas inventadas.</div>
-<p class="secondary-nav"><a class="btn btn-secondary" href="{{ route('network.launchpad') }}">Launchpad</a> <a class="btn btn-secondary" href="{{ route('network.topology') }}">Mapa Network</a></p>
 <div class="grid">
 <div class="card metric"><span>Tenants activos</span><strong>{{ $activeTenants }}</strong></div>
 <div class="card metric"><span>Planes activos</span><strong>{{ $activePlans }}</strong></div>

@@ -1,6 +1,6 @@
 <?php
 return ['default'=>'mercado_pago','platform'=>[
- 'enabled'=>env('ZIGO_MP_PLATFORM_ENABLED',false),'access_token'=>env('ZIGO_MP_PLATFORM_ACCESS_TOKEN'),'account_id'=>env('ZIGO_MP_PLATFORM_ACCOUNT_ID'),'webhook_secret'=>env('ZIGO_MP_PLATFORM_WEBHOOK_SECRET'),'webhook_url'=>env('ZIGO_MP_PLATFORM_WEBHOOK_URL'),
+ 'enabled'=>env('ZIGO_MP_PLATFORM_ENABLED',true),'access_token'=>env('ZIGO_MP_PLATFORM_ACCESS_TOKEN'),'account_id'=>env('ZIGO_MP_PLATFORM_ACCOUNT_ID'),'webhook_secret'=>env('ZIGO_MP_PLATFORM_WEBHOOK_SECRET'),'webhook_url'=>env('ZIGO_MP_PLATFORM_WEBHOOK_URL'),
 ],'providers'=>['mercado_pago'=>[
  'enabled'=>env('ZIGO_MP_ENABLED',false),'environment'=>env('ZIGO_MP_ENVIRONMENT','sandbox'),
  'client_id'=>env('ZIGO_MP_CLIENT_ID'),'client_secret'=>env('ZIGO_MP_CLIENT_SECRET'),'redirect_uri'=>env('ZIGO_MP_REDIRECT_URI'),'webhook_secret'=>env('ZIGO_MP_WEBHOOK_SECRET'),

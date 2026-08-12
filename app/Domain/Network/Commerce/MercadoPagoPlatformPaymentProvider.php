@@ -75,7 +75,7 @@ final class MercadoPagoPlatformPaymentProvider implements PlatformPaymentProvide
         $token = (string) $this->cfg('platform.access_token');
         $webhook = (string) $this->cfg('platform.webhook_url');
         if (!$token || !$webhook) {
-            throw new RuntimeException('ZIGO platform payments no está configurado.');
+            throw new RuntimeException('PLATFORM_PAYMENT_CONFIGURATION_MISSING');
         }
 
         $separator = str_contains($webhook, '?') ? '&' : '?';
@@ -102,7 +102,7 @@ final class MercadoPagoPlatformPaymentProvider implements PlatformPaymentProvide
                 $body,
             );
         if (!$response->successful()) {
-            throw new RuntimeException('Mercado Pago no pudo crear el checkout SaaS.');
+            throw new RuntimeException('MERCADO_PAGO_PREFERENCE_HTTP_'.$response->status());
         }
 
         return $response->json();

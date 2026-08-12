@@ -16,8 +16,9 @@ use App\Http\Requests\Onboarding\{ReserveOnboardingSubdomainRequest, StartOnboar
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\{Log, Schema};
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 final class ZigoPlatformController extends Controller
 {
@@ -173,8 +174,27 @@ final class ZigoPlatformController extends Controller
 
     public function checkout(string $token, PlatformPaymentService $payments)
     {
-        abort_unless(config('zigo_payments.platform.enabled'), 503);
-        $attempt = $payments->initializeOnboarding($this->application($token));
+        $application = $this->application($token);
+        if (!config('zigo_payments.platform.enabled')) {
+            Log::warning('ZIGO onboarding checkout unavailable', [
+                'onboarding_uuid' => $application->uuid,
+                'reason' => 'PLATFORM_PAYMENT_DISABLED',
+            ]);
+            return back()->withErrors(['payment' => 'No fue posible iniciar el pago en este momento. Intenta nuevamente.']);
+        }
+        try {
+            $attempt = $payments->initializeOnboarding($application);
+        } catch (Throwable $exception) {
+            $reason = preg_match('/^(?:PLATFORM_PAYMENT_CONFIGURATION_MISSING|MERCADO_PAGO_PREFERENCE_HTTP_\d{3})$/', $exception->getMessage())
+                ? $exception->getMessage()
+                : 'PAYMENT_PROVIDER_ERROR';
+            Log::warning('ZIGO onboarding checkout initialization failed', [
+                'onboarding_uuid' => $application->uuid,
+                'reason' => $reason,
+                'exception' => $exception::class,
+            ]);
+            return back()->withErrors(['payment' => 'No fue posible iniciar el pago en este momento. Intenta nuevamente.']);
+        }
         $url = $attempt->getRawOriginal('init_point');
         $host = (string) parse_url($url, PHP_URL_HOST);
         abort_unless(

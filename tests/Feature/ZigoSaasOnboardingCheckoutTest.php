@@ -132,7 +132,7 @@ final class ZigoSaasOnboardingCheckoutTest extends TestCase
 
         $offer->update(['price' => '999.00']);
         $this->get($this->base.'/zigo-platform/solicitud/'.$application->public_token.'/resumen')
-            ->assertOk()->assertSee('$116.00')->assertDontSee('$999.00');
+            ->assertOk()->assertSee('IVA (16%)')->assertSee('$116.00')->assertDontSee('$999.00');
         $this->assertPreTenantIsolation();
     }
 
@@ -162,6 +162,28 @@ final class ZigoSaasOnboardingCheckoutTest extends TestCase
         $this->assertSame('PUBLIC-A', $annualApplication->commercial_snapshot_json['plan']['commercial_code']);
         $this->assertSame('annual', $annualApplication->commercial_snapshot_json['plan']['billing_period']);
         $this->assertSame('1000.00', $annualApplication->subtotal);
+        $this->assertSame('160.00', $annualApplication->tax_amount);
+        $this->assertSame('1160.00', $annualApplication->total);
+        $this->assertSame('0.16', $annualApplication->commercial_snapshot_json['tax_rate']);
+    }
+
+    public function test_one_thousand_offer_sends_tax_inclusive_total_to_mercado_pago(): void
+    {
+        $offer = $this->catalog();
+        $offer->update(['price' => '1000.00']);
+        $application = $this->readyForCheckout($offer);
+        Http::fake(['https://api.mercadopago.com/checkout/preferences' => Http::response([
+            'id' => 'pref-tax-total',
+            'sandbox_init_point' => 'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=tax-total',
+        ], 201)]);
+
+        $this->post($this->base.'/zigo-platform/solicitud/'.$application->public_token.'/checkout')
+            ->assertRedirectContains('mercadopago.com.mx');
+        $this->assertSame('1000.00', $application->fresh()->subtotal);
+        $this->assertSame('160.00', $application->tax_amount);
+        $this->assertSame('1160.00', $application->total);
+        $this->assertSame('1160.00', PlatformPaymentAttempt::firstOrFail()->amount);
+        Http::assertSent(fn ($request): bool => ($request->data()['items'][0]['unit_price'] ?? null) === 1160.0);
     }
 
     public function test_checkout_links_attempt_exclusively_to_onboarding_and_uses_server_values(): void
@@ -202,6 +224,24 @@ final class ZigoSaasOnboardingCheckoutTest extends TestCase
 
         $this->assertSame('PENDING_PAYMENT', $application->fresh()->status);
         $this->assertNull($application->paid_at);
+        $this->assertPreTenantIsolation();
+    }
+
+    public function test_provider_failure_returns_controlled_message_and_never_marks_paid(): void
+    {
+        $application = $this->readyForCheckout($this->catalog());
+        Http::fake(['https://api.mercadopago.com/checkout/preferences' => Http::response([
+            'message' => 'provider detail must not reach the customer',
+        ], 503)]);
+
+        $this->from($this->base.'/zigo-platform/solicitud/'.$application->public_token.'/resumen')
+            ->post($this->base.'/zigo-platform/solicitud/'.$application->public_token.'/checkout')
+            ->assertRedirect($this->base.'/zigo-platform/solicitud/'.$application->public_token.'/resumen')
+            ->assertSessionHasErrors(['payment' => 'No fue posible iniciar el pago en este momento. Intenta nuevamente.']);
+
+        $this->assertSame('PENDING_PAYMENT', $application->fresh()->status);
+        $this->assertNull($application->paid_at);
+        $this->assertSame('CREATED', PlatformPaymentAttempt::firstOrFail()->status);
         $this->assertPreTenantIsolation();
     }
 
