@@ -12,11 +12,7 @@ use App\Domain\Network\Onboarding\Services\{
     OnboardingSubdomainService
 };
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Onboarding\{
-    ReserveOnboardingSubdomainRequest,
-    SelectOnboardingSolutionRequest,
-    StartOnboardingRequest
-};
+use App\Http\Requests\Onboarding\{ReserveOnboardingSubdomainRequest, StartOnboardingRequest};
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -68,7 +64,17 @@ final class ZigoPlatformController extends Controller
             ],
         );
         if ($offer) {
-            $request->session()->put('zigo_onboarding_initial_offer', $offer->uuid);
+            $applications->updateDraft($application, [
+                'selected_plan_id' => $offer->plan_id,
+                'billing_period' => $this->billingPeriod($offer),
+                'selected_modules_json' => [
+                    'plan_offer_uuid' => $offer->uuid,
+                    'module_ids' => [],
+                    'module_offer_uuids' => [],
+                    'operations_offer_uuid' => null,
+                ],
+                'requested_operations' => null,
+            ], 'PLAN_SELECTED', ['commercial_code' => $offer->code]);
         }
 
         return redirect()->route('zigo-platform.onboarding.solution', $application->public_token);
@@ -79,64 +85,34 @@ final class ZigoPlatformController extends Controller
         $application = $this->application($token);
         abort_unless($application->status === SaasOnboardingApplication::DRAFT, 409);
 
-        return view('zigo-platform.solution', [
-            'application' => $application,
-            'offers' => $this->planOffers(),
-            'moduleOffers' => NetworkCommercialProduct::with('module')
-                ->where('is_active', true)->whereIn('type', ['MODULE', 'ADDON'])
-                ->where('code', 'not like', '%RAPIDGO%')->where('name', 'not like', '%RapidGo%')
-                ->whereHas('module', fn ($query) => $query->where('is_active', true))
-                ->orderBy('sort_order')->get(),
-            'operationOffers' => NetworkCommercialProduct::where('is_active', true)
-                ->where('type', 'OPERATION_PACK')->where('billing_type', 'ONE_TIME')
-                ->where('code', 'not like', '%RAPIDGO%')->where('name', 'not like', '%RapidGo%')
-                ->orderBy('sort_order')->get(),
-            'initialOffer' => $request->session()->pull('zigo_onboarding_initial_offer'),
-        ]);
+        $offerUuid = $application->selected_modules_json['plan_offer_uuid'] ?? null;
+        $offer = $this->findPublicPlanOffer((string) $offerUuid, false);
+        if (!$offer && $this->planOffers()->isNotEmpty()) {
+            return redirect()->route('zigo-platform.pricing');
+        }
+
+        return view('zigo-platform.solution', ['application' => $application, 'offer' => $offer]);
     }
 
     public function storeSolution(
-        SelectOnboardingSolutionRequest $request,
+        Request $request,
         string $token,
         OnboardingApplicationService $applications,
     ) {
         $application = $this->application($token);
-        $data = $request->validated();
-        $billingType = $data['billing_period'] === 'annual' ? 'ANNUAL' : 'MONTHLY';
-        $planOffer = $this->findPublicPlanOffer($data['plan_offer']);
-        if ($planOffer->billing_type !== $billingType) {
-            throw ValidationException::withMessages(['plan_offer' => 'La oferta no corresponde al periodo seleccionado.']);
-        }
-
-        $moduleOffers = NetworkCommercialProduct::with('module')->whereIn('uuid', $data['module_offers'] ?? [])
-            ->where('is_active', true)->whereIn('type', ['MODULE', 'ADDON'])
-            ->where('code', 'not like', '%RAPIDGO%')->where('name', 'not like', '%RapidGo%')
-            ->where('billing_type', $billingType)->get();
-        if ($moduleOffers->count() !== count($data['module_offers'] ?? []) || $moduleOffers->contains(fn ($offer) => !$offer->module?->is_active)) {
-            throw ValidationException::withMessages(['module_offers' => 'Uno o más módulos no están disponibles.']);
-        }
-
-        $operationOffer = null;
-        if (!empty($data['operations_offer'])) {
-            $operationOffer = NetworkCommercialProduct::where('uuid', $data['operations_offer'])
-                ->where('is_active', true)->where('type', 'OPERATION_PACK')
-                ->where('code', 'not like', '%RAPIDGO%')->where('name', 'not like', '%RapidGo%')
-                ->where('billing_type', 'ONE_TIME')->first();
-            if (!$operationOffer) {
-                throw ValidationException::withMessages(['operations_offer' => 'El volumen no está disponible.']);
-            }
-        }
+        $selection = $application->selected_modules_json ?? [];
+        $planOffer = $this->findPublicPlanOffer((string) ($selection['plan_offer_uuid'] ?? ''));
 
         $applications->updateDraft($application, [
             'selected_plan_id' => $planOffer->plan_id,
-            'billing_period' => $data['billing_period'],
+            'billing_period' => $this->billingPeriod($planOffer),
             'selected_modules_json' => [
                 'plan_offer_uuid' => $planOffer->uuid,
-                'module_ids' => $moduleOffers->pluck('module_id')->unique()->values()->all(),
-                'module_offer_uuids' => $moduleOffers->pluck('uuid')->values()->all(),
-                'operations_offer_uuid' => $operationOffer?->uuid,
+                'module_ids' => [],
+                'module_offer_uuids' => [],
+                'operations_offer_uuid' => null,
             ],
-            'requested_operations' => $operationOffer?->included_operations,
+            'requested_operations' => null,
         ], 'SOLUTION_SELECTED', ['plan_code' => $planOffer->plan->code]);
 
         return redirect()->route('zigo-platform.onboarding.platform', $application->public_token);
@@ -243,5 +219,10 @@ final class ZigoPlatformController extends Controller
             ->whereHas('plan', fn ($query) => $query->where('status', 'active'))->first();
         if (!$offer && $required) throw ValidationException::withMessages(['plan_offer' => 'La oferta no está disponible.']);
         return $offer;
+    }
+
+    private function billingPeriod(NetworkCommercialProduct $offer): string
+    {
+        return $offer->billing_type === 'ANNUAL' ? 'annual' : 'monthly';
     }
 }

@@ -50,14 +50,15 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 34px;
+            gap: 20px;
+            flex-wrap: nowrap;
         }
 
-        .brand { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; text-decoration:none; gap:2; min-width:430px; }
-        .brand-logo-frame { width:430px; max-width:100%; min-height:72px; display:flex; align-items:center; justify-content:flex-start; background:transparent; box-shadow:none; border-radius:0; overflow:visible; }
+        .brand { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; text-decoration:none; gap:2; min-width:330px; }
+        .brand-logo-frame { width:330px; max-width:100%; min-height:72px; display:flex; align-items:center; justify-content:flex-start; background:transparent; box-shadow:none; border-radius:0; overflow:visible; }
 
         .brand-logo {
-            width: 385px;
+            width: 310px;
             max-width: 100%;
             height: auto;
             object-fit: contain;
@@ -92,8 +93,9 @@
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: 28px;
-            flex-wrap: wrap;
+            gap: 16px;
+            flex-wrap: nowrap;
+            white-space: nowrap;
         }
 
         .main-nav a {
