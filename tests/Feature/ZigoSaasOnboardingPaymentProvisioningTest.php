@@ -12,6 +12,7 @@ use App\Domain\Network\Onboarding\Services\{
     OnboardingApplicationService, OnboardingStateService, OnboardingSubdomainService,
     SaasTenantProvisioningService
 };
+use App\Domain\Network\Tenancy\Models\Tenant;
 use App\Jobs\ProvisionSaasOnboardingJob;
 use App\Models\{Empresa, User};
 use Illuminate\Database\Schema\Blueprint;
@@ -151,16 +152,22 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
         $this->assertSame('FAILED', $failed->status);
         $this->assertNotNull($failed->paid_at);
         $this->assertSame('APPROVED', $attempt->fresh()->status);
+        $legacyCompanyId = $failed->legacy_empresa_id;
+        $this->assertNotNull($legacyCompanyId);
+        $this->assertSame(1, Empresa::withoutGlobalScopes()->count());
         $this->assertOperationalCounts(0);
 
         config(['zigo_onboarding.managed_subdomains_are_verified' => true]);
         $active = app(SaasTenantProvisioningService::class)->provision($failed);
         $this->assertSame('ACTIVE', $active->status);
+        $this->assertSame($legacyCompanyId, $active->legacy_empresa_id);
+        $this->assertSame(1, Empresa::withoutGlobalScopes()->count());
         $this->assertNotNull($active->tenant_id);
         $this->assertNotNull($active->owner_user_id);
         $this->assertNotNull($active->legacy_empresa_id);
         $this->assertSame(1, DB::table('empresas')->count());
         $this->assertSame($active->legacy_empresa_id, User::findOrFail($active->owner_user_id)->empresa_id);
+        $this->assertTrue($active->owner_is_new);
         $this->assertOperationalCounts(1);
         $this->assertSame(2, DB::table('network_entitlements')->count());
         $this->assertSame(1, TenantOperationAllowance::count());
@@ -176,41 +183,77 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
         $this->assertDatabaseHas('saas_onboarding_events', ['event' => 'PROVISIONING_COMPLETED']);
     }
 
-    public function test_existing_compatible_owner_is_reused_but_conflict_never_reassigns_company(): void
+    public function test_existing_owner_can_own_a_new_tenant_without_changing_legacy_identity(): void
     {
         Queue::fake();
         $company = Empresa::withoutGlobalScopes()->create([
-            'estatus' => 1, 'contacto' => 'Existing', 'nombre' => 'Existing Co',
+            'estatus' => 1, 'contacto' => 'Existing', 'nombre' => 'Historical Co',
             'email' => 'compatible@example.test', 'telefono' => '5555555555',
         ]);
+        $password = Hash::make('existing-secret');
         $owner = User::create([
             'name' => 'Existing', 'email' => 'compatible@example.test',
-            'empresa_id' => $company->id, 'password' => Hash::make('existing-secret'),
+            'empresa_id' => $company->id, 'password' => $password,
+        ]);
+        $previousTenant = Tenant::create([
+            'name' => 'Historical Tenant', 'slug' => 'historical-tenant', 'status' => 'active',
+        ]);
+        $previousMembership = $previousTenant->memberships()->create([
+            'user_id' => $owner->id, 'role' => 'owner', 'status' => 'active',
         ]);
         [$compatible, $attempt] = $this->pending('compatible', false, 'compatible@example.test');
-        [$conflict, $conflictAttempt] = $this->pending('conflict', false, 'conflict@example.test');
-        Http::fakeSequence()
-            ->push($this->payment($attempt, 'compatible-paid', 'approved'))
-            ->push($this->payment($conflictAttempt, 'conflict-paid', 'approved'));
+        Http::fakeSequence()->push($this->payment($attempt, 'compatible-paid', 'approved'));
         $this->signedPost($attempt, 'compatible-paid', 'request-compatible-paid')->assertOk();
         $result = app(SaasTenantProvisioningService::class)->provision($compatible->fresh());
+
         $this->assertSame('ACTIVE', $result->status);
         $this->assertSame($owner->id, $result->owner_user_id);
-        $this->assertSame($company->id, $result->legacy_empresa_id);
+        $this->assertNotSame($company->id, $result->legacy_empresa_id);
+        $this->assertSame('Company compatible SA de CV', Empresa::withoutGlobalScopes()->findOrFail($result->legacy_empresa_id)->nombre);
+        $this->assertSame($company->id, $owner->fresh()->empresa_id);
+        $this->assertSame('compatible@example.test', $owner->fresh()->email);
+        $this->assertSame($password, $owner->fresh()->password);
+        $this->assertFalse($result->owner_is_new);
+        $this->assertDatabaseHas('network_tenant_memberships', [
+            'id' => $previousMembership->id, 'tenant_id' => $previousTenant->id, 'user_id' => $owner->id,
+        ]);
+        $this->assertDatabaseHas('network_tenant_memberships', [
+            'tenant_id' => $result->tenant_id, 'user_id' => $owner->id,
+            'role' => 'owner', 'status' => 'active',
+        ]);
+        $this->assertSame(1, User::where('email', 'compatible@example.test')->count());
+        $this->assertDatabaseHas('saas_onboarding_events', ['event' => 'OWNER_REUSED']);
 
-        $otherCompany = Empresa::withoutGlobalScopes()->create([
-            'estatus' => 1, 'contacto' => 'Other', 'nombre' => 'Other Co',
-            'email' => 'company@example.test', 'telefono' => '5555555555',
+        $ids = [$result->legacy_empresa_id, $result->owner_user_id, $result->tenant_id];
+        $again = app(SaasTenantProvisioningService::class)->provision($result->fresh());
+        $this->assertSame($ids, [$again->legacy_empresa_id, $again->owner_user_id, $again->tenant_id]);
+        $this->assertSame(2, DB::table('network_tenant_memberships')->count());
+    }
+
+    public function test_real_legacy_company_identity_collision_still_fails_safely(): void
+    {
+        Queue::fake();
+        $historical = Empresa::withoutGlobalScopes()->create([
+            'estatus' => 1, 'contacto' => 'Existing', 'nombre' => 'Historical Co',
+            'email' => 'conflict@example.test', 'telefono' => '5555555555',
         ]);
-        $conflicting = User::create([
+        $owner = User::create([
             'name' => 'Conflict', 'email' => 'conflict@example.test',
-            'empresa_id' => $otherCompany->id, 'password' => Hash::make('existing-secret'),
+            'empresa_id' => $historical->id, 'password' => Hash::make('existing-secret'),
         ]);
+        Empresa::withoutGlobalScopes()->create([
+            'estatus' => 1, 'contacto' => 'Unrelated', 'nombre' => 'Company conflict',
+            'email' => 'unrelated@example.test', 'telefono' => '5555555555',
+        ]);
+        [$conflict, $conflictAttempt] = $this->pending('conflict', false, 'conflict@example.test');
+        Http::fakeSequence()->push($this->payment($conflictAttempt, 'conflict-paid', 'approved'));
         $this->signedPost($conflictAttempt, 'conflict-paid', 'request-conflict-paid')->assertOk();
         $failed = app(SaasTenantProvisioningService::class)->provision($conflict->fresh());
+
         $this->assertSame('FAILED', $failed->status);
-        $this->assertSame('OWNER_EMAIL_CONFLICT', $failed->failure_code);
-        $this->assertSame($otherCompany->id, $conflicting->fresh()->empresa_id);
+        $this->assertSame('LEGACY_COMPANY_CONFLICT', $failed->failure_code);
+        $this->assertSame($historical->id, $owner->fresh()->empresa_id);
+        $this->assertNull($failed->legacy_empresa_id);
     }
 
     public function test_reconciler_processes_paid_and_active_is_safe_noop(): void
@@ -354,7 +397,7 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
         Schema::create('network_commercial_products',function(Blueprint$t){$t->id();$t->uuid('uuid')->unique();$t->string('code')->unique();$t->string('name');$t->text('description')->nullable();$t->string('type');$t->string('billing_type');$t->decimal('price',12,2);$t->char('currency',3);$t->unsignedBigInteger('module_id')->nullable();$t->unsignedBigInteger('plan_id')->nullable();$t->unsignedInteger('included_operations')->nullable();$t->boolean('is_active');$t->unsignedInteger('sort_order')->default(0);$t->json('metadata')->nullable();$t->timestamps();});
         (require database_path('migrations/2026_08_19_100000_create_saas_onboarding_applications.php'))->up();
         (require database_path('migrations/2026_08_19_100100_create_saas_onboarding_events.php'))->up();
-        Schema::table('saas_onboarding_applications',function(Blueprint$t){$t->unsignedBigInteger('legacy_empresa_id')->nullable();});
+        Schema::table('saas_onboarding_applications',function(Blueprint$t){$t->unsignedBigInteger('legacy_empresa_id')->nullable();$t->boolean('owner_is_new')->nullable();});
         Schema::create('tenant_saas_orders',function(Blueprint$t){$t->id();$t->uuid('uuid')->unique();$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('onboarding_application_id')->nullable()->unique();$t->unsignedBigInteger('commercial_product_id');$t->unsignedBigInteger('created_by_user_id');$t->string('purchase_key');$t->string('status');$t->string('payment_status');$t->unsignedInteger('quantity');$t->decimal('unit_amount',12,2);$t->decimal('subtotal',12,2);$t->decimal('tax_amount',12,2);$t->decimal('total_amount',12,2);$t->char('currency',3);$t->json('purchase_snapshot');$t->string('payment_provider')->nullable();$t->string('payment_reference')->nullable();$t->timestamp('expires_at')->nullable();$t->timestamp('paid_at')->nullable();$t->timestamp('activated_at')->nullable();$t->timestamps();});
         Schema::create('platform_payment_attempts',function(Blueprint$t){$t->id();$t->uuid('uuid')->unique();$t->unsignedBigInteger('tenant_id')->nullable();$t->unsignedBigInteger('saas_order_id')->nullable();$t->unsignedBigInteger('onboarding_application_id')->nullable();$t->string('provider');$t->string('status');$t->string('provider_preference_id')->nullable();$t->string('provider_payment_id')->nullable();$t->string('external_reference')->unique();$t->decimal('amount',12,2);$t->char('currency',3);$t->text('init_point')->nullable();$t->timestamp('approved_at')->nullable();$t->timestamp('rejected_at')->nullable();$t->timestamps();$t->unique(['provider','provider_payment_id']);});
         Schema::create('platform_payment_events',function(Blueprint$t){$t->id();$t->string('provider');$t->string('event_key');$t->unsignedBigInteger('platform_payment_attempt_id')->nullable();$t->string('provider_payment_id')->nullable();$t->string('status');$t->string('error_code')->nullable();$t->timestamp('received_at');$t->timestamp('processed_at')->nullable();$t->timestamps();$t->unique(['provider','event_key']);});

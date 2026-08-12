@@ -11,7 +11,7 @@ use App\Domain\Network\Commerce\Models\{
 use App\Domain\Network\Onboarding\Exceptions\OnboardingProvisioningException;
 use App\Domain\Network\Onboarding\Models\SaasOnboardingApplication;
 use App\Domain\Network\Tenancy\Models\{Tenant, TenantDomain};
-use App\Models\User;
+use App\Models\{Empresa, User};
 use Illuminate\Support\Facades\{DB, Hash, Schema};
 use Illuminate\Support\Str;
 use Throwable;
@@ -52,6 +52,7 @@ final class SaasTenantProvisioningService
         );
 
         try {
+            $application = $this->prepareLegacyCompany($application);
             $active = DB::transaction(function () use ($application): SaasOnboardingApplication {
                 $onboarding = SaasOnboardingApplication::query()
                     ->whereKey($application->id)->lockForUpdate()->firstOrFail();
@@ -70,9 +71,10 @@ final class SaasTenantProvisioningService
                 }
 
                 $existingOwner = User::whereRaw('LOWER(email) = ?', [$onboarding->contact_email])->first();
-                [$legacyCompany, $companyCreated] = $this->legacyCompanies->resolveOrCreate($onboarding, $existingOwner);
-                $onboarding->update(['legacy_empresa_id' => $legacyCompany->id]);
-                $this->audit($onboarding, $companyCreated ? 'LEGACY_COMPANY_CREATED' : 'LEGACY_COMPANY_REUSED');
+                $legacyCompany = Empresa::withoutGlobalScopes()->find($onboarding->legacy_empresa_id);
+                if (!$legacyCompany) {
+                    throw new OnboardingProvisioningException('LEGACY_COMPANY_MISSING');
+                }
 
                 $owner = $existingOwner;
                 if (!$owner) {
@@ -87,8 +89,6 @@ final class SaasTenantProvisioningService
                     if (Schema::hasColumn('saas_onboarding_applications', 'owner_is_new')) {
                         $onboarding->update(['owner_is_new' => true]);
                     }
-                } elseif ((int) $owner->empresa_id !== (int) $legacyCompany->id) {
-                    throw new OnboardingProvisioningException('OWNER_EMAIL_CONFLICT');
                 } else {
                     $this->audit($onboarding, 'OWNER_REUSED');
                     if (Schema::hasColumn('saas_onboarding_applications', 'owner_is_new')) {
@@ -148,6 +148,29 @@ final class SaasTenantProvisioningService
             }
             return $fresh;
         }
+    }
+
+    private function prepareLegacyCompany(SaasOnboardingApplication $application): SaasOnboardingApplication
+    {
+        return DB::transaction(function () use ($application): SaasOnboardingApplication {
+            $onboarding = SaasOnboardingApplication::query()
+                ->whereKey($application->id)->lockForUpdate()->firstOrFail();
+            if ($onboarding->status !== SaasOnboardingApplication::PROVISIONING || !$onboarding->paid_at) {
+                throw new OnboardingProvisioningException('PAID_STATE_REQUIRED');
+            }
+            $snapshot = $onboarding->commercial_snapshot_json;
+            $plan = !empty($snapshot['plan']['id']) ? Plan::find($snapshot['plan']['id']) : null;
+            if (!$snapshot || !$plan || $plan->code !== ($snapshot['plan']['code'] ?? null)) {
+                throw new OnboardingProvisioningException('COMMERCIAL_SNAPSHOT_INVALID');
+            }
+
+            $existingOwner = User::whereRaw('LOWER(email) = ?', [$onboarding->contact_email])->first();
+            [$legacyCompany, $companyCreated] = $this->legacyCompanies->resolveOrCreate($onboarding, $existingOwner);
+            $onboarding->update(['legacy_empresa_id' => $legacyCompany->id]);
+            $this->audit($onboarding, $companyCreated ? 'LEGACY_COMPANY_CREATED' : 'LEGACY_COMPANY_REUSED');
+
+            return $onboarding->fresh();
+        });
     }
 
     private function tenant(SaasOnboardingApplication $onboarding, Plan $plan): Tenant
