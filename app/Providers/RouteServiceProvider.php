@@ -54,6 +54,18 @@ class RouteServiceProvider extends ServiceProvider
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
 
+        RateLimiter::for('onboarding-checkout', function (Request $request) {
+            return Limit::perMinute(10)
+                ->by(hash('sha256', (string) $request->route('token').'|'.$request->ip()))
+                ->response(function (Request $request, array $headers) {
+                    return redirect()->route('zigo-platform.onboarding.summary', [
+                        'token' => (string) $request->route('token'),
+                    ])->withErrors([
+                        'payment' => 'Has realizado varios intentos de pago. Espera un momento e inténtalo nuevamente.',
+                    ])->withHeaders($headers);
+                });
+        });
+
         RateLimiter::for(
             'devops-package-store',
             fn (Request $request) => Limit::perMinute(10)

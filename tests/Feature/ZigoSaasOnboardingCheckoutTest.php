@@ -94,6 +94,51 @@ final class ZigoSaasOnboardingCheckoutTest extends TestCase
         $this->assertPreTenantIsolation();
     }
 
+    public function test_start_generates_key_and_reuses_only_editable_draft(): void
+    {
+        $offer=$this->catalog();
+        $this->get($this->base.'/zigo-platform/comenzar?offer='.$offer->uuid)->assertOk();
+        $key=session('zigo_onboarding_purchase_key');$this->assertTrue(\Illuminate\Support\Str::isUuid($key));
+        $this->post($this->base.'/zigo-platform/comenzar',array_merge($this->companyPayload(),['offer'=>$offer->uuid]))->assertRedirect();
+        $draft=SaasOnboardingApplication::firstOrFail();$this->assertSame($key,$draft->purchase_key);
+        $this->post($this->base.'/zigo-platform/comenzar',array_merge($this->companyPayload(),['offer'=>$offer->uuid]))->assertRedirect();
+        $this->assertSame(1,SaasOnboardingApplication::count());
+        $this->assertSame($draft->id,SaasOnboardingApplication::first()->id);
+    }
+
+    public function test_pending_purchase_rotates_key_preserves_old_application_and_uses_current_offer(): void
+    {
+        $oldOffer=$this->catalog();$old=$this->readyForCheckout($oldOffer);$oldSnapshot=$old->commercial_snapshot_json;$oldKey=$old->purchase_key;
+        $newPlan=Plan::create(['code'=>'NEW','name'=>'Nuevo','status'=>'active','monthly_price'=>'200.00','currency'=>'MXN']);
+        $newOffer=NetworkCommercialProduct::create(['code'=>'NEW-A','name'=>'Nueva anual','type'=>'PLAN','billing_type'=>'ANNUAL','price'=>'2000.00','currency'=>'MXN','plan_id'=>$newPlan->id,'is_active'=>true]);
+        $this->get($this->base.'/zigo-platform/comenzar?offer='.$newOffer->uuid)->assertOk();$newKey=session('zigo_onboarding_purchase_key');$this->assertNotSame($oldKey,$newKey);
+        $this->post($this->base.'/zigo-platform/comenzar',array_merge($this->companyPayload(),['offer'=>$newOffer->uuid]))->assertRedirect();
+        $new=SaasOnboardingApplication::whereKeyNot($old->id)->firstOrFail();
+        $this->assertSame('DRAFT',$new->status);$this->assertSame($newKey,$new->purchase_key);$this->assertSame($newPlan->id,$new->selected_plan_id);$this->assertSame('annual',$new->billing_period);$this->assertSame($newOffer->uuid,$new->selected_modules_json['plan_offer_uuid']);
+        $this->assertSame('PENDING_PAYMENT',$old->fresh()->status);$this->assertSame($oldSnapshot,$old->commercial_snapshot_json);$this->get($this->base.'/zigo-platform/solicitud/'.$old->public_token.'/resumen')->assertOk();
+        $this->get($this->base.'/zigo-platform/solicitud/'.$old->public_token.'/retorno/pending')->assertOk();
+    }
+
+    public function test_every_non_editable_status_rotates_and_same_email_can_contract_again(): void
+    {
+        $this->catalog();
+        foreach(['PAID','FAILED','CANCELLED','EXPIRED','PROVISIONING','ACTIVE'] as $index=>$status){
+            $key=(string)\Illuminate\Support\Str::uuid();
+            $old=SaasOnboardingApplication::create(array_merge($this->companyPayload(),['contact_email'=>'ana@example.test','purchase_key'=>$key,'status'=>$status,'billing_period'=>'monthly']));
+            $this->withSession(['zigo_onboarding_purchase_key'=>$key])->post($this->base.'/zigo-platform/comenzar',$this->companyPayload())->assertRedirect();
+            $new=SaasOnboardingApplication::where('id','>',$old->id)->latest('id')->firstOrFail();
+            $this->assertSame('DRAFT',$new->status);$this->assertNotSame($key,$new->purchase_key);$this->assertSame('ana@example.test',$new->contact_email);$this->assertSame($status,$old->fresh()->status);
+            $this->flushSession();
+        }
+    }
+
+    public function test_draft_with_frozen_snapshot_rotates_without_relaxing_update_guard(): void
+    {
+        $key=(string)\Illuminate\Support\Str::uuid();$old=SaasOnboardingApplication::create(array_merge($this->companyPayload(),['purchase_key'=>$key,'status'=>'DRAFT','billing_period'=>'monthly','commercial_snapshot_json'=>['version'=>1]]));
+        $this->withSession(['zigo_onboarding_purchase_key'=>$key])->post($this->base.'/zigo-platform/comenzar',$this->companyPayload())->assertRedirect();
+        $this->assertSame(2,SaasOnboardingApplication::count());$this->assertNotSame($key,SaasOnboardingApplication::whereKeyNot($old->id)->firstOrFail()->purchase_key);
+    }
+
     public function test_inactive_plan_is_rejected_without_disclosing_or_creating_resources(): void
     {
         $offer = $this->catalog();
@@ -243,6 +288,31 @@ final class ZigoSaasOnboardingCheckoutTest extends TestCase
         $this->assertNull($application->paid_at);
         $this->assertSame('CREATED', PlatformPaymentAttempt::firstOrFail()->status);
         $this->assertPreTenantIsolation();
+    }
+
+    public function test_checkout_allows_ten_attempts_then_returns_commercial_rate_limit_per_token_and_ip(): void
+    {
+        $application=$this->readyForCheckout($this->catalog());
+        Http::fake(['https://api.mercadopago.com/checkout/preferences'=>Http::response([
+            'id'=>'pref-rate-limit','sandbox_init_point'=>'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=rate-limit',
+        ],201)]);
+        $url=$this->base.'/zigo-platform/solicitud/'.$application->public_token.'/checkout';
+        $key=hash('sha256',$application->public_token.'|127.0.0.1');
+        \Illuminate\Support\Facades\RateLimiter::clear($key);
+
+        foreach(range(1,10) as $attempt){
+            $this->post($url)->assertRedirectContains('mercadopago.com.mx')->assertStatus(302);
+        }
+        $this->from($this->base.'/zigo-platform/solicitud/'.$application->public_token.'/resumen')->post($url)
+            ->assertStatus(302)
+            ->assertRedirect($this->base.'/zigo-platform/solicitud/'.$application->public_token.'/resumen')
+            ->assertSessionHasErrors(['payment'=>'Has realizado varios intentos de pago. Espera un momento e inténtalo nuevamente.']);
+        $this->assertSame('PENDING_PAYMENT',$application->fresh()->status);$this->assertNull($application->paid_at);
+
+        $other=$application->replicate();$other->uuid=null;$other->public_token=null;$other->purchase_key=(string)\Illuminate\Support\Str::uuid();$other->requested_subdomain='other-checkout';$other->reserved_subdomain_key='other-checkout';$other->save();
+        $otherUrl=$this->base.'/zigo-platform/solicitud/'.$other->public_token.'/checkout';
+        $this->post($otherUrl)->assertRedirectContains('mercadopago.com.mx');
+        $this->assertSame(2,PlatformPaymentAttempt::count());
     }
 
     private function start(?NetworkCommercialProduct $offer = null, string $email = 'ANA@EXAMPLE.TEST'): SaasOnboardingApplication

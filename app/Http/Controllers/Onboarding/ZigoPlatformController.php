@@ -35,6 +35,7 @@ final class ZigoPlatformController extends Controller
     public function start(Request $request)
     {
         $offer = $this->findPublicPlanOffer((string) $request->query('offer'), false);
+        $this->editablePurchaseKey($request);
         return view('zigo-platform.start', ['offer' => $offer]);
     }
 
@@ -45,11 +46,7 @@ final class ZigoPlatformController extends Controller
     ) {
         $data = $request->validated();
         $offer = $this->findPublicPlanOffer((string) ($data['offer'] ?? ''), false);
-        $purchaseKey = (string) $request->session()->get('zigo_onboarding_purchase_key');
-        if (!Str::isUuid($purchaseKey)) {
-            $purchaseKey = (string) Str::uuid();
-            $request->session()->put('zigo_onboarding_purchase_key', $purchaseKey);
-        }
+        $purchaseKey = $this->editablePurchaseKey($request);
         unset($data['offer']);
         $application = $applications->createOrRecover($data, $purchaseKey);
 
@@ -247,5 +244,22 @@ final class ZigoPlatformController extends Controller
     private function billingPeriod(NetworkCommercialProduct $offer): string
     {
         return $offer->billing_type === 'ANNUAL' ? 'annual' : 'monthly';
+    }
+
+    private function editablePurchaseKey(Request $request): string
+    {
+        $purchaseKey = (string) $request->session()->get('zigo_onboarding_purchase_key');
+        if (!Str::isUuid($purchaseKey)) {
+            $purchaseKey = (string) Str::uuid();
+            $request->session()->put('zigo_onboarding_purchase_key', $purchaseKey);
+            return $purchaseKey;
+        }
+        $application = SaasOnboardingApplication::where('purchase_key', $purchaseKey)->first();
+        if ($application && ($application->status !== SaasOnboardingApplication::DRAFT
+            || $application->commercial_snapshot_json !== null)) {
+            $purchaseKey = (string) Str::uuid();
+            $request->session()->put('zigo_onboarding_purchase_key', $purchaseKey);
+        }
+        return $purchaseKey;
     }
 }

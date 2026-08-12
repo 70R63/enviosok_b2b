@@ -57,7 +57,7 @@ Route::middleware('zigo.corporate.host')->prefix('zigo-platform')->name('zigo-pl
     Route::get('/solicitud/{token}/plataforma', [ZigoPlatformController::class, 'platform'])->name('onboarding.platform');
     Route::patch('/solicitud/{token}/plataforma', [ZigoPlatformController::class, 'storePlatform'])->middleware('throttle:12,1')->name('onboarding.platform.store');
     Route::get('/solicitud/{token}/resumen', [ZigoPlatformController::class, 'summary'])->name('onboarding.summary');
-    Route::post('/solicitud/{token}/checkout', [ZigoPlatformController::class, 'checkout'])->middleware('throttle:5,1')->name('onboarding.checkout');
+    Route::post('/solicitud/{token}/checkout', [ZigoPlatformController::class, 'checkout'])->middleware('throttle:onboarding-checkout')->name('onboarding.checkout');
     Route::get('/solicitud/{token}/retorno/{result}', [ZigoPlatformController::class, 'returned'])->middleware('throttle:20,1')->name('onboarding.return');
 });
 
