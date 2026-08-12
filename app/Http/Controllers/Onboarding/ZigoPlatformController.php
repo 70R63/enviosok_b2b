@@ -124,6 +124,7 @@ final class ZigoPlatformController extends Controller
         return view('zigo-platform.platform', [
             'application' => $application,
             'domainBase' => config('zigo_onboarding.subdomain_base'),
+            'domainSuffix' => config('zigo_onboarding.tenant_subdomain_suffix', ''),
         ]);
     }
 

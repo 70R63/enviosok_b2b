@@ -84,6 +84,21 @@ final class ZigoSaasOnboardingOwnerActivationTest extends TestCase
         $this->assertDatabaseCount('users', 2);
     }
 
+    public function test_welcome_urls_use_the_persisted_stage_and_production_domains(): void
+    {
+        Notification::fake();
+        [$stage, $stageOwner] = $this->activeApplication('bruniverse-stage', false);
+        [$production, $productionOwner] = $this->activeApplication('bruniverse', false);
+
+        app(OwnerActivationService::class)->sendIfNeeded($stage);
+        app(OwnerActivationService::class)->sendIfNeeded($production);
+
+        Notification::assertSentTo($stageOwner, SaasOwnerWelcomeNotification::class, fn ($notification) =>
+            str_contains($notification->toMail($stageOwner)->actionUrl, 'bruniverse-stage.zigo-envios.com/admin/login'));
+        Notification::assertSentTo($productionOwner, SaasOwnerWelcomeNotification::class, fn ($notification) =>
+            str_contains($notification->toMail($productionOwner)->actionUrl, 'bruniverse.zigo-envios.com/admin/login'));
+    }
+
     public function test_owner_setup_preserves_entitlements_and_finishes_to_dashboard(): void
     {
         [$application, $owner] = $this->activeApplication('setup');

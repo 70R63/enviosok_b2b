@@ -31,6 +31,8 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
         config([
             'zigo_surfaces.payments.host' => 'payments.zigo.local',
             'zigo_onboarding.subdomain_base' => 'zigo-envios.com',
+            'zigo_onboarding.tenant_subdomain_suffix' => '',
+            'zigo_onboarding.tenant_domain_environment' => 'production',
             'zigo_onboarding.managed_subdomains_are_verified' => true,
             'zigo_payments.platform.account_id' => '123456',
             'zigo_payments.platform.access_token' => 'platform-token',
@@ -168,6 +170,12 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
         $this->assertSame(1, DB::table('empresas')->count());
         $this->assertSame($active->legacy_empresa_id, User::findOrFail($active->owner_user_id)->empresa_id);
         $this->assertTrue($active->owner_is_new);
+        $this->assertDatabaseHas('network_tenant_domains', [
+            'tenant_id' => $active->tenant_id,
+            'domain' => 'provision-all.zigo-envios.com',
+            'environment' => 'production',
+        ]);
+        $this->assertSame('provision-all', $active->tenant->slug);
         $this->assertOperationalCounts(1);
         $this->assertSame(2, DB::table('network_entitlements')->count());
         $this->assertSame(1, TenantOperationAllowance::count());
@@ -254,6 +262,32 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
         $this->assertSame('LEGACY_COMPANY_CONFLICT', $failed->failure_code);
         $this->assertSame($historical->id, $owner->fresh()->empresa_id);
         $this->assertNull($failed->legacy_empresa_id);
+    }
+
+    public function test_stage_domain_uses_suffix_and_sandbox_without_changing_tenant_slug(): void
+    {
+        Queue::fake();
+        config([
+            'zigo_onboarding.tenant_subdomain_suffix' => '-stage',
+            'zigo_onboarding.tenant_domain_environment' => 'sandbox',
+        ]);
+        [$application, $attempt] = $this->pending('bruniverse');
+        $this->sendWebhook($attempt, 'stage-domain-paid', 'approved')->assertOk();
+
+        $active = app(SaasTenantProvisioningService::class)->provision($application->fresh());
+        $this->assertSame('ACTIVE', $active->status);
+        $this->assertSame('bruniverse', $active->tenant->slug);
+        $this->assertDatabaseHas('network_tenant_domains', [
+            'tenant_id' => $active->tenant_id,
+            'domain' => 'bruniverse-stage.zigo-envios.com',
+            'environment' => 'sandbox',
+            'is_primary' => true,
+            'status' => 'verified',
+        ]);
+
+        $again = app(SaasTenantProvisioningService::class)->provision($active->fresh());
+        $this->assertSame($active->tenant_id, $again->tenant_id);
+        $this->assertSame(1, DB::table('network_tenant_domains')->count());
     }
 
     public function test_reconciler_processes_paid_and_active_is_safe_noop(): void

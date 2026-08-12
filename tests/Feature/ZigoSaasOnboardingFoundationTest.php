@@ -174,7 +174,7 @@ final class ZigoSaasOnboardingFoundationTest extends TestCase
         $this->assertSame('mi-empresa', $service->normalize('  Mi-Empresa '));
         $this->assertSame('mi-empresa.zigo-envios.com', $service->hostname('Mi-Empresa'));
 
-        foreach (['admin', 'RapidGo', '-bad', 'bad-', 'bad.example', 'https://bad'] as $invalid) {
+        foreach (['admin', 'RapidGo', 'empresas', 'apihub', 'devops', '-bad', 'bad-', 'bad.example', 'https://bad'] as $invalid) {
             try {
                 $service->normalize($invalid);
                 $this->fail("{$invalid} should be rejected.");
@@ -182,6 +182,22 @@ final class ZigoSaasOnboardingFoundationTest extends TestCase
                 $this->assertTrue(true);
             }
         }
+    }
+
+    public function test_stage_suffix_builds_final_hostname_and_collision_uses_it(): void
+    {
+        config(['zigo_onboarding.tenant_subdomain_suffix' => '-stage']);
+        $service = app(OnboardingSubdomainService::class);
+        $this->assertSame('bruniverse-stage.zigo-envios.com', $service->hostname('bruniverse'));
+
+        $tenant = Tenant::create(['name' => 'Stage Existing', 'slug' => 'other-stage', 'status' => 'active']);
+        $tenant->domains()->create([
+            'domain' => 'bruniverse-stage.zigo-envios.com', 'type' => 'subdomain',
+            'environment' => 'sandbox', 'is_primary' => true, 'status' => 'verified',
+        ]);
+
+        $this->expectException(ValidationException::class);
+        $service->reserve($this->application('STAGE-COLLISION'), 'bruniverse');
     }
 
     public function test_subdomain_detects_tenant_domain_and_active_reservation_collisions(): void

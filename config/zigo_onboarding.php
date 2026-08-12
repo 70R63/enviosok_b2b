@@ -2,6 +2,8 @@
 
 return [
     'subdomain_base' => env('ZIGO_TENANT_DOMAIN', 'zigo-envios.com'),
+    'tenant_subdomain_suffix' => env('ZIGO_TENANT_SUBDOMAIN_SUFFIX', ''),
+    'tenant_domain_environment' => env('ZIGO_TENANT_DOMAIN_ENVIRONMENT', 'production'),
     'reservation_minutes' => (int) env('ZIGO_ONBOARDING_RESERVATION_MINUTES', 60),
     // ZIGO Platform commercial offers are taxable SaaS services in Mexico.
     'tax_rate' => env('ZIGO_ONBOARDING_TAX_RATE', '0.16'),
@@ -13,6 +15,6 @@ return [
     'reserved_subdomains' => [
         'www', 'api', 'admin', 'network', 'payments', 'payment', 'support',
         'soporte', 'crm', 'driver', 'mail', 'stage', 'staging', 'sandbox',
-        'dev', 'test', 'rapidgo', 'zigo',
+        'dev', 'test', 'rapidgo', 'zigo', 'empresas', 'apihub', 'devops',
     ],
 ];

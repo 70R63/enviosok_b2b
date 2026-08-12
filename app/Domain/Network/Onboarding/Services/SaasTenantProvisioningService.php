@@ -298,12 +298,16 @@ final class SaasTenantProvisioningService
             throw new OnboardingProvisioningException('MANAGED_DOMAIN_NOT_VERIFIABLE');
         }
         $hostname = $this->subdomains->hostname($onboarding->requested_subdomain);
+        $environment = (string) config('zigo_onboarding.tenant_domain_environment', 'production');
+        if (!in_array($environment, TenantDomain::ENVIRONMENTS, true)) {
+            throw new OnboardingProvisioningException('TENANT_DOMAIN_ENVIRONMENT_INVALID');
+        }
         $conflict = TenantDomain::where('domain', $hostname)->where('tenant_id', '!=', $tenant->id)->exists();
         if ($conflict) throw new OnboardingProvisioningException('DOMAIN_CONFLICT');
         $domain = $tenant->domains()->updateOrCreate(
             ['domain' => $hostname],
             [
-                'type' => 'subdomain', 'environment' => 'production', 'is_primary' => true,
+                'type' => 'subdomain', 'environment' => $environment, 'is_primary' => true,
                 'status' => 'verified', 'verified_at' => now(),
             ],
         );

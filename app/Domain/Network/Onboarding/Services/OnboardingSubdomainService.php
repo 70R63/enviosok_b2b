@@ -36,7 +36,18 @@ final class OnboardingSubdomainService
             throw ValidationException::withMessages(['requested_subdomain' => 'El dominio base no está configurado.']);
         }
 
-        return $this->normalize($label).'.'.$base;
+        $suffix = strtolower(trim((string) config('zigo_onboarding.tenant_subdomain_suffix', '')));
+        $finalLabel = $this->normalize($label).$suffix;
+        if (
+            strlen($finalLabel) > 63 ||
+            !preg_match('/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/', $finalLabel)
+        ) {
+            throw ValidationException::withMessages([
+                'requested_subdomain' => 'El sufijo del subdominio no está configurado correctamente.',
+            ]);
+        }
+
+        return $finalLabel.'.'.$base;
     }
 
     public function reserve(SaasOnboardingApplication $application, string $requestedLabel): SaasOnboardingApplication
