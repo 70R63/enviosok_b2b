@@ -26,7 +26,7 @@ final class ZigoSaasOnboardingCheckoutTest extends TestCase
             'zigo_onboarding.tax_rate' => '0.16',
             'zigo_payments.platform.enabled' => true,
             'zigo_payments.platform.access_token' => 'platform-access-token',
-            'zigo_payments.platform.webhook_url' => 'https://payments.zigo-envios.com/api/payments/mercado-pago/webhook',
+            'zigo_payments.platform.webhook_url' => 'https://payments.zigo-envios.com/api/payments/mercado-pago/platform/webhook',
             'zigo_payments.providers.mercado_pago.environment' => 'sandbox',
             'zigo_payments.providers.mercado_pago.api_url' => 'https://api.mercadopago.com',
         ]);

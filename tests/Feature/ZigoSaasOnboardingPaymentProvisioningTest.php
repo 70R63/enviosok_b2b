@@ -97,6 +97,28 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
         $this->assertOperationalCounts(0);
     }
 
+    public function test_dedicated_platform_webhook_resolves_attempt_without_query_hint(): void
+    {
+        Queue::fake();
+        [$application, $attempt] = $this->pending('external-reference-fallback');
+        $paymentId = 'approved-without-hint';
+        Http::fake([
+            'https://api.mercadopago.com/v1/payments/*' => Http::response(
+                $this->payment($attempt, $paymentId, 'approved'),
+            ),
+        ]);
+
+        $this->signedPostToUrl(
+            $this->platformWebhookUrl($paymentId),
+            $paymentId,
+            'request-without-hint',
+        )->assertOk();
+
+        $this->assertSame('APPROVED', $attempt->fresh()->status);
+        $this->assertSame('PAID', $application->fresh()->status);
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+    }
+
     public function test_inconsistent_event_can_be_reprocessed_and_late_expired_payment_becomes_paid(): void
     {
         Queue::fake();
@@ -279,17 +301,27 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
 
     protected function signedPost(PlatformPaymentAttempt $attempt, string $paymentId, string $requestId)
     {
+        return $this->signedPostToUrl($this->webhookUrl($attempt, $paymentId), $paymentId, $requestId);
+    }
+
+    protected function signedPostToUrl(string $url, string $paymentId, string $requestId)
+    {
         $timestamp = (string) time();
         $manifest = 'id:'.strtolower($paymentId).';request-id:'.$requestId.';ts:'.$timestamp.';';
         $signature = hash_hmac('sha256', $manifest, 'webhook-secret');
         return $this->withHeaders(['x-request-id'=>$requestId,'x-signature'=>'ts='.$timestamp.',v1='.$signature])
-            ->postJson($this->webhookUrl($attempt, $paymentId), ['type'=>'payment','data'=>['id'=>$paymentId]]);
+            ->postJson($url, ['type'=>'payment','data'=>['id'=>$paymentId]]);
     }
 
     protected function webhookUrl(PlatformPaymentAttempt $attempt, string $paymentId): string
     {
         return 'http://payments.zigo.local/api/payments/mercado-pago/webhook?onboarding_attempt='
             .$attempt->uuid.'&data[id]='.$paymentId;
+    }
+
+    protected function platformWebhookUrl(string $paymentId): string
+    {
+        return 'http://payments.zigo.local/api/payments/mercado-pago/platform/webhook?data[id]='.$paymentId;
     }
 
     protected function payment(PlatformPaymentAttempt $attempt, string $id, string $status): array
