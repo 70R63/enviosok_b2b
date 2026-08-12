@@ -11,6 +11,7 @@ use App\Http\Requests\Network\StoreTenantMembershipRequest;
 use App\Http\Requests\Tenant\UpdateTenantMembershipRequest;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
+use App\Domain\Network\Operations\NetworkAdminAuditService;
 
 final class TenantMembershipController extends Controller
 {
@@ -20,7 +21,7 @@ final class TenantMembershipController extends Controller
         return view('network.tenants.members', compact('tenant', 'memberships'));
     }
 
-    public function store(StoreTenantMembershipRequest $request, Tenant $tenant)
+    public function store(StoreTenantMembershipRequest $request, Tenant $tenant,NetworkAdminAuditService$audit)
     {
         $user = User::query()->where('email', $request->validated('email'))->first();
         if (! $user) throw ValidationException::withMessages(['email' => 'Usuario todavía no registrado.']);
@@ -29,15 +30,16 @@ final class TenantMembershipController extends Controller
             && ($request->validated('role') !== 'owner' || $request->validated('status') !== 'active')) {
             throw ValidationException::withMessages(['role' => 'El primer usuario del tenant debe ser owner activo.']);
         }
-        $tenant->memberships()->create(['user_id' => $user->id, 'role' => $request->validated('role'), 'status' => $request->validated('status')]);
+        $membership=$tenant->memberships()->create(['user_id' => $user->id, 'role' => $request->validated('role'), 'status' => $request->validated('status')]);$audit->record($request->user()->id,'membership.created',$membership,[],$membership->toArray());
         return back()->with('success', 'Usuario agregado al tenant.');
     }
 
-    public function update(UpdateTenantMembershipRequest $request, Tenant $tenant, TenantMembership $membership, TenantContext $context, TenantAccessService $access)
+    public function update(UpdateTenantMembershipRequest $request, Tenant $tenant, TenantMembership $membership, TenantContext $context, TenantAccessService $access,NetworkAdminAuditService$audit)
     {
         abort_unless($membership->tenant_id === $tenant->id, 404);
-        $context->set($tenant);
+        $before=$membership->only(['role','status']);$context->set($tenant);
         $access->updateMembership($membership, $request->validated(), $request->user(), true);
+        $audit->record($request->user()->id,'membership.updated',$membership,$before,$membership->fresh()->only(['role','status']));
         return back()->with('success', 'Membership actualizado.');
     }
 }

@@ -16,6 +16,7 @@ use App\Http\Requests\Onboarding\{ReserveOnboardingSubdomainRequest, StartOnboar
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 final class ZigoPlatformController extends Controller
@@ -200,6 +201,7 @@ final class ZigoPlatformController extends Controller
     {
         return NetworkCommercialProduct::with(['plan.modules'])
             ->where('is_active', true)->where('type', 'PLAN')
+            ->when(Schema::hasColumn('network_commercial_products','is_public'),fn($query)=>$query->where('is_public',true)->whereNull('archived_at'))
             ->where('code', 'not like', '%RAPIDGO%')->where('name', 'not like', '%RapidGo%')
             ->whereIn('billing_type', ['MONTHLY', 'ANNUAL'])->where('price', '>', 0)
             ->whereHas('plan', fn ($query) => $query->where('status', 'active'))
@@ -214,6 +216,7 @@ final class ZigoPlatformController extends Controller
         }
         $offer = NetworkCommercialProduct::with('plan')->where('uuid', $uuid)
             ->where('is_active', true)->where('type', 'PLAN')->where('price', '>', 0)
+            ->when(Schema::hasColumn('network_commercial_products','is_public'),fn($query)=>$query->where('is_public',true)->whereNull('archived_at'))
             ->where('code', 'not like', '%RAPIDGO%')->where('name', 'not like', '%RapidGo%')
             ->whereIn('billing_type', ['MONTHLY', 'ANNUAL'])
             ->whereHas('plan', fn ($query) => $query->where('status', 'active'))->first();

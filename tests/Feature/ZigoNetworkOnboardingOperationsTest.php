@@ -9,7 +9,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\{DB, Hash, Schema};
 use Tests\TestCase;
 
-final class ZigoNetworkOnboardingOperationsTest extends TestCase
+class ZigoNetworkOnboardingOperationsTest extends TestCase
 {
     private string $host;
 

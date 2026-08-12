@@ -42,6 +42,7 @@ use App\Http\Controllers\Payments\PaymentEdgeHealthController;
 use App\Http\Controllers\Tenant\TenantSaasController;
 use App\Http\Controllers\Network\CommercialCatalogController;
 use App\Http\Controllers\Network\NetworkApiHubController;
+use App\Http\Controllers\Network\NetworkOperationsController;
 use App\Http\Controllers\Tenant\TenantApiHubController;
 use App\Http\Controllers\Support\{CustomerSupportController,DriverSupportController,TenantSupportController,NetworkSupportController};
 
@@ -120,6 +121,7 @@ Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superad
         Route::get('/tenants/{tenant}/branding', [TenantBrandingController::class, 'edit'])->name('tenants.branding.edit');
         Route::match(['put', 'patch'], '/tenants/{tenant}/branding', [TenantBrandingController::class, 'update'])->name('tenants.branding.update');
         Route::get('/tenants/{tenant}/members', [NetworkTenantMembershipController::class, 'index'])->name('tenants.members.index');
+        Route::get('/tenants/{tenant}/users', [NetworkOperationsController::class, 'tenantUsers'])->name('tenants.users.index');
         Route::post('/tenants/{tenant}/members', [NetworkTenantMembershipController::class, 'store'])->name('tenants.members.store');
         Route::patch('/tenants/{tenant}/members/{membership}', [NetworkTenantMembershipController::class, 'update'])->name('tenants.members.update');
         Route::get('/tenants/{tenant}/subscriptions', [SubscriptionController::class, 'index'])->name('tenants.subscriptions.index');
@@ -137,8 +139,18 @@ Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superad
         Route::get('/plans/{plan}', [PlanController::class, 'show'])->name('plans.show');
         Route::get('/plans/{plan}/edit', [PlanController::class, 'edit'])->name('plans.edit');
         Route::match(['put', 'patch'], '/plans/{plan}', [PlanController::class, 'update'])->name('plans.update');
+        Route::delete('/plans/{plan}', [PlanController::class, 'destroy'])->name('plans.destroy');
+        Route::get('/users', [NetworkOperationsController::class, 'users'])->name('users.index');
+        Route::patch('/tenants/{tenant}/users/{membership}', [NetworkOperationsController::class, 'membership'])->name('users.update');
+        Route::post('/tenants/{tenant}/users/{membership}/reset-password', [NetworkOperationsController::class, 'reset'])->name('users.reset');
+        Route::post('/tenants/{tenant}/users/{membership}/resend-activation', [NetworkOperationsController::class, 'activation'])->name('users.activation');
+        Route::get('/subscriptions', [NetworkOperationsController::class, 'subscriptions'])->name('subscriptions.index');
+        Route::get('/subscriptions/{subscription}', [NetworkOperationsController::class, 'subscription'])->name('subscriptions.show');
+        Route::patch('/subscriptions/{subscription}/status', [NetworkOperationsController::class, 'subscriptionStatus'])->name('subscriptions.status');
         Route::get('/local-shipping', [LocalShippingController::class, 'index'])->name('local-shipping.index');
-        Route::get('/payments', NetworkPaymentController::class)->name('payments.index');
+        Route::get('/payments', [NetworkOperationsController::class, 'payments'])->name('payments.index');
+        Route::get('/payments/{attempt}', [NetworkOperationsController::class, 'payment'])->name('payments.show');
+        Route::get('/commercial-products', [CommercialCatalogController::class, 'index'])->name('commercial-products.index');
         Route::get('/catalog', [CommercialCatalogController::class, 'index'])->name('catalog.index');
         Route::post('/catalog', [CommercialCatalogController::class, 'store'])->name('catalog.store');
         Route::put('/catalog/{product}', [CommercialCatalogController::class, 'update'])->name('catalog.update');
@@ -148,6 +160,7 @@ Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superad
         Route::get('/support/{ticket}', [NetworkSupportController::class, 'show'])->name('support.show');
         Route::post('/support/{ticket}/respuestas', [NetworkSupportController::class, 'reply'])->name('support.reply');
         Route::get('/api-hub', NetworkApiHubController::class)->name('api-hub.index');
+        Route::get('/audit', [NetworkOperationsController::class, 'audit'])->name('audit.index');
         Route::patch('/support/{ticket}', [NetworkSupportController::class, 'update'])->name('support.update');
         Route::get('/support/{ticket}/adjuntos/{attachment}', [NetworkSupportController::class, 'attachment'])->name('support.attachment');
         Route::get('/delivery-proofs/{proof}/{kind}', [DeliveryEvidenceController::class, 'network'])->name('delivery-proofs.evidence');

@@ -7,6 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Domain\Network\Map\NetworkMapRegistry;
 use App\Domain\Network\Billing\Models\Subscription;
 use Illuminate\Support\Facades\Schema;
+use App\Domain\Network\Onboarding\Models\SaasOnboardingApplication;
+use App\Domain\Network\Commerce\Models\PlatformPaymentAttempt;
+use App\Domain\Support\Models\SupportTicket;
 class NetworkDashboardController extends Controller
 {
     public function __invoke(NetworkMapRegistry $registry)
@@ -21,6 +24,11 @@ class NetworkDashboardController extends Controller
             'statusCounts' => $registry->counts(),
             'statuses' => $registry->statuses(),
             'subscriptionCounts'=>$subscriptionCounts,
+            'pendingOnboardings'=>Schema::hasTable('saas_onboarding_applications')?SaasOnboardingApplication::whereIn('status',['PENDING_PAYMENT','PAID','PROVISIONING'])->count():0,
+            'failedOnboardings'=>Schema::hasTable('saas_onboarding_applications')?SaasOnboardingApplication::where('status','FAILED')->count():0,
+            'recentApprovedPayments'=>Schema::hasTable('platform_payment_attempts')?PlatformPaymentAttempt::where('status','APPROVED')->where('approved_at','>=',now()->subDays(7))->count():0,
+            'approvedFailed'=>Schema::hasTable('platform_payment_attempts')?PlatformPaymentAttempt::where('status','APPROVED')->whereHas('onboarding',fn($q)=>$q->where('status','FAILED'))->count():0,
+            'openTickets'=>Schema::hasTable('support_tickets')?SupportTicket::whereNotIn('status',['RESOLVED','CLOSED'])->count():0,
         ]);
     }
 }

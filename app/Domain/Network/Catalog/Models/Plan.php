@@ -49,4 +49,5 @@ class Plan extends Model
         return $this->hasMany(Tenant::class, 'current_plan_id');
     }
     public function subscriptions(): HasMany { return $this->hasMany(Subscription::class); }
+    public function commercialOffers(): HasMany { return $this->hasMany(\App\Domain\Network\Commerce\Models\NetworkCommercialProduct::class); }
 }

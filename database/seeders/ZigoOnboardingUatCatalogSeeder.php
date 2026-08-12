@@ -6,6 +6,7 @@ use App\Domain\Network\Catalog\Models\{Module, Plan};
 use App\Domain\Network\Commerce\Models\NetworkCommercialProduct;
 use Illuminate\Database\Seeder;
 use RuntimeException;
+use Illuminate\Support\Facades\Schema;
 
 final class ZigoOnboardingUatCatalogSeeder extends Seeder
 {
@@ -36,9 +37,7 @@ final class ZigoOnboardingUatCatalogSeeder extends Seeder
             }
 
             foreach (['MONTHLY' => 'monthly', 'ANNUAL' => 'annual'] as $billingType => $priceKey) {
-                NetworkCommercialProduct::query()->updateOrCreate(
-                    ['code' => 'UAT-'.$definition['code'].'-'.$billingType],
-                    [
+                $productData = [
                         'name' => $definition['name'], 'description' => $definition['description'],
                         'type' => 'PLAN', 'billing_type' => $billingType,
                         'price' => $definition[$priceKey], 'currency' => 'MXN',
@@ -49,7 +48,15 @@ final class ZigoOnboardingUatCatalogSeeder extends Seeder
                             'uat_test_data' => true, 'not_approved_for_production' => true,
                             'allowance_label' => 'Hasta '.number_format($definition['operations']).' envíos '.($billingType === 'ANNUAL' ? 'al año' : 'al mes'),
                         ],
-                    ],
+                    ];
+                if (Schema::hasColumn('network_commercial_products','is_public')) {
+                    $productData['is_public'] = true;
+                    $productData['display_order'] = ($position * 10) + 1;
+                    $productData['archived_at'] = null;
+                }
+                NetworkCommercialProduct::query()->updateOrCreate(
+                    ['code' => 'UAT-'.$definition['code'].'-'.$billingType],
+                    $productData,
                 );
             }
         }
