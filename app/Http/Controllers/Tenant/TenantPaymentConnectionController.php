@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Tenant;
 use App\Domain\Network\Tenancy\Models\TenantMembership;
 use App\Domain\Network\Tenancy\{TenantAccessService, TenantContext};
 use App\Domain\Payments\Contracts\PaymentProvider;
+use App\Domain\Payments\Exceptions\MercadoPagoOAuthException;
 use App\Domain\Payments\Models\TenantPaymentConnection;
 use App\Http\Controllers\Controller;
 use Illuminate\Contracts\Cache\Repository;
@@ -54,7 +55,14 @@ final class TenantPaymentConnectionController extends Controller
         $membership = TenantMembership::where('tenant_id', $correlation['tenant_id'])
             ->where('user_id', $correlation['user_id'])->where('status', 'active')
             ->whereIn('role', ['owner', 'admin'])->firstOrFail();
-        $tokens = $provider->exchangeAuthorizationCode((string) $request->query('code'), $correlation['verifier']);
+        try {
+            $tokens = $provider->exchangeAuthorizationCode((string) $request->query('code'), $correlation['verifier']);
+        } catch (MercadoPagoOAuthException) {
+            return redirect($correlation['return_url'])->with(
+                'error',
+                'No fue posible conectar Mercado Pago. Intenta autorizar la cuenta nuevamente.'
+            );
+        }
         $connection = TenantPaymentConnection::firstOrCreate(
             ['tenant_id' => $membership->tenant_id, 'provider' => 'MERCADO_PAGO'],
             ['status' => 'PENDING']

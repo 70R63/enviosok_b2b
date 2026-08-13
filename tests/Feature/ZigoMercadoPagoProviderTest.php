@@ -1,9 +1,25 @@
 <?php
 namespace Tests\Feature;
-use App\Domain\Network\Channels\B2C\Models\TenantCustomerCheckout; use App\Domain\Payments\MercadoPagoPaymentProvider; use App\Domain\Payments\Models\{TenantPaymentAttempt,TenantPaymentConnection}; use Illuminate\Database\Schema\Blueprint; use Illuminate\Http\Request; use Illuminate\Support\Facades\{DB,Http,Schema}; use Tests\TestCase;
+use App\Domain\Network\Channels\B2C\Models\TenantCustomerCheckout; use App\Domain\Payments\Exceptions\MercadoPagoOAuthException; use App\Domain\Payments\MercadoPagoPaymentProvider; use App\Domain\Payments\Models\{TenantPaymentAttempt,TenantPaymentConnection}; use Illuminate\Database\Schema\Blueprint; use Illuminate\Http\Request; use Illuminate\Support\Facades\{DB,Http,Log,Schema}; use Tests\TestCase;
 final class ZigoMercadoPagoProviderTest extends TestCase{
  protected function setUp():void{parent::setUp();config()->set('zigo_payments.providers.mercado_pago',['enabled'=>true,'environment'=>'sandbox','client_id'=>'public-client-id','client_secret'=>'server-secret','redirect_uri'=>'https://payments.example.test/payments/mercado-pago/oauth/callback','webhook_secret'=>'signed-secret','api_url'=>'https://api.mercadopago.com','authorization_url'=>'https://auth.mercadopago.com/authorization','webhook_url'=>'https://payments.example.test/api/payments/mercado-pago/webhook','marketplace_fee_enabled'=>true,'marketplace_fee_amount'=>'5.00','connect_timeout'=>1,'timeout'=>2,'refresh_before_minutes'=>30,'webhook_tolerance_seconds'=>300]);}
  public function test_oauth_authorization_uses_state_and_pkce_without_client_secret():void{$url=(new MercadoPagoPaymentProvider)->authorizationUrl('opaque-state','s256-challenge');parse_str(parse_url($url,PHP_URL_QUERY),$q);$this->assertSame('code',$q['response_type']);$this->assertSame('opaque-state',$q['state']);$this->assertSame('s256-challenge',$q['code_challenge']);$this->assertSame('S256',$q['code_challenge_method']);$this->assertArrayNotHasKey('client_secret',$q);}
+ public function test_sandbox_authorization_code_exchange_requests_test_credentials_and_returns_tokens():void{
+  Http::fake(['api.mercadopago.com/oauth/token'=>Http::response(['access_token'=>'seller-access','refresh_token'=>'seller-refresh','user_id_test'=>321],200)]);
+  $tokens=(new MercadoPagoPaymentProvider)->exchangeAuthorizationCode('authorization-code','pkce-verifier');
+  $this->assertSame('seller-access',$tokens['access_token']);$this->assertSame('seller-refresh',$tokens['refresh_token']);
+  Http::assertSent(function($r){$body=$r->data();return $r->url()==='https://api.mercadopago.com/oauth/token'&&$body['client_id']==='public-client-id'&&$body['client_secret']==='server-secret'&&$body['grant_type']==='authorization_code'&&$body['code']==='authorization-code'&&$body['redirect_uri']==='https://payments.example.test/payments/mercado-pago/oauth/callback'&&$body['code_verifier']==='pkce-verifier'&&$body['test_token']===true;});
+ }
+ public function test_production_authorization_code_exchange_omits_test_token():void{
+  config()->set('zigo_payments.providers.mercado_pago.environment','production');Http::fake(['api.mercadopago.com/oauth/token'=>Http::response(['access_token'=>'live-access'],200)]);
+  (new MercadoPagoPaymentProvider)->exchangeAuthorizationCode('authorization-code','pkce-verifier');
+  Http::assertSent(fn($r)=>$r->url()==='https://api.mercadopago.com/oauth/token'&&!array_key_exists('test_token',$r->data()));
+ }
+ public function test_token_rejection_logs_only_safe_provider_diagnostics_and_throws_controlled_exception():void{
+  Log::spy();Http::fake(['api.mercadopago.com/oauth/token'=>Http::response(['error'=>'invalid_grant','message'=>'PKCE verification failed','cause'=>[['code'=>'invalid_verifier']],'access_token'=>'leaked-access','refresh_token'=>'leaked-refresh','client_secret'=>'leaked-secret'],400)]);
+  try{(new MercadoPagoPaymentProvider)->exchangeAuthorizationCode('leaked-code','leaked-verifier');$this->fail('Expected OAuth exception.');}catch(MercadoPagoOAuthException $e){$this->assertSame('Mercado Pago rechazó el intercambio OAuth.',$e->getMessage());$this->assertStringNotContainsString('leaked',$e->getMessage());}
+  Log::shouldHaveReceived('warning')->once()->with('Mercado Pago OAuth token exchange failed',['status'=>400,'error'=>'invalid_grant','message'=>'PKCE verification failed','cause_code'=>'invalid_verifier']);
+ }
  public function test_preference_uses_frozen_server_values_and_seller_token():void{
   Http::fake(['api.mercadopago.com/checkout/preferences'=>Http::response(['id'=>'pref-1','sandbox_init_point'=>'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=pref-1'],201)]);
   $connection=new TenantPaymentConnection(['status'=>'CONNECTED','access_token'=>'seller-oauth-token']);$checkout=new TenantCustomerCheckout(['uuid'=>'b5b637ae-84cc-42f1-a3ec-e611003f77b7','status'=>'PENDING_PAYMENT','currency'=>'MXN','total_amount'=>'120.00','expires_at'=>now()->addHour()]);$attempt=new TenantPaymentAttempt(['uuid'=>'48b6df10-6954-419c-bb29-09527efffd52','external_reference'=>'zg_opaque_reference','marketplace_fee_amount'=>'5.00']);
