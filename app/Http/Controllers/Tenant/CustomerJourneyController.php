@@ -33,12 +33,15 @@ final class CustomerJourneyController extends Controller
         ]);
         $metadata=$operation->metadata??[];$snapshot=LocalShippingQuoteSnapshot::where('tenant_id',$context->id())->where('uuid',$metadata['selected_quote_snapshot_uuid']??'')->firstOrFail();
         $data['sender']['address']=$snapshot->origin;$data['recipient']['address']=$snapshot->destination;$data['package']=['type'=>$snapshot->package_type,'weight'=>(string)$snapshot->weight_kg]+($snapshot->dimensions??[]);
-        DB::transaction(function () use ($operation, $data): void {
+        $profile = $request->attributes->get('customer_profile');
+        $checkout = DB::transaction(function () use ($operation, $data, $context, $profile, $checkouts): TenantCustomerCheckout {
             $locked = TenantOperation::whereKey($operation->id)->where('status', 'quoted')->lockForUpdate()->firstOrFail();
-            abort_if($locked->customerCheckout()->exists(), 409);
+            $existing = $locked->customerCheckout()->lockForUpdate()->first();
+            if ($existing) return $existing;
+
             $metadata = $locked->metadata ?? []; $metadata['shipping_data'] = $data; $locked->update(['metadata' => $metadata]);
+            return $checkouts->create($context->tenant(), $profile, $locked->fresh());
         });
-        $checkout=$checkouts->create($context->tenant(),$request->attributes->get('customer_profile'),$operation->fresh());
         return redirect('/app/checkout/'.$checkout->uuid.'/resumen');
     }
 
