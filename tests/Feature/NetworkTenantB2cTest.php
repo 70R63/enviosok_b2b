@@ -42,6 +42,40 @@ final class NetworkTenantB2cTest extends TestCase
         $this->get('http://unknown.zigo.local/cotizar')->assertNotFound();
     }
 
+    public function test_tenant_storefront_routes_are_public_branded_and_isolated_from_corporate_hosts(): void
+    {
+        $tenant = $this->tenant('storefront', ['B2C', 'SHIPPING']);
+        $tenant->branding()->create([
+            'brand_name' => 'Storefront Express',
+            'primary_color' => '#123456',
+            'secondary_color' => '#234567',
+            'accent_color' => '#345678',
+            'support_email' => 'ayuda@storefront.test',
+            'support_phone' => '81 1234 5678',
+        ]);
+
+        $home = $this->get($this->url($tenant, '/'))->assertOk()
+            ->assertSee('Envía fácil con Storefront Express')
+            ->assertSee('Cotizar envío')
+            ->assertSee('Regístrate o inicia sesión')
+            ->assertSee('ayuda@storefront.test')
+            ->assertSee('#123456', false)
+            ->assertDontSee('Tenant')
+            ->assertDontSee('White Label')
+            ->assertDontSee('Sandbox');
+        $this->assertSame(1, substr_count($home->getContent(), 'Cotiza</div>'));
+
+        $this->get($this->url($tenant, '/cotizar'))->assertOk()->assertSee('Storefront Express');
+        $this->get($this->url($tenant, '/rastrear'))->assertOk()->assertSee('Rastrea tu envío');
+        $this->get($this->url($tenant, '/registro'))->assertOk()->assertSee('Crea tu cuenta');
+        $this->get($this->url($tenant, '/login'))->assertOk()->assertSee('Iniciar sesión');
+        $this->get($this->url($tenant, '/white-label'))->assertStatus(301)->assertRedirect('/');
+        $this->get($this->url($tenant, '/admin'))->assertRedirect(route('tenant.admin.login', [], false));
+        $this->get('http://unknown.zigo.local/')->assertNotFound();
+        $this->get('http://stage.zigo-envios.com/')->assertDontSee('Storefront Express');
+        $this->get('http://zigo-envios.com/')->assertDontSee('Storefront Express');
+    }
+
     public function test_subscription_and_entitlements_guard_channel_quote_and_tracking(): void
     {
         $suspended = $this->tenant('suspended', ['B2C', 'SHIPPING'], 'suspended');

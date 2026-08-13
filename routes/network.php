@@ -180,9 +180,10 @@ Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superad
     });
 
 Route::get('/', [TenantHomeController::class, 'home'])->middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:B2C'])->name('tenant.customer.landing');
-Route::get('/white-label', [TenantHomeController::class, 'home'])->middleware(['tenant.resolve', 'tenant.subscription'])->name('tenant.home');
+Route::permanentRedirect('/white-label', '/')->middleware('tenant.resolve')->name('tenant.home');
 
 Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:B2C'])->name('tenant.customer.')->group(function (): void {
+    Route::get('/login', [CustomerAuthController::class, 'create'])->name('login.public');
     Route::get('/ingresar', [CustomerAuthController::class, 'create'])->name('login');
     Route::post('/ingresar', [CustomerAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
     Route::get('/registro', [CustomerAuthController::class, 'registration'])->name('register');
@@ -190,6 +191,7 @@ Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:
     Route::post('/salir', [CustomerAuthController::class, 'destroy'])->name('logout');
     Route::post('/cotizar/seleccionar', [TenantB2cController::class, 'select'])->name('quote.select');
     Route::get('/rastreo', [TenantB2cController::class, 'tracking'])->middleware('tenant.entitlement:TRACKING')->name('tracking');
+    Route::get('/rastrear', [TenantB2cController::class, 'tracking'])->name('tracking.public');
     Route::get('/rastreo/{tracking}', [TenantB2cController::class, 'track'])->middleware('tenant.entitlement:TRACKING')->name('tracking.show');
     Route::middleware('tenant.customer')->prefix('app')->name('app.')->group(function (): void {
         Route::get('/', [CustomerPortalController::class, 'dashboard'])->name('dashboard');
