@@ -8,6 +8,7 @@ use App\Domain\Network\Tenancy\TenantContext;
 use App\Domain\Shipping\LastMile\Models\TenantDeliveryProofOption;
 use App\Domain\Shipping\Local\{LocalTrackingService};
 use App\Domain\Shipping\Local\Models\LocalShipment;
+use App\Domain\Shipping\Local\Models\LocalShippingQuoteSnapshot;
 use App\Http\Controllers\Controller;
 use App\Services\ZigoPostalCodeService;
 use Illuminate\Http\Request;
@@ -22,34 +23,23 @@ final class CustomerJourneyController extends Controller
         return view('tenant.customer.journey.shipping', ['tenant' => $context->tenant()->load('branding'), 'operation' => $operation, 'package' => $operation->metadata['quoted_package'] ?? []]);
     }
 
-    public function storeShipping(Request $request, TenantContext $context, ZigoPostalCodeService $postal)
+    public function storeShipping(Request $request, TenantContext $context, CustomerCheckoutService $checkouts)
     {
         $operation = $this->activeOperation($request, $context);
         $data = $request->validate([
-            'sender.name' => ['required','string','max:120'], 'sender.phone' => ['required','string','max:30'], 'sender.address' => ['required','string','max:300'],
-            'sender.postal_code' => ['required','regex:/^\d{5}$/'], 'sender.neighborhood' => ['required','string','max:160'], 'sender.references' => ['nullable','string','max:300'],
-            'recipient.name' => ['required','string','max:120'], 'recipient.phone' => ['required','string','max:30'], 'recipient.address' => ['required','string','max:300'],
-            'recipient.postal_code' => ['required','regex:/^\d{5}$/'], 'recipient.neighborhood' => ['required','string','max:160'], 'recipient.references' => ['nullable','string','max:300'],
+            'sender.name' => ['required','string','max:120'], 'sender.phone' => ['required','string','max:30'], 'sender.interior' => ['nullable','string','max:40'], 'sender.references' => ['nullable','string','max:300'],
+            'recipient.name' => ['required','string','max:120'], 'recipient.phone' => ['required','string','max:30'], 'recipient.interior' => ['nullable','string','max:40'], 'recipient.references' => ['nullable','string','max:300'],
             'reference' => ['nullable','string','max:100'],
         ]);
-        $metadata = $operation->metadata ?? [];
-        if ($data['sender']['postal_code'] !== ($metadata['origin_postal_code'] ?? null) || $data['recipient']['postal_code'] !== ($metadata['destination_postal_code'] ?? null)) {
-            throw ValidationException::withMessages(['postal_code' => 'Los códigos postales deben coincidir con la ruta cotizada. Vuelve a cotizar para cambiar la ruta.']);
-        }
-        foreach (['sender','recipient'] as $side) {
-            $lookup = $postal->lookup($data[$side]['postal_code']);
-            if (! ($lookup['success'] ?? false)) throw ValidationException::withMessages([$side.'.postal_code' => 'No encontramos este código postal en el catálogo.']);
-            $allowed = collect($lookup['colonias'])->pluck('nombre')->contains(fn ($name) => hash_equals((string) $name, $data[$side]['neighborhood']));
-            if (! $allowed) throw ValidationException::withMessages([$side.'.neighborhood' => 'Selecciona una colonia válida para este código postal.']);
-            $data[$side]['state'] = $lookup['estado']; $data[$side]['municipality'] = $lookup['municipio']; $data[$side]['city'] = $lookup['ciudad'];
-        }
-        $data['package'] = $metadata['quoted_package'];
+        $metadata=$operation->metadata??[];$snapshot=LocalShippingQuoteSnapshot::where('tenant_id',$context->id())->where('uuid',$metadata['selected_quote_snapshot_uuid']??'')->firstOrFail();
+        $data['sender']['address']=$snapshot->origin;$data['recipient']['address']=$snapshot->destination;$data['package']=['type'=>$snapshot->package_type,'weight'=>(string)$snapshot->weight_kg]+($snapshot->dimensions??[]);
         DB::transaction(function () use ($operation, $data): void {
             $locked = TenantOperation::whereKey($operation->id)->where('status', 'quoted')->lockForUpdate()->firstOrFail();
             abort_if($locked->customerCheckout()->exists(), 409);
             $metadata = $locked->metadata ?? []; $metadata['shipping_data'] = $data; $locked->update(['metadata' => $metadata]);
         });
-        return redirect('/app/envio/evidencia');
+        $checkout=$checkouts->create($context->tenant(),$request->attributes->get('customer_profile'),$operation->fresh());
+        return redirect('/app/checkout/'.$checkout->uuid.'/resumen');
     }
 
     public function evidence(Request $request, TenantContext $context)

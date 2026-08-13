@@ -25,4 +25,11 @@ final class LocalCoverageService
         }
         return LocalShippingZonePostalCode::firstOrCreate(['zone_id' => $zone->id, 'postal_code' => $postalCode]);
     }
+
+    public function assignForTenant(int $tenantId, LocalShippingZone $zone, string $postalCode, array $metadata = []): LocalShippingZonePostalCode
+    {
+        abort_unless((int)$zone->tenant_id === $tenantId, 404); $lookup=$this->postalCodes->lookup($postalCode);
+        if(!($lookup['success']??false)) throw ValidationException::withMessages(['postal_codes'=>$lookup['message']??'Código postal inválido.']);
+        return LocalShippingZonePostalCode::updateOrCreate(['tenant_id'=>$tenantId,'zone_id'=>$zone->id,'postal_code'=>$postalCode],['state'=>$lookup['estado'],'municipality'=>$lookup['municipio'],'active'=>true,'metadata'=>$metadata]);
+    }
 }

@@ -6,76 +6,45 @@ use App\Domain\Network\Billing\SubscriptionService;
 use App\Domain\Network\Channels\B2C\Exceptions\TenantQuoteUnavailableException;
 use App\Domain\Network\Channels\B2C\Models\TenantOperation;
 use App\Domain\Network\Tenancy\Models\Tenant;
-use App\Models\B2cCotizacion;
-use App\Services\ZigoCommercialQuoteService;
-use App\Services\ZigoProviderRateService;
-use App\Domain\Shipping\Local\LocalQuoteService;
+use App\Domain\Shipping\Local\Models\{LocalShippingPackageRule,LocalShippingQuoteSnapshot,LocalShippingService};
+use App\Domain\Shipping\Local\{PackageValidator};
+use App\Domain\Shipping\Local\Pricing\LocalPricingEngine;
+use App\Domain\Shipping\Local\Routing\RouteDistanceProvider;
+use App\Services\ZigoPostalCodeService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 final class TenantB2cQuoteService
 {
-    public function __construct(private ZigoProviderRateService $providers, private ZigoCommercialQuoteService $commercial, private SubscriptionService $subscriptions, private LocalQuoteService $localQuotes) {}
+    public function __construct(private SubscriptionService $subscriptions, private ZigoPostalCodeService $postal, private PackageValidator $packages, private LocalPricingEngine $pricing, private RouteDistanceProvider $routes) {}
 
     public function quote(Tenant $tenant, array $data): array
     {
-        return DB::transaction(function () use ($tenant, $data): array {
-            [$weight, $dimensions] = $this->package($data);
-            $quote = B2cCotizacion::create([
-                'user_id' => null, 'cp_origen' => $data['cp_origen'], 'cp_destino' => $data['cp_destino'],
-                'tipo_envio' => $data['tipo_envio'], 'peso' => $weight, 'peso_real' => (float) $data['peso'],
-                'peso_facturable' => $weight, 'medidas' => $dimensions, 'estatus' => 'COTIZADA',
-                'referencia' => 'TENANT_B2C',
-            ]);
-
-            $publicOptions = [];
-            foreach ($this->providers->getOptionsForCotizacion($quote) as $option) {
-                if (($option['is_fallback_rate'] ?? false) === true) {
-                    continue;
-                }
-                $priced = $this->commercial->calculate($quote, $option, [
-                    'customer_segment' => 'anonymous', 'package_type' => $data['tipo_envio'],
-                    'plan' => $this->subscriptions->currentForTenant($tenant)?->plan?->code,
-                ]);
-                $publicOptions[] = [
-                    'carrier' => $priced['carrier'], 'service' => $priced['service'],
-                    'service_code' => (string) ($option['service_code'] ?? $option['servicio']),
-                    'provider' => (string) ($option['provider_source'] ?? strtolower($priced['carrier'])),
-                    'price' => (float) $priced['final_price'],
-                    'delivery' => $option['entrega'] ?? null,
-                ];
-            }
-
-            $publicOptions = array_merge($publicOptions, $this->localQuotes->quote([
-                'cp_origen' => $data['cp_origen'], 'cp_destino' => $data['cp_destino'],
-                'weight' => $weight, 'length' => $data['length'] ?? null,
-                'width' => $data['width'] ?? null, 'height' => $data['height'] ?? null,
-            ]));
-
-            if ($publicOptions === []) {
-                throw TenantQuoteUnavailableException::noCommercialRates();
-            }
-
-            $operation = TenantOperation::create([
-                'tenant_id' => $tenant->id,
-                'subscription_id' => $this->subscriptions->currentForTenant($tenant)?->id,
-                'channel' => 'b2c', 'status' => 'quoted',
-                'source_type' => B2cCotizacion::class, 'source_id' => $quote->id,
-                'provider' => $publicOptions[0]['provider'] ?? null,
-                'service_code' => $publicOptions[0]['service_code'] ?? null,
-                'metadata' => ['origin_postal_code' => $data['cp_origen'], 'destination_postal_code' => $data['cp_destino'], 'package_type' => $data['tipo_envio'],
-                    'quoted_package' => ['type' => $data['tipo_envio'], 'weight' => (float) $data['peso'], 'billable_weight' => $weight, 'length' => $data['length'] ?? null, 'width' => $data['width'] ?? null, 'height' => $data['height'] ?? null],
-                    'final_price' => $publicOptions[0]['price'], 'currency' => 'MXN'],
-            ]);
-
-            return ['operation' => $operation, 'options' => $publicOptions];
+        $origin = $this->address($data, 'origin'); $destination = $this->address($data, 'destination');
+        $services = LocalShippingService::with(['pricingRules','packageRules'])->where('tenant_id',$tenant->id)->where('status','active')->where('published',true)
+            ->where(fn($q)=>$q->whereNull('valid_from')->orWhere('valid_from','<=',now()))->where(fn($q)=>$q->whereNull('valid_to')->orWhere('valid_to','>=',now()))
+            ->whereHas('originZone',fn($q)=>$this->coveredZone($q,$tenant->id,$data['cp_origen']))
+            ->whereHas('destinationZone',fn($q)=>$this->coveredZone($q,$tenant->id,$data['cp_destino']))->orderBy('sort_order')->orderBy('id')->get();
+        if ($services->isEmpty()) throw ValidationException::withMessages(['quote'=>'La ruta no tiene cobertura disponible.']);
+        $eligible = $services->filter(function($service) use($tenant,$data){
+            $rule=$service->packageRules->firstWhere('package_type',$data['tipo_envio']) ?? LocalShippingPackageRule::where('tenant_id',$tenant->id)->whereNull('service_id')->where('package_type',$data['tipo_envio'])->where('active',true)->first();
+            if(!$rule)return false; try{$this->packages->validate($rule,['weight'=>$data['peso'],'length'=>$data['length']??null,'width'=>$data['width']??null,'height'=>$data['height']??null]);return true;}catch(ValidationException){return false;}
         });
+        if($eligible->isEmpty()) throw ValidationException::withMessages(['package'=>'El paquete excede los límites configurados.']);
+        $needsDistance=$eligible->contains(fn($s)=>in_array($s->pricing_strategy,['BASE_PLUS_OVERAGE','DISTANCE_TIERS_OVERAGE'],true));
+        $route=$needsDistance?$this->routes->distance($origin['address'],$destination['address']):null;
+        $options=[];
+        foreach($eligible as $service){
+            $requires=in_array($service->pricing_strategy,['BASE_PLUS_OVERAGE','DISTANCE_TIERS_OVERAGE'],true); if($requires&&!$route)continue;
+            try{$price=$this->pricing->price($service,$data['tipo_envio'],$route['distance_meters']??null);}catch(\DomainException){continue;}
+            $snapshot=LocalShippingQuoteSnapshot::create(['tenant_id'=>$tenant->id,'service_id'=>$service->id,'origin'=>$origin,'destination'=>$destination,'package_type'=>$data['tipo_envio'],'weight_kg'=>$data['peso'],'dimensions'=>$data['tipo_envio']==='caja'?['length'=>$data['length'],'width'=>$data['width'],'height'=>$data['height']]:null,'distance_meters'=>$requires?$route['distance_meters']:null,'pricing_strategy'=>$service->pricing_strategy,'matched_tariff'=>$price->metadata['rule'],'amount'=>$price->totalAmount,'currency'=>$price->currency,'expires_at'=>now()->addMinutes(30)]);
+            $options[]=['snapshot_uuid'=>$snapshot->uuid,'service'=>$service->name,'service_code'=>$service->code,'sla'=>$service->sla_text,'price'=>$price->totalAmount,'currency'=>$price->currency,'distance_meters'=>$snapshot->distance_meters];
+        }
+        if($options===[]) throw TenantQuoteUnavailableException::noCommercialRates();
+        $operation=TenantOperation::create(['tenant_id'=>$tenant->id,'subscription_id'=>$this->subscriptions->currentForTenant($tenant)?->id,'channel'=>'b2c','status'=>'quoted','metadata'=>['quote_snapshot_uuids'=>array_column($options,'snapshot_uuid')]]);
+        return ['operation'=>$operation,'options'=>$options];
     }
 
-    private function package(array $data): array
-    {
-        if ($data['tipo_envio'] === 'sobre') return [1.0, null];
-        $dimensions = sprintf('%sx%sx%s', $data['length'], $data['width'], $data['height']);
-        $volumetric = ((float) $data['length'] * (float) $data['width'] * (float) $data['height']) / 5000;
-        return [ceil(max((float) $data['peso'], $volumetric)), $dimensions];
-    }
+    private function coveredZone($query,int $tenantId,string $cp): void {$query->where('tenant_id',$tenantId)->where('status','active')->whereHas('postalCodes',fn($q)=>$q->where('tenant_id',$tenantId)->where('postal_code',$cp)->where('active',true)->where(fn($v)=>$v->whereNull('valid_from')->orWhere('valid_from','<=',now()))->where(fn($v)=>$v->whereNull('valid_to')->orWhere('valid_to','>=',now())));}
+    private function address(array $data,string $side): array {$cp=$data[$side==='origin'?'cp_origen':'cp_destino'];$lookup=$this->postal->lookup($cp);if(!($lookup['success']??false))throw ValidationException::withMessages([$side=>"No encontramos el código postal {$cp} en SEPOMEX."]);$settlement=$data[$side.'_settlement'];$valid=collect($lookup['colonias'])->contains(fn($c)=>hash_equals((string)$c['nombre'],$settlement));if(!$valid)throw ValidationException::withMessages([$side.'_settlement'=>'Selecciona una colonia válida.']);$street=trim($data[$side.'_address']);return ['address'=>implode(', ',[$street,$settlement,$cp.' '.$lookup['municipio'],$lookup['estado'],'México']),'street'=>$street,'postal_code'=>$cp,'settlement'=>$settlement,'municipality'=>$lookup['municipio'],'state'=>$lookup['estado']];}
 }

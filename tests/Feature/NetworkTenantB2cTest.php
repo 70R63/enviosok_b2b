@@ -11,9 +11,10 @@ use App\Domain\Network\Channels\B2C\Models\TenantOperation;
 use App\Domain\Network\Channels\B2C\TenantOperationService;
 use App\Domain\Network\Tenancy\Models\Tenant;
 use App\Domain\Shipping\Local\Models\LocalShipment;
+use App\Domain\Shipping\Local\Models\{LocalShippingPackageRule, LocalShippingPricingRule, LocalShippingQuoteSnapshot, LocalShippingService, LocalShippingZone, LocalShippingZonePostalCode};
+use App\Domain\Shipping\Local\Routing\RouteDistanceProvider;
 use App\Models\Roles\Roles;
 use App\Models\User;
-use App\Services\ZigoCommercialQuoteService;
 use App\Services\ZigoProviderRateService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +33,7 @@ final class NetworkTenantB2cTest extends TestCase
             $this->markTestSkipped('Requires SQLite :memory:.');
         }
         $this->schema();
+        $this->postalFixtures();
     }
 
     public function test_verified_host_is_branded_and_unknown_host_is_404(): void
@@ -105,60 +107,66 @@ final class NetworkTenantB2cTest extends TestCase
         $this->assertDatabaseMissing('network_entitlements', ['code' => 'B2C']);
     }
 
-    public function test_quote_uses_legacy_adapters_is_tenant_owned_and_does_not_consume_operations(): void
+    public function test_tenant_quote_returns_only_its_published_service_and_creates_owned_snapshot_without_usage(): void
     {
         $tenant = $this->tenant('quote', $this->storefrontEntitlements());
-        $this->mock(ZigoProviderRateService::class, function (MockInterface $mock): void {
-            $mock->shouldReceive('getOptionsForCotizacion')->once()->andReturn([['logistico' => 'Estafeta', 'servicio' => 'Terrestre', 'service_code' => 'terrestre', 'provider_source' => 'xperta', 'base_price' => 100]]);
-        });
-        $this->mock(ZigoCommercialQuoteService::class, function (MockInterface $mock): void {
-            $mock->shouldReceive('calculate')->once()->andReturn(['carrier' => 'ESTAFETA', 'service' => 'Terrestre', 'final_price' => 149.50]);
-        });
-        $this->post($this->url($tenant, '/cotizar'), $this->quote())->assertOk()->assertSee('149.50')->assertDontSee('base_price')->assertDontSee('100.00');
+        $foreign = $this->tenant('foreign-quote', $this->storefrontEntitlements());
+        $this->tenantService($tenant, published: true, amount: '149.50');
+        $this->tenantService($foreign, published: true, amount: '999.00');
+        $this->mock(ZigoProviderRateService::class, fn (MockInterface $mock) => $mock->shouldNotReceive('getOptionsForCotizacion'));
+
+        $this->post($this->url($tenant, '/cotizar'), $this->quote())->assertOk()
+            ->assertSee('Entrega tenant')->assertSee('149.50')
+            ->assertDontSee('999.00')->assertDontSee('FLAT')->assertDontSee('base_cost')->assertDontSee('matched_tariff');
         $operation = TenantOperation::firstOrFail();
+        $snapshot = LocalShippingQuoteSnapshot::firstOrFail();
         $this->assertSame($tenant->id, $operation->tenant_id);
+        $this->assertSame($tenant->id, $snapshot->tenant_id);
+        $this->assertSame('149.50', (string) $snapshot->amount);
         $this->assertSame('quoted', $operation->status);
         $this->assertDatabaseCount('network_usage_events', 0);
-        $this->assertSame('64000', $operation->metadata['origin_postal_code']);
-        $this->assertSame('sobre', $operation->metadata['quoted_package']['type']);
-        $this->assertEquals(1.0, $operation->metadata['quoted_package']['weight']);
+        $this->assertSame('64000', $snapshot->origin['postal_code']);
+        $this->assertSame('57300', $snapshot->destination['postal_code']);
     }
 
-    public function test_fallback_only_quote_returns_controlled_error_preserves_input_and_rolls_back(): void
+    public function test_tenant_quote_without_coverage_preserves_input_rolls_back_and_does_not_request_distance(): void
     {
-        $tenant = $this->tenant('fallback', $this->storefrontEntitlements());
-        $this->mock(ZigoProviderRateService::class, function (MockInterface $mock): void {
-            $mock->shouldReceive('getOptionsForCotizacion')->once()->andReturn([[
-                'logistico' => 'Estafeta', 'servicio' => 'Terrestre', 'base_price' => 395,
-                'provider_source' => 'estafeta_solo_cotizacion', 'is_fallback_rate' => true,
-            ]]);
-        });
-        $payload = ['cp_origen' => '64000', 'cp_destino' => '57300', 'tipo_envio' => 'caja', 'peso' => 2.5, 'length' => 20, 'width' => 15, 'height' => 10];
+        $tenant = $this->tenant('no-coverage', $this->storefrontEntitlements());
+        $this->tenantService($tenant, published: true, amount: '149.50', coveredDestination: false, strategy: 'DISTANCE_TIERS_OVERAGE');
+        $this->mock(RouteDistanceProvider::class, fn (MockInterface $mock) => $mock->shouldNotReceive('distance'));
+        $payload = $this->quote(['tipo_envio' => 'caja', 'peso' => 2.5, 'length' => 20, 'width' => 15, 'height' => 10]);
 
         $this->from($this->url($tenant, '/cotizar'))->post($this->url($tenant, '/cotizar'), $payload)
             ->assertRedirect($this->url($tenant, '/cotizar'))
             ->assertSessionHasErrors('quote')
             ->assertSessionHasInput('cp_origen', '64000')
+            ->assertSessionHasInput('origin_settlement', 'Centro')
+            ->assertSessionHasInput('origin_address', 'Avenida Juárez 123')
             ->assertSessionHasInput('cp_destino', '57300')
+            ->assertSessionHasInput('destination_settlement', 'Benito Juárez')
+            ->assertSessionHasInput('destination_address', 'Avenida Pantitlán 456')
             ->assertSessionHasInput('tipo_envio', 'caja')
             ->assertSessionHasInput('peso', 2.5)
-            ->assertSessionHasInput('length', 20);
+            ->assertSessionHasInput('length', 20)
+            ->assertSessionHasInput('width', 15)
+            ->assertSessionHasInput('height', 10);
 
-        $this->assertDatabaseCount('b2c_cotizaciones', 0);
+        $this->assertDatabaseCount('local_shipping_quote_snapshots', 0);
         $this->assertDatabaseCount('network_tenant_operations', 0);
         $this->assertDatabaseCount('network_usage_events', 0);
     }
 
-    public function test_provider_without_options_returns_controlled_error_and_rolls_back(): void
+    public function test_unpublished_tenant_service_returns_controlled_error_without_national_fallback_or_artifacts(): void
     {
-        $tenant = $this->tenant('no-options', $this->storefrontEntitlements());
-        $this->mock(ZigoProviderRateService::class, fn (MockInterface $mock) => $mock->shouldReceive('getOptionsForCotizacion')->once()->andReturn([]));
+        $tenant = $this->tenant('unpublished', $this->storefrontEntitlements());
+        $this->tenantService($tenant, published: false, amount: '149.50');
+        $this->mock(ZigoProviderRateService::class, fn (MockInterface $mock) => $mock->shouldNotReceive('getOptionsForCotizacion'));
 
         $this->from($this->url($tenant, '/cotizar'))->post($this->url($tenant, '/cotizar'), $this->quote())
             ->assertRedirect($this->url($tenant, '/cotizar'))
             ->assertSessionHasErrors('quote');
 
-        $this->assertDatabaseCount('b2c_cotizaciones', 0);
+        $this->assertDatabaseCount('local_shipping_quote_snapshots', 0);
         $this->assertDatabaseCount('network_tenant_operations', 0);
         $this->assertDatabaseCount('network_usage_events', 0);
     }
@@ -184,9 +192,9 @@ final class NetworkTenantB2cTest extends TestCase
         $foreign = TenantOperation::create(['tenant_id' => $b->id, 'subscription_id' => $b->subscriptions()->first()->id, 'channel' => 'b2c', 'status' => 'quoted']);
         $user = $this->user();
         $a->memberships()->create(['user_id' => $user->id, 'role' => 'owner', 'status' => 'active']);
-        // Legacy admin operations still requires the aggregate B2C entitlement; RC4.8A.1 leaves it unchanged.
-        $this->actingAs($user)->get($this->url($a, '/admin/operations'))->assertForbidden();
-        DB::table('zigo_postal_codes')->insert(['codigo_postal' => '64000', 'asentamiento' => 'Centro', 'tipo_asentamiento' => 'Colonia', 'municipio' => 'Monterrey', 'estado' => 'Nuevo León', 'ciudad' => 'Monterrey', 'activo' => true]);
+        $this->actingAs($user)->get($this->url($a, '/admin/operations'))->assertOk()->assertDontSee($foreign->uuid);
+        $this->get($this->url($a, '/admin/operations/'.$foreign->uuid))->assertNotFound();
+        $this->post($this->url($a, '/admin/operations/'.$foreign->uuid.'/confirm'))->assertNotFound();
         $this->get($this->url($a, '/postal-code/lookup/64000'))->assertOk()->assertJsonPath('codigo_postal', '64000');
         $this->get($this->url($a, '/b2c/cp/colonias?cp=64000'))->assertOk()->assertJsonPath('data.0.d_codigo', '64000');
         $this->assertNotNull(app('router')->getRoutes()->getByName('home'));
@@ -221,9 +229,40 @@ final class NetworkTenantB2cTest extends TestCase
         }
     }
 
-    private function quote(): array
+    private function quote(array $overrides = []): array
     {
-        return ['cp_origen' => '64000', 'cp_destino' => '64000', 'tipo_envio' => 'sobre', 'peso' => 1];
+        return array_replace([
+            'cp_origen' => '64000',
+            'origin_settlement' => 'Centro',
+            'origin_address' => 'Avenida Juárez 123',
+            'cp_destino' => '57300',
+            'destination_settlement' => 'Benito Juárez',
+            'destination_address' => 'Avenida Pantitlán 456',
+            'tipo_envio' => 'sobre',
+            'peso' => 1,
+        ], $overrides);
+    }
+
+    private function postalFixtures(): void
+    {
+        DB::table('zigo_postal_codes')->insert([
+            ['codigo_postal' => '64000', 'asentamiento' => 'Centro', 'tipo_asentamiento' => 'Colonia', 'municipio' => 'Monterrey', 'estado' => 'Nuevo León', 'ciudad' => 'Monterrey', 'activo' => true],
+            ['codigo_postal' => '57300', 'asentamiento' => 'Benito Juárez', 'tipo_asentamiento' => 'Colonia', 'municipio' => 'Nezahualcóyotl', 'estado' => 'México', 'ciudad' => 'Nezahualcóyotl', 'activo' => true],
+        ]);
+    }
+
+    private function tenantService(Tenant $tenant, bool $published, string $amount, bool $coveredDestination = true, string $strategy = 'FLAT'): LocalShippingService
+    {
+        $zone = LocalShippingZone::create(['tenant_id' => $tenant->id, 'code' => 'pool', 'name' => 'Cobertura', 'coverage_mode' => 'POSTAL_POOL', 'status' => 'active']);
+        foreach (array_filter(['64000', $coveredDestination ? '57300' : null]) as $postalCode) {
+            LocalShippingZonePostalCode::create(['tenant_id' => $tenant->id, 'zone_id' => $zone->id, 'postal_code' => $postalCode, 'active' => true]);
+        }
+        $service = LocalShippingService::create(['tenant_id' => $tenant->id, 'code' => 'tenant-delivery', 'name' => 'Entrega tenant', 'origin_zone_id' => $zone->id, 'destination_zone_id' => $zone->id, 'service_level' => 'same_day', 'base_cost' => '80.00', 'base_price' => '100.00', 'currency' => 'MXN', 'status' => 'active', 'published' => $published, 'pricing_strategy' => $strategy, 'sort_order' => 1, 'sla_text' => 'Mismo día']);
+        LocalShippingPricingRule::create(['tenant_id' => $tenant->id, 'service_id' => $service->id, 'from_km' => $strategy === 'DISTANCE_TIERS_OVERAGE' ? '0' : null, 'to_km' => $strategy === 'DISTANCE_TIERS_OVERAGE' ? '25' : null, 'amount' => $amount, 'active' => true]);
+        foreach ([['sobre', '1', null, null, null], ['caja', '40', '60', '50', '40']] as $package) {
+            LocalShippingPackageRule::create(['tenant_id' => $tenant->id, 'service_id' => $service->id, 'package_type' => $package[0], 'max_weight_kg' => $package[1], 'max_dimension_1_cm' => $package[2], 'max_dimension_2_cm' => $package[3], 'max_dimension_3_cm' => $package[4], 'active' => true]);
+        }
+        return $service;
     }
 
     private function storefrontEntitlements(): array
@@ -278,5 +317,7 @@ final class NetworkTenantB2cTest extends TestCase
         Schema::create('zigo_postal_codes', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->string('codigo_postal'), $t->string('asentamiento'), $t->string('tipo_asentamiento')->nullable(), $t->string('municipio'), $t->string('estado'), $t->string('ciudad')->nullable(), $t->boolean('activo')]));
         $migration = require database_path('migrations/2026_08_09_100000_create_local_shipping_foundation_tables.php');
         $migration->up();
+        $logistics = require database_path('migrations/2026_08_20_100000_extend_local_shipping_for_tenant_logistics.php');
+        $logistics->up();
     }
 }

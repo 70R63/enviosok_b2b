@@ -11,10 +11,10 @@ final class CustomerCheckoutService
 {
     public function __construct(private CustomerCheckoutPricing $pricing) {}
 
-    public function create(Tenant $tenant, TenantCustomerProfile $profile, TenantOperation $operation, TenantDeliveryProofOption $proof): TenantCustomerCheckout
+    public function create(Tenant $tenant, TenantCustomerProfile $profile, TenantOperation $operation, ?TenantDeliveryProofOption $proof = null): TenantCustomerCheckout
     {
         abort_unless((int) $profile->tenant_id === (int) $tenant->id && (int) $operation->tenant_id === (int) $tenant->id && (int) $operation->customer_profile_id === (int) $profile->id, 404);
-        abort_unless($operation->status === 'quoted' && $proof->is_active && (int) $proof->tenant_id === (int) $tenant->id, 422);
+        abort_unless($operation->status === 'quoted' && (! $proof || ($proof->is_active && (int) $proof->tenant_id === (int) $tenant->id)), 422);
         return DB::transaction(function () use ($tenant, $profile, $operation, $proof): TenantCustomerCheckout {
             $operation = TenantOperation::whereKey($operation->id)->lockForUpdate()->firstOrFail();
             $existing = TenantCustomerCheckout::where('tenant_operation_id', $operation->id)->lockForUpdate()->first();
@@ -27,7 +27,7 @@ final class CustomerCheckoutService
                 'status' => 'DRAFT', 'payment_status' => 'PENDING', 'expires_at' => now()->addHours(24),
                 'quote_snapshot' => $metadata['selected_quote'] + ['route' => ['origin' => $metadata['origin_postal_code'] ?? null, 'destination' => $metadata['destination_postal_code'] ?? null], 'package' => $metadata['quoted_package'] ?? []],
                 'shipping_data_snapshot' => $metadata['shipping_data'],
-                'proof_option_snapshot' => ['uuid' => $proof->uuid, 'code' => $proof->code, 'name' => $proof->name, 'description' => $proof->description, 'receiver_policy' => $proof->receiver_policy, 'require_receiver_name' => $proof->require_receiver_name, 'require_receiver_type' => $proof->require_receiver_type, 'require_signature' => $proof->require_signature, 'require_photo' => $proof->require_photo, 'require_gps' => $proof->require_gps, 'max_delivery_attempts' => $proof->max_delivery_attempts, 'surcharge_amount' => (float) $proof->surcharge_amount, 'currency' => $proof->currency],
+                'proof_option_snapshot' => $proof ? ['uuid' => $proof->uuid, 'code' => $proof->code, 'name' => $proof->name, 'description' => $proof->description, 'receiver_policy' => $proof->receiver_policy, 'require_receiver_name' => $proof->require_receiver_name, 'require_receiver_type' => $proof->require_receiver_type, 'require_signature' => $proof->require_signature, 'require_photo' => $proof->require_photo, 'require_gps' => $proof->require_gps, 'max_delivery_attempts' => $proof->max_delivery_attempts, 'surcharge_amount' => (float) $proof->surcharge_amount, 'currency' => $proof->currency] : [],
             ]));
         });
     }

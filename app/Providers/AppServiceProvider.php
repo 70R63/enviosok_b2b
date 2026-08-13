@@ -9,6 +9,7 @@ use App\Domain\Payments\Contracts\PaymentProvider;
 use App\Domain\Payments\MercadoPagoPaymentProvider;
 use App\Domain\Network\Commerce\Contracts\PlatformPaymentProvider;
 use App\Domain\Network\Commerce\MercadoPagoPlatformPaymentProvider;
+use App\Domain\Shipping\Local\Routing\{GoogleRoutesDistanceProvider,RouteDistanceProvider};
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -22,6 +23,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(TenantContext::class, fn () => new TenantContext());
         $this->app->bind(PaymentProvider::class, MercadoPagoPaymentProvider::class);
         $this->app->bind(PlatformPaymentProvider::class, MercadoPagoPlatformPaymentProvider::class);
+        $this->app->bind(RouteDistanceProvider::class, GoogleRoutesDistanceProvider::class);
     }
 
     /**

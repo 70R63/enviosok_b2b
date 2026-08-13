@@ -27,6 +27,7 @@ use App\Http\Controllers\Tenant\TenantDriverController;
 use App\Http\Controllers\Tenant\TenantHomeController;
 use App\Http\Controllers\Tenant\TenantMemberController;
 use App\Http\Controllers\Tenant\TenantOperationController;
+use App\Http\Controllers\Tenant\TenantLogisticsController;
 use App\Http\Controllers\Tenant\CustomerAuthController;
 use App\Http\Controllers\Tenant\CustomerPortalController;
 use App\Http\Controllers\Tenant\CustomerJourneyController;
@@ -221,6 +222,7 @@ Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:
 });
 
 Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:QUOTES'])->name('tenant.b2c.')->group(function (): void {
+    Route::get('/codigos-postales/{postalCode}', [TenantB2cController::class, 'postal'])->where('postalCode','[0-9]{5}')->name('postal.show');
     Route::get('/cotizar', [TenantB2cController::class, 'create'])->name('quote.create');
     Route::post('/cotizar', [TenantB2cController::class, 'store'])->middleware(['tenant.entitlement:SHIPPING', 'throttle:20,1'])->name('quote.store');
     Route::post('/cotizar/seleccionar', [TenantB2cController::class, 'select'])->name('quote.select');
@@ -282,8 +284,17 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
             Route::delete('/configuracion/pagos/mercado-pago', [TenantPaymentConnectionController::class, 'disconnect'])->middleware('throttle:5,1')->name('payments.mercado-pago.disconnect');
             Route::post('/configuracion/entregas', [TenantDeliveryProofOptionController::class, 'store'])->name('delivery-proof-options.store');
             Route::put('/configuracion/entregas/{option}', [TenantDeliveryProofOptionController::class, 'update'])->name('delivery-proof-options.update');
-            Route::get('/operations', [TenantOperationController::class, 'index'])->middleware('tenant.entitlement:B2C')->name('operations.index');
-            Route::post('/operations/{operation}/confirm', [TenantOperationController::class, 'confirm'])->middleware(['tenant.entitlement:B2C', 'tenant.entitlement:SHIPPING'])->name('operations.confirm');
+            Route::get('/operations', [TenantOperationController::class, 'index'])->name('operations.index');
+            Route::get('/operacion', [TenantLogisticsController::class,'index'])->name('logistics.index');
+            Route::post('/operacion/servicios', [TenantLogisticsController::class,'service'])->name('logistics.services.store');
+            Route::put('/operacion/servicios/{service}', [TenantLogisticsController::class,'updateService'])->name('logistics.services.update');
+            Route::post('/operacion/servicios/{service}/tarifas', [TenantLogisticsController::class,'pricing'])->name('logistics.pricing.store');
+            Route::post('/operacion/cobertura', [TenantLogisticsController::class,'coverage'])->name('logistics.coverage.store');
+            Route::post('/operacion/cobertura/importar', [TenantLogisticsController::class,'import'])->name('logistics.coverage.import');
+            Route::patch('/operacion/cobertura/{coverage}', [TenantLogisticsController::class,'toggleCoverage'])->name('logistics.coverage.toggle');
+            Route::delete('/operacion/cobertura/{coverage}', [TenantLogisticsController::class,'removeCoverage'])->name('logistics.coverage.remove');
+            Route::post('/operacion/paquetes', [TenantLogisticsController::class,'package'])->name('logistics.packages.store');
+            Route::post('/operations/{operation}/confirm', [TenantOperationController::class, 'confirm'])->middleware('tenant.entitlement:SHIPPING')->name('operations.confirm');
             Route::get('/operations/{operation}', [TenantOperationController::class, 'show'])->middleware('tenant.entitlement:SHIPPING')->name('operations.show');
             Route::get('/delivery-proofs/{proof}/{kind}', [DeliveryEvidenceController::class, 'tenant'])->name('delivery-proofs.evidence');
             Route::get('/delivery-failures/{attempt}/photo', [DeliveryEvidenceController::class, 'tenantFailed'])->name('delivery-failures.photo');

@@ -25,6 +25,12 @@ return [
         'token' => env('POSTMARK_TOKEN'),
     ],
 
+    'google_routes' => [
+        'api_key' => env('GOOGLE_ROUTES_API_KEY'),
+        'base_url' => env('GOOGLE_ROUTES_BASE_URL', 'https://routes.googleapis.com'),
+        'timeout' => (int) env('GOOGLE_ROUTES_TIMEOUT', 8),
+    ],
+
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),

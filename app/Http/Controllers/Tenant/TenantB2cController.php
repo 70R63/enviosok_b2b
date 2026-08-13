@@ -10,6 +10,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Domain\Network\Channels\B2C\Models\TenantOperation;
 use App\Domain\Network\Channels\B2C\Models\TenantCustomerProfile;
+use App\Domain\Shipping\Local\Models\LocalShippingQuoteSnapshot;
+use App\Services\ZigoPostalCodeService;
 
 final class TenantB2cController extends Controller
 {
@@ -22,6 +24,8 @@ final class TenantB2cController extends Controller
     {
         $data = $request->validate([
             'cp_origen' => ['required', 'regex:/^\d{5}$/'], 'cp_destino' => ['required', 'regex:/^\d{5}$/'],
+            'origin_settlement' => ['required','string','max:160'], 'origin_address' => ['required','string','max:255'],
+            'destination_settlement' => ['required','string','max:160'], 'destination_address' => ['required','string','max:255'],
             'tipo_envio' => ['required', 'in:sobre,caja'], 'peso' => ['required', 'numeric', 'min:0.1', 'max:70'],
             'length' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:300'],
             'width' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:300'],
@@ -40,7 +44,7 @@ final class TenantB2cController extends Controller
             'tenant_id' => $tenant->id, 'operation_uuid' => $result['operation']->uuid,
             'options' => collect($result['options'])->values()->all(),
         ]);
-        return view('tenant.b2c.quote', ['tenant' => $tenant, 'result' => $result, 'customerPortal' => $request->is('app/*')]);
+        return view($request->is('app/*') ? 'tenant.b2c.quote' : 'tenant.home', ['tenant' => $tenant, 'result' => $result, 'customerPortal' => $request->is('app/*'), 'preview'=>false]);
     }
 
     public function select(Request $request, TenantContext $context)
@@ -52,10 +56,9 @@ final class TenantB2cController extends Controller
         $option = $quote['options'][$data['option']] ?? null;
         abort_unless(is_array($option), 404);
         $operation = TenantOperation::where('tenant_id', $context->id())->where('uuid', $data['operation_uuid'])->where('status', 'quoted')->firstOrFail();
-        $metadata = $operation->metadata ?? [];
-        $metadata['selected_quote'] = ['service' => $option['service'] ?? null, 'delivery' => $option['delivery'] ?? null, 'price' => $option['price'] ?? null, 'currency' => 'MXN'];
-        $metadata['final_price'] = $option['price'] ?? $metadata['final_price'] ?? null;
-        $operation->update(['provider' => $option['provider'] ?? null, 'service_code' => $option['service_code'] ?? null, 'metadata' => $metadata]);
+        $snapshot=LocalShippingQuoteSnapshot::where('tenant_id',$context->id())->where('uuid',$option['snapshot_uuid'])->where('expires_at','>',now())->firstOrFail();
+        $metadata=$operation->metadata??[];$metadata['selected_quote_snapshot_uuid']=$snapshot->uuid;$metadata['selected_quote']=['service'=>$option['service'],'price'=>(string)$snapshot->amount,'currency'=>$snapshot->currency];$metadata['final_price']=(string)$snapshot->amount;$metadata['origin_postal_code']=$snapshot->origin['postal_code'];$metadata['destination_postal_code']=$snapshot->destination['postal_code'];$metadata['quoted_package']=['type'=>$snapshot->package_type,'weight'=>(string)$snapshot->weight_kg]+($snapshot->dimensions??[]);
+        $operation->update(['provider'=>'ZIGO_LOCAL','service_code'=>$option['service_code'],'metadata'=>$metadata]);
         if (auth()->check()) {
             $profile = TenantCustomerProfile::where('tenant_id', $context->id())->where('user_id', auth()->id())->where('status', 'active')->first();
             if ($profile) {
@@ -68,6 +71,8 @@ final class TenantB2cController extends Controller
         $request->session()->put('url.intended', '/app/envio/nuevo');
         return redirect('/ingresar')->with('status', 'Inicia sesión o crea tu cuenta para continuar con este servicio.');
     }
+
+    public function postal(string $postalCode, ZigoPostalCodeService $postal){$result=$postal->lookup($postalCode);return response()->json($result,$result['status']??200);}
 
     public function tracking(TenantContext $context)
     {
