@@ -127,6 +127,47 @@ class ZigoCustomerPortalTest extends TestCase
         $this->assertSame('sobre',$first->quote_snapshot['package']['type']); $this->assertDatabaseCount('tenant_customer_checkouts',1);
     }
 
+    public function test_optional_evidence_summary_renders_without_evidence_and_keeps_server_total(): void
+    {
+        $tenant = $this->tenant('summary-no-proof');
+        $profile = $this->customer($tenant, 'summary-no-proof@example.test');
+        $checkout = $this->checkoutForView($tenant, $profile);
+
+        $this->assertSame([], $checkout->proof_option_snapshot);
+        $this->assertSame('179.00', $checkout->shipping_amount);
+        $this->assertSame('0.00', $checkout->evidence_amount);
+        $this->assertSame('179.00', $checkout->total_amount);
+        $this->actingAs($profile->user)->get($this->url($tenant, '/app/checkout/'.$checkout->uuid.'/resumen'))
+            ->assertOk()->assertSee('TOTAL')->assertSee('$179.00 MXN')->assertDontSee('Evidencia');
+    }
+
+    public function test_optional_evidence_summary_renders_selected_evidence(): void
+    {
+        $tenant = $this->tenant('summary-with-proof');
+        $profile = $this->customer($tenant, 'summary-with-proof@example.test');
+        $proof = TenantDeliveryProofOption::create([
+            'tenant_id' => $tenant->id, 'code' => 'PHOTO', 'name' => 'Fotografía de entrega',
+            'receiver_policy' => 'ANY_PERSON_AT_ADDRESS', 'max_delivery_attempts' => 2,
+            'surcharge_amount' => 25, 'currency' => 'MXN', 'is_active' => true, 'sort_order' => 1,
+        ]);
+        $checkout = $this->checkoutForView($tenant, $profile, $proof);
+
+        $this->assertSame('204.00', $checkout->total_amount);
+        $this->actingAs($profile->user)->get($this->url($tenant, '/app/checkout/'.$checkout->uuid.'/resumen'))
+            ->assertOk()->assertSee('Evidencia')->assertSee('Fotografía de entrega')->assertSee('$25.00')->assertSee('$204.00 MXN');
+    }
+
+    public function test_optional_evidence_payment_renders_without_proof_or_misleading_copy(): void
+    {
+        $tenant = $this->tenant('payment-no-proof');
+        $profile = $this->customer($tenant, 'payment-no-proof@example.test');
+        $checkout = $this->checkoutForView($tenant, $profile);
+
+        $this->actingAs($profile->user)->get($this->url($tenant, '/app/checkout/'.$checkout->uuid.'/pago'))
+            ->assertOk()->assertSee('Servicio seleccionado')->assertSee('$179.00 MXN')
+            ->assertDontSee('Servicio y evidencia seleccionados');
+    }
+
     public function test_store_shipping_creates_once_and_retries_redirect_to_immutable_checkout(): void
     {
         $tenant = $this->tenant('shipping-idempotent');
@@ -267,6 +308,19 @@ class ZigoCustomerPortalTest extends TestCase
             'recipient' => ['name' => 'Destinatario', 'phone' => '8222222222', 'interior' => null, 'references' => 'Frente al parque'],
             'reference' => 'Pedido RC4.9.1',
         ];
+    }
+
+    private function checkoutForView(Tenant $tenant, TenantCustomerProfile $profile, ?TenantDeliveryProofOption $proof = null): TenantCustomerCheckout
+    {
+        [$operation] = $this->quotedOperation($tenant, $profile);
+        $metadata = $operation->metadata;
+        $metadata['shipping_data'] = [
+            'sender' => ['name' => 'Remitente', 'phone' => '8111111111', 'address' => ['street' => 'Origen 1']],
+            'recipient' => ['name' => 'Destinatario', 'phone' => '8222222222', 'address' => ['street' => 'Destino 2']],
+            'package' => ['type' => 'sobre', 'weight' => '1.00'],
+        ];
+        $operation->update(['metadata' => $metadata]);
+        return app(CustomerCheckoutService::class)->create($tenant, $profile, $operation->fresh(), $proof);
     }
 
     private function schema(): void
