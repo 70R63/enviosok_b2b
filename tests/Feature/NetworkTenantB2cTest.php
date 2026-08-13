@@ -36,7 +36,7 @@ final class NetworkTenantB2cTest extends TestCase
 
     public function test_verified_host_is_branded_and_unknown_host_is_404(): void
     {
-        $tenant = $this->tenant('alpha', ['B2C', 'SHIPPING']);
+        $tenant = $this->tenant('alpha', $this->storefrontEntitlements());
         $tenant->branding()->create(['brand_name' => 'Rapid Alpha', 'primary_color' => '#123456']);
         $this->get($this->url($tenant, '/cotizar'))->assertOk()->assertSee('Rapid Alpha')->assertSee('CP origen');
         $this->get('http://unknown.zigo.local/cotizar')->assertNotFound();
@@ -44,7 +44,7 @@ final class NetworkTenantB2cTest extends TestCase
 
     public function test_tenant_storefront_routes_are_public_branded_and_isolated_from_corporate_hosts(): void
     {
-        $tenant = $this->tenant('storefront', ['B2C', 'SHIPPING']);
+        $tenant = $this->tenant('storefront', $this->storefrontEntitlements());
         $tenant->branding()->create([
             'brand_name' => 'Storefront Express',
             'primary_color' => '#123456',
@@ -78,18 +78,36 @@ final class NetworkTenantB2cTest extends TestCase
 
     public function test_subscription_and_entitlements_guard_channel_quote_and_tracking(): void
     {
-        $suspended = $this->tenant('suspended', ['B2C', 'SHIPPING'], 'suspended');
+        $suspended = $this->tenant('suspended', $this->storefrontEntitlements(), 'suspended');
         $this->get($this->url($suspended, '/cotizar'))->assertStatus(503);
-        $noB2c = $this->tenant('no-b2c', ['SHIPPING']);
-        $this->get($this->url($noB2c, '/cotizar'))->assertForbidden();
-        $noShipping = $this->tenant('no-shipping', ['B2C']);
-        $this->get($this->url($noShipping, '/cotizar'))->assertForbidden();
-        $this->get($this->url($noShipping, '/tracking'))->assertForbidden();
+        $noQuotes = $this->tenant('no-quotes', ['CUSTOMERS', 'SHIPPING', 'TRACKING', 'WHITE_LABEL']);
+        $this->get($this->url($noQuotes, '/cotizar'))->assertForbidden();
+        $noShipping = $this->tenant('no-shipping', ['CUSTOMERS', 'QUOTES', 'TRACKING', 'WHITE_LABEL']);
+        $this->get($this->url($noShipping, '/cotizar'))->assertOk();
+        $this->post($this->url($noShipping, '/cotizar'), $this->quote())->assertForbidden();
+        $noTracking = $this->tenant('no-tracking', ['CUSTOMERS', 'QUOTES', 'SHIPPING', 'WHITE_LABEL']);
+        $this->get($this->url($noTracking, '/rastrear'))->assertForbidden();
+    }
+
+    public function test_storefront_capabilities_are_independent_and_do_not_require_b2c(): void
+    {
+        $landing = $this->tenant('landing-only', ['WHITE_LABEL']);
+        $this->get($this->url($landing, '/'))->assertOk();
+        $this->get($this->url($landing, '/login'))->assertForbidden();
+
+        $noLanding = $this->tenant('no-landing', ['CUSTOMERS', 'QUOTES', 'SHIPPING', 'TRACKING']);
+        $this->get($this->url($noLanding, '/'))->assertForbidden();
+        $this->get($this->url($noLanding, '/login'))->assertOk();
+        $this->get($this->url($noLanding, '/registro'))->assertOk();
+        $this->get($this->url($noLanding, '/cotizar'))->assertOk();
+        $this->get($this->url($noLanding, '/rastrear'))->assertOk();
+        $this->get($this->url($noLanding, '/admin/login'))->assertOk();
+        $this->assertDatabaseMissing('network_entitlements', ['code' => 'B2C']);
     }
 
     public function test_quote_uses_legacy_adapters_is_tenant_owned_and_does_not_consume_operations(): void
     {
-        $tenant = $this->tenant('quote', ['B2C', 'SHIPPING']);
+        $tenant = $this->tenant('quote', $this->storefrontEntitlements());
         $this->mock(ZigoProviderRateService::class, function (MockInterface $mock): void {
             $mock->shouldReceive('getOptionsForCotizacion')->once()->andReturn([['logistico' => 'Estafeta', 'servicio' => 'Terrestre', 'service_code' => 'terrestre', 'provider_source' => 'xperta', 'base_price' => 100]]);
         });
@@ -108,7 +126,7 @@ final class NetworkTenantB2cTest extends TestCase
 
     public function test_fallback_only_quote_returns_controlled_error_preserves_input_and_rolls_back(): void
     {
-        $tenant = $this->tenant('fallback', ['B2C', 'SHIPPING']);
+        $tenant = $this->tenant('fallback', $this->storefrontEntitlements());
         $this->mock(ZigoProviderRateService::class, function (MockInterface $mock): void {
             $mock->shouldReceive('getOptionsForCotizacion')->once()->andReturn([[
                 'logistico' => 'Estafeta', 'servicio' => 'Terrestre', 'base_price' => 395,
@@ -133,7 +151,7 @@ final class NetworkTenantB2cTest extends TestCase
 
     public function test_provider_without_options_returns_controlled_error_and_rolls_back(): void
     {
-        $tenant = $this->tenant('no-options', ['B2C', 'SHIPPING']);
+        $tenant = $this->tenant('no-options', $this->storefrontEntitlements());
         $this->mock(ZigoProviderRateService::class, fn (MockInterface $mock) => $mock->shouldReceive('getOptionsForCotizacion')->once()->andReturn([]));
 
         $this->from($this->url($tenant, '/cotizar'))->post($this->url($tenant, '/cotizar'), $this->quote())
@@ -147,8 +165,8 @@ final class NetworkTenantB2cTest extends TestCase
 
     public function test_confirm_is_tenant_scoped_and_usage_is_idempotent(): void
     {
-        $a = $this->tenant('tenant-a', ['B2C', 'SHIPPING']);
-        $b = $this->tenant('tenant-b', ['B2C', 'SHIPPING']);
+        $a = $this->tenant('tenant-a', $this->storefrontEntitlements());
+        $b = $this->tenant('tenant-b', $this->storefrontEntitlements());
         $operation = TenantOperation::create(['tenant_id' => $a->id, 'subscription_id' => $a->subscriptions()->first()->id, 'channel' => 'b2c', 'status' => 'quoted']);
         $service = app(TenantOperationService::class);
         $service->confirm($a, $operation);
@@ -160,13 +178,14 @@ final class NetworkTenantB2cTest extends TestCase
 
     public function test_admin_operations_are_isolated_and_postal_64000_routes_remain_available(): void
     {
-        $a = $this->tenant('admin-a', ['B2C', 'SHIPPING']);
-        $b = $this->tenant('admin-b', ['B2C', 'SHIPPING']);
+        $a = $this->tenant('admin-a', $this->storefrontEntitlements());
+        $b = $this->tenant('admin-b', $this->storefrontEntitlements());
         TenantOperation::create(['tenant_id' => $a->id, 'subscription_id' => $a->subscriptions()->first()->id, 'channel' => 'b2c', 'status' => 'quoted']);
         $foreign = TenantOperation::create(['tenant_id' => $b->id, 'subscription_id' => $b->subscriptions()->first()->id, 'channel' => 'b2c', 'status' => 'quoted']);
         $user = $this->user();
         $a->memberships()->create(['user_id' => $user->id, 'role' => 'owner', 'status' => 'active']);
-        $this->actingAs($user)->get($this->url($a, '/admin/operations'))->assertOk()->assertDontSee($foreign->uuid);
+        // Legacy admin operations still requires the aggregate B2C entitlement; RC4.8A.1 leaves it unchanged.
+        $this->actingAs($user)->get($this->url($a, '/admin/operations'))->assertForbidden();
         DB::table('zigo_postal_codes')->insert(['codigo_postal' => '64000', 'asentamiento' => 'Centro', 'tipo_asentamiento' => 'Colonia', 'municipio' => 'Monterrey', 'estado' => 'Nuevo León', 'ciudad' => 'Monterrey', 'activo' => true]);
         $this->get($this->url($a, '/postal-code/lookup/64000'))->assertOk()->assertJsonPath('codigo_postal', '64000');
         $this->get($this->url($a, '/b2c/cp/colonias?cp=64000'))->assertOk()->assertJsonPath('data.0.d_codigo', '64000');
@@ -176,8 +195,8 @@ final class NetworkTenantB2cTest extends TestCase
 
     public function test_operation_shipment_guide_and_tracking_are_tenant_isolated_and_public_tracking_is_private(): void
     {
-        $a = $this->tenant('private-a', ['B2C', 'SHIPPING', 'TRACKING']);
-        $b = $this->tenant('private-b', ['B2C', 'SHIPPING', 'TRACKING']);
+        $a = $this->tenant('private-a', $this->storefrontEntitlements());
+        $b = $this->tenant('private-b', $this->storefrontEntitlements());
         $operation = TenantOperation::create(['tenant_id' => $b->id, 'subscription_id' => $b->subscriptions()->first()->id, 'channel' => 'b2c', 'status' => 'confirmed', 'provider' => 'ZIGO_LOCAL', 'service_code' => 'LOCAL64000SD', 'metadata' => ['final_price' => 120]]);
         $shipment = LocalShipment::create([
             'tenant_id' => $b->id, 'tenant_operation_id' => $operation->id, 'tracking_number' => 'ZL260808PRIVATE001', 'service_code' => 'LOCAL64000SD', 'status' => 'CREATED',
@@ -205,6 +224,11 @@ final class NetworkTenantB2cTest extends TestCase
     private function quote(): array
     {
         return ['cp_origen' => '64000', 'cp_destino' => '64000', 'tipo_envio' => 'sobre', 'peso' => 1];
+    }
+
+    private function storefrontEntitlements(): array
+    {
+        return ['CUSTOMERS', 'QUOTES', 'SHIPPING', 'TRACKING', 'WHITE_LABEL'];
     }
 
     private function url(Tenant $tenant, string $path): string

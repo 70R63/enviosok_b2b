@@ -179,20 +179,16 @@ Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superad
         Route::patch('/local-shipping/services/{service}/toggle', [LocalShippingController::class, 'toggleService'])->name('local-shipping.services.toggle');
     });
 
-Route::get('/', [TenantHomeController::class, 'home'])->middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:B2C'])->name('tenant.customer.landing');
+Route::get('/', [TenantHomeController::class, 'home'])->middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:WHITE_LABEL'])->name('tenant.customer.landing');
 Route::permanentRedirect('/white-label', '/')->middleware('tenant.resolve')->name('tenant.home');
 
-Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:B2C'])->name('tenant.customer.')->group(function (): void {
+Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:CUSTOMERS'])->name('tenant.customer.')->group(function (): void {
     Route::get('/login', [CustomerAuthController::class, 'create'])->name('login.public');
     Route::get('/ingresar', [CustomerAuthController::class, 'create'])->name('login');
     Route::post('/ingresar', [CustomerAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
     Route::get('/registro', [CustomerAuthController::class, 'registration'])->name('register');
     Route::post('/registro', [CustomerAuthController::class, 'register'])->middleware('throttle:5,1')->name('register.store');
     Route::post('/salir', [CustomerAuthController::class, 'destroy'])->name('logout');
-    Route::post('/cotizar/seleccionar', [TenantB2cController::class, 'select'])->name('quote.select');
-    Route::get('/rastreo', [TenantB2cController::class, 'tracking'])->middleware('tenant.entitlement:TRACKING')->name('tracking');
-    Route::get('/rastrear', [TenantB2cController::class, 'tracking'])->name('tracking.public');
-    Route::get('/rastreo/{tracking}', [TenantB2cController::class, 'track'])->middleware('tenant.entitlement:TRACKING')->name('tracking.show');
     Route::middleware('tenant.customer')->prefix('app')->name('app.')->group(function (): void {
         Route::get('/', [CustomerPortalController::class, 'dashboard'])->name('dashboard');
         Route::get('/cotizar', [CustomerPortalController::class, 'quote'])->middleware('tenant.entitlement:SHIPPING')->name('quote');
@@ -224,11 +220,18 @@ Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:
     });
 });
 
-Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:B2C'])->name('tenant.b2c.')->group(function (): void {
-    Route::get('/cotizar', [TenantB2cController::class, 'create'])->middleware('tenant.entitlement:SHIPPING')->name('quote.create');
+Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:QUOTES'])->name('tenant.b2c.')->group(function (): void {
+    Route::get('/cotizar', [TenantB2cController::class, 'create'])->name('quote.create');
     Route::post('/cotizar', [TenantB2cController::class, 'store'])->middleware(['tenant.entitlement:SHIPPING', 'throttle:20,1'])->name('quote.store');
-    Route::get('/tracking', [TenantB2cController::class, 'tracking'])->middleware('tenant.entitlement:TRACKING')->name('tracking');
-    Route::get('/tracking/{tracking}', [TenantB2cController::class, 'track'])->middleware('tenant.entitlement:TRACKING')->name('tracking.show');
+    Route::post('/cotizar/seleccionar', [TenantB2cController::class, 'select'])->name('quote.select');
+});
+
+Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:TRACKING'])->name('tenant.b2c.')->group(function (): void {
+    Route::get('/rastrear', [TenantB2cController::class, 'tracking'])->name('tracking.public');
+    Route::get('/rastreo', [TenantB2cController::class, 'tracking'])->name('tracking.legacy');
+    Route::get('/rastreo/{tracking}', [TenantB2cController::class, 'track'])->name('tracking.legacy.show');
+    Route::get('/tracking', [TenantB2cController::class, 'tracking'])->name('tracking');
+    Route::get('/tracking/{tracking}', [TenantB2cController::class, 'track'])->name('tracking.show');
 });
 
 Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->group(function (): void {
