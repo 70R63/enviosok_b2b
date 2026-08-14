@@ -114,10 +114,11 @@ final class CustomerJourneyController extends Controller
 
     public function pickup(Request $request, string $shipment, TenantContext $context, LocalTrackingService $tracking, \App\Domain\Shipping\LastMile\DriverDispatchService $dispatch)
     {
+        abort_unless(app(\App\Domain\Network\Billing\EntitlementService::class)->has($context->tenant(), 'DRIVER'), 403);
         $profile = $request->attributes->get('customer_profile');
         $item = LocalShipment::query()->select('local_shipments.*')->join('network_tenant_operations as owned_ops','owned_ops.id','=','local_shipments.tenant_operation_id')
             ->where('local_shipments.tenant_id',$context->id())->where('owned_ops.customer_profile_id',$profile->id)->where('local_shipments.uuid',$shipment)->firstOrFail();
-        if (! in_array($item->status, ['CREATED','READY_FOR_PICKUP'], true)) throw ValidationException::withMessages(['pickup' => 'Este envío ya no permite solicitar recolección.']);
+        if ($item->status !== 'CREATED') throw ValidationException::withMessages(['pickup' => 'Este envío ya no permite solicitar recolección.']);
         try { $tracking->transition($item, 'READY_FOR_PICKUP', auth()->id(), 'Recolección solicitada.'); $dispatch->autoAssign($context->tenant(), $item->fresh(), auth()->id()); }
         catch (\DomainException $e) { throw ValidationException::withMessages(['pickup' => $e->getMessage()]); }
         return back()->with('success', 'Recolección solicitada.');

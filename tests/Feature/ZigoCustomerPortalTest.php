@@ -84,8 +84,10 @@ class ZigoCustomerPortalTest extends TestCase
             ->assertSee('Pendientes de pago')->assertSee('Nuevo envío')->assertSee('href="/app/cotizar"', false)->assertSee('customer-links', false)
             ->assertDontSee('class="z-card z-stack tenant-quote-form"', false)->assertDontSee('data-settlement-wrap="destination"', false);
         $this->get($this->url($tenant, '/app/cotizar'))->assertOk()->assertSee('Datos de origen')->assertSee('Datos de destino')
-            ->assertSee('data-complete-quote', false)->assertSee('Peso volumétrico')->assertSee('Guardar esta dirección');
-        $this->get($this->url($tenant, '/app/envios'))->assertOk()->assertSee($own->tracking_number)->assertDontSee($foreign->tracking_number);
+            ->assertSee('data-complete-quote', false)->assertSee('Peso volumétrico')->assertSee('Guardar esta dirección')
+            ->assertSee('name="origin_city"', false)->assertSee('name="destination_state"', false)
+            ->assertDontSee('name="pickup_requested"', false)->assertSee("municipalityField.value=''", false);
+        $this->get($this->url($tenant, '/app/envios'))->assertOk()->assertSee($own->tracking_number)->assertDontSee($foreign->tracking_number)->assertSee('customer-shipment-card', false);
         $this->get($this->url($tenant, '/app/envios/'.$own->uuid))->assertOk()->assertSee('Secret address');
         $senderSnapshot = $own->sender_snapshot;
         $this->get($this->url($tenant, '/app/envios/'.$own->uuid.'/guia.pdf'))->assertOk()->assertHeader('Content-Type', 'application/pdf');
@@ -140,7 +142,7 @@ class ZigoCustomerPortalTest extends TestCase
     {
         $tenant=$this->tenant('addresses');$owner=$this->customer($tenant,'address-owner@example.test');$other=$this->customer($tenant,'address-other@example.test');
         $payload=$this->addressPayload(['alias'=>'Casa','is_default_origin'=>1]);
-        $this->actingAs($owner->user)->get($this->url($tenant,'/app/direcciones'))->assertOk()->assertSee('Mis direcciones')->assertDontSee('Drivers');
+        $this->actingAs($owner->user)->get($this->url($tenant,'/app/direcciones'))->assertOk()->assertSee('Mis direcciones')->assertSee('address-card-grid', false)->assertDontSee('Drivers');
         $this->post($this->url($tenant,'/app/direcciones'),$payload)->assertRedirect();
         $address=TenantCustomerAddress::sole();
         $this->assertSame('Monterrey',$address->municipality);$this->assertSame('Nuevo León',$address->state);$this->assertTrue($address->is_default_origin);

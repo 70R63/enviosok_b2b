@@ -243,6 +243,64 @@ final class NetworkTenantB2cTest extends TestCase
         $this->post($this->url($tenant, '/cotizar'), $this->quote())->assertOk();
     }
 
+    public function test_selected_settlements_persist_in_canonical_quote_snapshot(): void
+    {
+        $tenant = $this->tenant('settlement-contract', $this->storefrontEntitlements());
+        $this->tenantService($tenant, published: true, amount: '149.50');
+
+        $this->post($this->url($tenant, '/cotizar'), $this->quote([
+            'origin_city' => 'Monterrey', 'origin_state' => 'Nuevo León',
+            'destination_city' => 'Nezahualcóyotl', 'destination_state' => 'México',
+        ]))->assertOk();
+
+        $snapshot = LocalShippingQuoteSnapshot::sole();
+        $this->assertSame('Centro', $snapshot->origin['settlement']);
+        $this->assertSame('Monterrey', $snapshot->origin['municipality']);
+        $this->assertSame('Nuevo León', $snapshot->origin['state']);
+        $this->assertSame('Benito Juárez', $snapshot->destination['settlement']);
+        $this->assertSame('Nezahualcóyotl', $snapshot->destination['municipality']);
+        $this->assertSame('México', $snapshot->destination['state']);
+    }
+
+    public function test_envelope_ignores_manipulated_weight_and_dimensions_and_box_limits_are_specific(): void
+    {
+        $tenant = $this->tenant('package-contract', $this->storefrontEntitlements());
+        $this->tenantService($tenant, published: true, amount: '149.50');
+
+        $this->post($this->url($tenant, '/cotizar'), $this->quote([
+            'peso' => 999, 'length' => 999, 'width' => 999, 'height' => 999,
+        ]))->assertOk();
+        $envelope = LocalShippingQuoteSnapshot::sole();
+        $this->assertSame('1.00', (string) $envelope->weight_kg);
+        $this->assertNull($envelope->dimensions);
+
+        foreach ([
+            ['peso' => 40.01, 'length' => 10, 'width' => 10, 'height' => 10, 'field' => 'peso', 'message' => 'El peso máximo permitido es 40 kg.'],
+            ['peso' => 5, 'length' => 61, 'width' => 10, 'height' => 10, 'field' => 'length', 'message' => 'El largo máximo permitido es 60 cm.'],
+            ['peso' => 5, 'length' => 10, 'width' => 51, 'height' => 10, 'field' => 'width', 'message' => 'El ancho máximo permitido es 50 cm.'],
+            ['peso' => 5, 'length' => 10, 'width' => 10, 'height' => 41, 'field' => 'height', 'message' => 'El alto máximo permitido es 40 cm.'],
+        ] as $case) {
+            $payload = $this->quote(array_merge($case, ['tipo_envio' => 'caja']));
+            unset($payload['field'], $payload['message']);
+            $this->post($this->url($tenant, '/cotizar'), $payload)
+                ->assertSessionHasErrors([$case['field'] => $case['message']]);
+        }
+    }
+
+    public function test_box_billable_weight_uses_volumetric_divisor_and_ceil_max(): void
+    {
+        $tenant = $this->tenant('volumetric-contract', $this->storefrontEntitlements());
+        $this->tenantService($tenant, published: true, amount: '149.50');
+
+        $this->post($this->url($tenant, '/cotizar'), $this->quote([
+            'tipo_envio' => 'caja', 'peso' => 2.2, 'length' => 40, 'width' => 30, 'height' => 20,
+        ]))->assertOk();
+
+        $snapshot = LocalShippingQuoteSnapshot::sole();
+        $this->assertSame(4.8, (40 * 30 * 20) / 5000);
+        $this->assertSame('5.00', (string) $snapshot->weight_kg);
+    }
+
     public function test_distance_quote_is_preliminary_and_exact_addresses_create_auditable_final_snapshot(): void
     {
         $tenant = $this->tenant('distance-final', $this->storefrontEntitlements());

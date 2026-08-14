@@ -6,7 +6,6 @@ use App\Domain\Network\Channels\B2C\Exceptions\TenantQuoteUnavailableException;
 use App\Domain\Network\Channels\B2C\TenantB2cQuoteService;
 use App\Domain\Network\Channels\B2C\CustomerCheckoutService;
 use App\Domain\Network\Channels\B2C\TenantCustomerAddressService;
-use App\Domain\Network\Billing\EntitlementService;
 use App\Domain\Network\Tenancy\TenantContext;
 use App\Domain\Shipping\Local\Models\LocalShipment;
 use App\Http\Controllers\Controller;
@@ -26,10 +25,15 @@ final class TenantB2cController extends Controller
     public function store(Request $request, TenantContext $context, TenantB2cQuoteService $quotes)
     {
         $customerPortal = $request->is('app/*');
+        if ($request->input('tipo_envio') === 'sobre') {
+            $request->merge(['peso' => 1, 'length' => null, 'width' => null, 'height' => null]);
+        }
         $rules = [
             'cp_origen' => ['required', 'regex:/^\d{5}$/'], 'cp_destino' => ['required', 'regex:/^\d{5}$/'],
             'origin_settlement' => ['required','string','max:160'], 'origin_address' => ['nullable','string','max:255'],
+            'origin_city' => ['nullable','string','max:160'], 'origin_state' => ['nullable','string','max:160'],
             'destination_settlement' => ['required','string','max:160'], 'destination_address' => ['nullable','string','max:255'],
+            'destination_city' => ['nullable','string','max:160'], 'destination_state' => ['nullable','string','max:160'],
             'tipo_envio' => ['required', 'in:sobre,caja'], 'peso' => ['required', 'numeric', 'min:0.1', 'max:40'],
             'length' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:60'],
             'width' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:50'],
@@ -39,12 +43,12 @@ final class TenantB2cController extends Controller
             $person.'.name'=>['required','string','max:120'], $person.'.phone'=>['required','string','max:30'], $person.'.email'=>['nullable','email','max:160'],
             $person.'.street'=>['required','string','max:180'], $person.'.exterior'=>['required','string','max:40'], $person.'.interior'=>['nullable','string','max:40'], $person.'.references'=>['nullable','string','max:300'],
         ];
-        if ($customerPortal) $rules += ['pickup_requested'=>['nullable','boolean'],'save_sender_address'=>['nullable','boolean'],'save_recipient_address'=>['nullable','boolean']];
+        if ($customerPortal) $rules += ['save_sender_address'=>['nullable','boolean'],'save_recipient_address'=>['nullable','boolean']];
         $data = $request->validate($rules, [
-            'peso.max'=>'El paquete excede los límites permitidos. Para caja se admite un máximo de 40 kg y dimensiones de hasta 60 × 50 × 40 cm.',
-            'length.max'=>'El paquete excede los límites permitidos. Para caja se admite un máximo de 40 kg y dimensiones de hasta 60 × 50 × 40 cm.',
-            'width.max'=>'El paquete excede los límites permitidos. Para caja se admite un máximo de 40 kg y dimensiones de hasta 60 × 50 × 40 cm.',
-            'height.max'=>'El paquete excede los límites permitidos. Para caja se admite un máximo de 40 kg y dimensiones de hasta 60 × 50 × 40 cm.',
+            'peso.max'=>'El peso máximo permitido es 40 kg.',
+            'length.max'=>'El largo máximo permitido es 60 cm.',
+            'width.max'=>'El ancho máximo permitido es 50 cm.',
+            'height.max'=>'El alto máximo permitido es 40 cm.',
         ]);
         $realWeight = (float) $data['peso'];
         if ($data['tipo_envio'] === 'sobre') {
@@ -59,9 +63,6 @@ final class TenantB2cController extends Controller
             $data['destination_address'] = $this->streetAddress($data['recipient']);
         }
         $tenant = $context->tenant()->load('branding');
-        if ($customerPortal && ! app(EntitlementService::class)->has($tenant, 'DRIVER')) {
-            $data['pickup_requested'] = false;
-        }
         try {
             $result = $quotes->quote($tenant, $data);
         } catch (TenantQuoteUnavailableException) {
@@ -76,7 +77,7 @@ final class TenantB2cController extends Controller
         ]);
         if ($customerPortal) {
             $operation = $result['operation'];
-            $operation->update(['customer_profile_id'=>$request->attributes->get('customer_profile')->id,'created_by_user_id'=>$request->user()->id,'metadata'=>($operation->metadata??[])+['shipping_draft'=>['sender'=>$data['sender'],'recipient'=>$data['recipient'],'pickup_requested'=>(bool)($data['pickup_requested']??false),'save_sender_address'=>(bool)($data['save_sender_address']??false),'save_recipient_address'=>(bool)($data['save_recipient_address']??false),'real_weight'=>$realWeight]]]);
+            $operation->update(['customer_profile_id'=>$request->attributes->get('customer_profile')->id,'created_by_user_id'=>$request->user()->id,'metadata'=>($operation->metadata??[])+['shipping_draft'=>['sender'=>$data['sender'],'recipient'=>$data['recipient'],'save_sender_address'=>(bool)($data['save_sender_address']??false),'save_recipient_address'=>(bool)($data['save_recipient_address']??false),'real_weight'=>$realWeight]]]);
             $addresses = \App\Domain\Network\Channels\B2C\Models\TenantCustomerAddress::where('tenant_id',$context->id())->where('customer_profile_id',$request->attributes->get('customer_profile')->id)->where('is_active',true)->orderBy('alias')->get();
         }
         return view($customerPortal ? 'tenant.b2c.quote' : 'tenant.home', ['tenant' => $tenant, 'result' => $result, 'customerPortal' => $customerPortal, 'preview'=>false,
@@ -107,7 +108,7 @@ final class TenantB2cController extends Controller
                     $draft['sender']['address'] = $snapshot->origin;
                     $draft['recipient']['address'] = $snapshot->destination;
                     $draft['package'] = ['type'=>$snapshot->package_type,'weight'=>(string)$snapshot->weight_kg,'real_weight'=>(string)($draft['real_weight']??$snapshot->weight_kg)]+($snapshot->dimensions??[]);
-                    $metadata['shipping_data'] = ['sender'=>$draft['sender'],'recipient'=>$draft['recipient'],'package'=>$draft['package'],'pickup_requested'=>(bool)($draft['pickup_requested']??false)];
+                    $metadata['shipping_data'] = ['sender'=>$draft['sender'],'recipient'=>$draft['recipient'],'package'=>$draft['package']];
                     $metadata['selected_quote']['provider'] = $option['provider'] ?? 'ZIGO Local';
                     $metadata['selected_quote']['origin'] = $snapshot->origin;
                     $metadata['selected_quote']['destination'] = $snapshot->destination;

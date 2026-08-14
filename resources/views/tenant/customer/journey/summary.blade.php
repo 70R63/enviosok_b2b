@@ -6,16 +6,9 @@
 @php($summaryDestination=data_get($checkout->quote_snapshot,'route.destination'))
 @include('tenant.customer.journey.steps',['currentStep'=>4])
 <header class="z-page-header"><div><div class="z-eyebrow">REVISA Y PAGA</div><h1>Todo listo para pagar</h1><p class="z-muted">Confirma servicio, ruta, paquete e importe.</p></div></header>
-<div class="z-detail-grid">
-<section class="z-card"><h2>Resumen del envío</h2><div class="z-stack">
-<div><div class="z-eyebrow">SERVICIO</div><strong>{{ data_get($checkout->quote_snapshot,'service','Servicio de envío') }}</strong><div class="z-muted">{{ data_get($checkout->quote_snapshot,'provider','ZIGO Local') }}</div></div>
-<div><div class="z-eyebrow">ORIGEN</div><strong>{{ is_array($summaryOrigin) ? ($summaryOrigin['address'] ?? \App\Support\Presentation\AddressPresenter::full($summaryOrigin)) : ($summaryOrigin ?: '—') }}</strong></div>
-<div><div class="z-eyebrow">DESTINO</div><strong>{{ is_array($summaryDestination) ? ($summaryDestination['address'] ?? \App\Support\Presentation\AddressPresenter::full($summaryDestination)) : ($summaryDestination ?: '—') }}</strong></div>
-<div><div class="z-eyebrow">PAQUETE</div><strong>{{ ucfirst(data_get($checkout->quote_snapshot,'package.type','Paquete')) }} · {{ data_get($checkout->quote_snapshot,'package.weight','—') }} kg facturables</strong></div>
-@if(data_get($checkout->shipping_data_snapshot,'pickup_requested'))<div class="z-alert z-alert--success">Recolección solicitada para después del pago aprobado.</div>@endif
-@if(filled($proofName))<div><div class="z-eyebrow">ENTREGA</div><strong>{{ $proofName }}</strong></div>@endif
-</div></section>
-<section class="z-card"><h2>Resumen comercial</h2><div class="journey-summary">
+<div class="checkout-summary-grid">
+<section class="z-card checkout-summary-card"><div class="z-eyebrow">RESUMEN DEL ENVÍO</div><div class="checkout-service"><div><strong>{{ data_get($checkout->quote_snapshot,'service','Servicio de envío') }}</strong><small>{{ data_get($checkout->quote_snapshot,'provider','ZIGO Local') }}</small></div>@if(filled($proofName))<span class="z-badge">{{ $proofName }}</span>@endif</div><div class="checkout-route"><div><small>Origen</small><strong>{{ is_array($summaryOrigin) ? ($summaryOrigin['address'] ?? \App\Support\Presentation\AddressPresenter::full($summaryOrigin)) : ($summaryOrigin ?: '—') }}</strong></div><span>→</span><div><small>Destino</small><strong>{{ is_array($summaryDestination) ? ($summaryDestination['address'] ?? \App\Support\Presentation\AddressPresenter::full($summaryDestination)) : ($summaryDestination ?: '—') }}</strong></div></div><div class="checkout-package"><span>Paquete</span><strong>{{ ucfirst(data_get($checkout->quote_snapshot,'package.type','Paquete')) }} · {{ data_get($checkout->quote_snapshot,'package.weight','—') }} kg facturables</strong></div></section>
+<section class="z-card checkout-summary-card"><div class="z-eyebrow">RESUMEN COMERCIAL</div><div class="journey-summary">
 <div><span>Subtotal</span><strong>${{ number_format((float)data_get($checkout->quote_snapshot,'subtotal',$checkout->shipping_amount),2) }}</strong></div>
 <div><span>IVA</span><strong>${{ number_format((float)data_get($checkout->quote_snapshot,'tax',0),2) }}</strong></div>
 @if((float)$checkout->evidence_amount>0)<div><span>Evidencia</span><strong>${{ number_format((float)$checkout->evidence_amount,2) }}</strong></div>@endif
@@ -23,3 +16,4 @@
 <p class="z-help">Disponible hasta {{ $checkout->expires_at?->format('d/m/Y H:i') }}.</p><form method="POST" action="{{ route('tenant.customer.app.checkout.continue',$checkout->uuid,false) }}">@csrf<button class="z-btn z-btn--block">Continuar al pago</button></form></section>
 </div>
 @endsection
+@push('head')<style>.checkout-summary-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:18px;align-items:start}.checkout-summary-card{display:grid;gap:16px;padding:22px}.checkout-service{display:flex;justify-content:space-between;gap:12px}.checkout-service strong,.checkout-service small{display:block}.checkout-service small{color:var(--z-muted);margin-top:3px}.checkout-route{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;padding:14px;border-radius:12px;background:var(--z-surface-subtle)}.checkout-route small,.checkout-route strong{display:block}.checkout-route small{color:var(--z-muted);margin-bottom:3px}.checkout-route strong{font-size:.88rem}.checkout-package{display:flex;justify-content:space-between;gap:14px;padding-top:12px;border-top:1px solid var(--z-border)}@media(max-width:900px){.checkout-summary-grid{grid-template-columns:1fr}}@media(max-width:620px){.checkout-route{grid-template-columns:1fr}.checkout-route>span{transform:rotate(90deg);justify-self:start}.checkout-package{align-items:flex-start;flex-direction:column}}</style>@endpush

@@ -41,7 +41,11 @@ final class CustomerPortalController extends Controller
     {
         $profile = $request->attributes->get('customer_profile');
         $item = $this->shipments($context, $profile->id)->with(['events', 'deliveryRequirement'])->where('local_shipments.uuid', $shipment)->firstOrFail();
-        return view('tenant.customer.shipment', ['tenant' => $context->tenant()->load('branding'), 'shipment' => $item]);
+        return view('tenant.customer.shipment', [
+            'tenant' => $context->tenant()->load('branding'),
+            'shipment' => $item,
+            'pickupEnabled' => app(\App\Domain\Network\Billing\EntitlementService::class)->has($context->tenant(), 'DRIVER'),
+        ]);
     }
 
     public function guide(Request $request, string $shipment, TenantContext $context, LocalGuideService $guides)
