@@ -9,11 +9,47 @@ final class ZigoDriverPwaTest extends TestCase
     public function test_central_login_manifest_offline_and_service_worker_are_host_scoped(): void
     {
         $host = config('zigo_driver.host');
-        $this->get("http://{$host}/driver/login")->assertOk()->assertSee('ZIGO DRIVER')->assertSee('by ZIGO Platform')->assertDontSee('RapidGo Driver');
-        $manifest = $this->get("http://{$host}/driver/manifest.webmanifest")->assertOk()->assertHeader('Content-Type', 'application/manifest+json');
-        $manifest->assertJsonPath('name', 'ZIGO Driver')->assertJsonPath('start_url', '/driver/')->assertJsonPath('scope', '/driver/')->assertJsonMissingPath('icons');
-        $this->get("http://{$host}/driver/offline")->assertOk()->assertSee('Sin conexión.')->assertSee('Revisa tu conexión para continuar operando.');
-        $this->get("http://{$host}/driver/service-worker.js")->assertOk()->assertHeader('Service-Worker-Allowed', '/driver/');
+        $this->assertNotSame('', $host);
+        $this->assertSame($host, parse_url((string) config('zigo_driver.url'), PHP_URL_HOST));
+
+        $this->get("https://{$host}/driver/login")->assertOk()->assertSee('ZIGO DRIVER')->assertSee('by ZIGO Platform')->assertDontSee('RapidGo Driver');
+        $manifest = $this->get("https://{$host}/driver/manifest.webmanifest")
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/manifest+json');
+        $manifest
+            ->assertJsonPath('name', 'ZIGO Driver')
+            ->assertJsonPath('short_name', 'ZIGO Driver')
+            ->assertJsonPath('start_url', '/driver/')
+            ->assertJsonPath('scope', '/driver/')
+            ->assertJsonPath('display', 'standalone')
+            ->assertJsonPath('prefer_related_applications', false)
+            ->assertJsonPath('icons.0.src', '/images/driver/zigo-driver-192.png')
+            ->assertJsonPath('icons.0.sizes', '192x192')
+            ->assertJsonPath('icons.0.type', 'image/png')
+            ->assertJsonPath('icons.0.purpose', 'any')
+            ->assertJsonPath('icons.1.src', '/images/driver/zigo-driver-512.png')
+            ->assertJsonPath('icons.1.sizes', '512x512')
+            ->assertJsonPath('icons.1.type', 'image/png')
+            ->assertJsonPath('icons.1.purpose', 'any')
+            ->assertJsonPath('icons.2.src', '/images/driver/zigo-driver-maskable-512.png')
+            ->assertJsonPath('icons.2.sizes', '512x512')
+            ->assertJsonPath('icons.2.type', 'image/png')
+            ->assertJsonPath('icons.2.purpose', 'maskable');
+
+        foreach ([
+            'images/driver/zigo-driver-192.png' => [192, 192],
+            'images/driver/zigo-driver-512.png' => [512, 512],
+            'images/driver/zigo-driver-maskable-512.png' => [512, 512],
+        ] as $path => $dimensions) {
+            $this->assertFileExists(public_path($path));
+            $this->assertSame($dimensions, array_slice(getimagesize(public_path($path)), 0, 2));
+        }
+
+        $this->get("https://{$host}/driver/offline")->assertOk()->assertSee('Sin conexión.')->assertSee('Revisa tu conexión para continuar operando.');
+        $this->get("https://{$host}/driver/service-worker.js")
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/javascript; charset=UTF-8')
+            ->assertHeader('Service-Worker-Allowed', '/driver/');
     }
 
     public function test_service_worker_contract_is_static_only_and_never_caches_mutations_or_protected_data(): void

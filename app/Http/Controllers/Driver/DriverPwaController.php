@@ -13,6 +13,12 @@ final class DriverPwaController extends Controller
             'description' => 'Operación de última milla de ZIGO Platform.',
             'start_url' => '/driver/', 'scope' => '/driver/', 'display' => 'standalone',
             'orientation' => 'portrait-primary', 'theme_color' => '#0B2445', 'background_color' => '#F1F5FA',
+            'icons' => [
+                ['src' => '/images/driver/zigo-driver-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
+                ['src' => '/images/driver/zigo-driver-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any'],
+                ['src' => '/images/driver/zigo-driver-maskable-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable'],
+            ],
+            'prefer_related_applications' => false,
             'lang' => 'es-MX', 'categories' => ['business', 'navigation'],
         ], 200, ['Content-Type' => 'application/manifest+json', 'Cache-Control' => 'public, max-age=3600']);
     }
