@@ -17,6 +17,7 @@ use App\Models\Roles\Roles;
 use App\Models\User;
 use App\Services\ZigoProviderRateService;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
@@ -83,21 +84,42 @@ final class NetworkTenantB2cTest extends TestCase
     {
         Storage::fake('public');
         $tenant = $this->tenant('premium-landing', $this->storefrontEntitlements());
-        $hero = 'tenant-branding/'.$tenant->uuid.'/hero.webp';
-        Storage::disk('public')->put($hero, 'image');
-        $tenant->branding()->create(['brand_name' => 'Premium Express', 'hero_image_path' => $hero]);
+        $hero = 'tenant-branding/'.$tenant->uuid.'/hero.png';
+        $logo = 'tenant-branding/'.$tenant->uuid.'/logo.png';
+        Storage::disk('public')->putFileAs(dirname($hero), UploadedFile::fake()->image('hero.png', 1600, 900), basename($hero));
+        Storage::disk('public')->putFileAs(dirname($logo), UploadedFile::fake()->image('logo.png', 320, 100), basename($logo));
+        $tenant->branding()->create(['brand_name' => 'Premium Express', 'hero_image_path' => $hero, 'logo_path' => $logo]);
 
         $guest = $this->get($this->url($tenant, '/'))->assertOk()
-            ->assertSee(Storage::disk('public')->url($hero), false)
+            ->assertSee('/branding/hero', false)
+            ->assertSee('/branding/logo', false)
+            ->assertDontSee(Storage::disk('public')->url($hero), false)
             ->assertSee('Iniciar sesión')->assertSee('Crear cuenta')
             ->assertSee('¿Ya tienes una guía?')->assertSee('data-landing-tracking', false)
+            ->assertSee('data-dimensions hidden', false)
+            ->assertSee('name="length"', false)->assertSee('name="width"', false)->assertSee('name="height"', false)
             ->assertDontSee('href="/#cotizar"', false);
         $guest->assertSee('action="/cotizar"', false);
 
+        foreach (['/branding/logo' => 'image/png', '/branding/hero' => 'image/png'] as $uri => $mime) {
+            $this->get($this->url($tenant, $uri))->assertOk()
+                ->assertHeader('Content-Type', $mime)
+                ->assertHeader('X-Content-Type-Options', 'nosniff');
+        }
+
         Storage::disk('public')->delete($hero);
         $this->get($this->url($tenant, '/'))->assertOk()
-            ->assertSee(asset('images/tenant-hero-fallback.svg'), false)
-            ->assertDontSee(Storage::disk('public')->url($hero), false);
+            ->assertSee('landing-visual__fallback', false)
+            ->assertDontSee('tenant-hero-fallback.svg', false)
+            ->assertDontSee('/branding/hero', false);
+        $this->get($this->url($tenant, '/branding/hero'))->assertNotFound();
+
+        $foreign = $this->tenant('premium-landing-foreign', $this->storefrontEntitlements());
+        $foreign->branding()->create(['brand_name' => 'Foreign', 'logo_path' => $logo]);
+        $this->get($this->url($foreign, '/branding/logo'))->assertNotFound();
+        $this->get($this->url($foreign, '/branding/hero'))->assertNotFound();
+        $this->get($this->url($tenant, '/branding/../../.env'))->assertNotFound();
+        $this->get($this->url($tenant, '/branding/not-allowed'))->assertNotFound();
 
         $customer = $this->user('premium-customer@test.local');
         $this->actingAs($customer)->get($this->url($tenant, '/'))->assertOk()
@@ -142,9 +164,10 @@ final class NetworkTenantB2cTest extends TestCase
         $this->tenantService($foreign, published: true, amount: '999.00');
         $this->mock(ZigoProviderRateService::class, fn (MockInterface $mock) => $mock->shouldNotReceive('getOptionsForCotizacion'));
 
-        $this->post($this->url($tenant, '/cotizar'), $this->quote())->assertOk()
+        $response = $this->post($this->url($tenant, '/cotizar'), $this->quote())->assertOk()
             ->assertSee('Entrega tenant')->assertSee('149.50')
             ->assertDontSee('999.00')->assertDontSee('FLAT')->assertDontSee('base_cost')->assertDontSee('matched_tariff');
+        $this->assertLessThan(strpos($response->getContent(), 'CÓMO FUNCIONA'), strpos($response->getContent(), 'SERVICIOS DISPONIBLES'));
         $operation = TenantOperation::firstOrFail();
         $snapshot = LocalShippingQuoteSnapshot::firstOrFail();
         $this->assertSame($tenant->id, $operation->tenant_id);

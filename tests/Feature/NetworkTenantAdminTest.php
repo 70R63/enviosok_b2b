@@ -126,7 +126,13 @@ final class NetworkTenantAdminTest extends TestCase
         Storage::disk('public')->assertExists($branding->hero_image_path);
         $this->assertStringStartsWith('tenant-branding/'.$tenant->uuid.'/', $branding->hero_image_path);
         $this->actingAs($owner)->get($this->url($tenant, '/admin'))->assertOk()
-            ->assertSee(Storage::disk('public')->url($branding->logo_path), false);
+            ->assertSee('/branding/logo', false)
+            ->assertDontSee(Storage::disk('public')->url($branding->logo_path), false);
+        $this->get($this->url($tenant, '/branding/logo'))->assertOk()->assertHeader('Content-Type', 'image/png');
+        $this->get($this->url($tenant, '/branding/hero'))->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
+        $this->actingAs($owner)->get($this->url($tenant, '/admin/configuracion'))->assertOk()
+            ->assertSee('Cambiar logo')->assertSee('Cambiar imagen principal de la landing')
+            ->assertSee('1600 × 900 px')->assertSee('/branding/hero', false);
 
         Storage::disk('public')->delete($branding->logo_path);
         $this->get($this->url($tenant, '/admin'))->assertOk()

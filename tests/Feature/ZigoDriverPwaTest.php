@@ -72,6 +72,17 @@ final class ZigoDriverPwaTest extends TestCase
         }
     }
 
+    public function test_install_button_stays_hidden_in_installed_display_mode(): void
+    {
+        $layout = file_get_contents(resource_path('views/tenant/driver/layout.blade.php'));
+
+        $this->assertStringContainsString("matchMedia('(display-mode: standalone)')", $layout);
+        $this->assertStringContainsString('window.navigator.standalone===true', $layout);
+        $this->assertStringContainsString("standaloneMedia.addEventListener?.('change'", $layout);
+        $this->assertStringContainsString("addEventListener('appinstalled',hideInstall)", $layout);
+        $this->assertStringContainsString('if(isInstalledMode()){hideInstall();return}', $layout);
+    }
+
     public function test_context_contract_never_trusts_request_tenant_id_and_logout_clears_profile(): void
     {
         $workspace = file_get_contents(app_path('Domain/Shipping/LastMile/DriverWorkspaceService.php'));

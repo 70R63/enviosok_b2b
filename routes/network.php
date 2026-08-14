@@ -21,6 +21,7 @@ use App\Http\Controllers\Tenant\TenantAuthController;
 use App\Http\Controllers\Tenant\OwnerActivationController;
 use App\Http\Controllers\Tenant\TenantSetupController;
 use App\Http\Controllers\Tenant\TenantB2cController;
+use App\Http\Controllers\Tenant\TenantBrandingAssetController;
 use App\Http\Controllers\Tenant\TenantConfigurationController;
 use App\Http\Controllers\Tenant\TenantDeliveryProofOptionController;
 use App\Http\Controllers\Tenant\TenantDriverController;
@@ -182,6 +183,12 @@ Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superad
         Route::post('/local-shipping/services', [LocalShippingController::class, 'storeService'])->name('local-shipping.services.store');
         Route::patch('/local-shipping/services/{service}/toggle', [LocalShippingController::class, 'toggleService'])->name('local-shipping.services.toggle');
     });
+
+Route::middleware('tenant.resolve')->prefix('branding')->name('tenant.branding.')->group(function (): void {
+    Route::get('/logo', [TenantBrandingAssetController::class, 'logo'])->name('logo');
+    Route::get('/hero', [TenantBrandingAssetController::class, 'hero'])->name('hero');
+    Route::get('/favicon', [TenantBrandingAssetController::class, 'favicon'])->name('favicon');
+});
 
 Route::get('/', [TenantHomeController::class, 'home'])->middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:WHITE_LABEL'])->name('tenant.customer.landing');
 Route::permanentRedirect('/white-label', '/')->middleware('tenant.resolve')->name('tenant.home');

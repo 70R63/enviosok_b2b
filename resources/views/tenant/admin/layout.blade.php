@@ -1,7 +1,7 @@
 @php($branding=$tenant->branding)
 @php($membership=app(\App\Domain\Network\Tenancy\TenantAccessService::class)->membership(auth()->user()))
 @php($safeColor=fn($value,$fallback)=>is_string($value)&&preg_match('/^#[0-9A-Fa-f]{6}$/',$value)?$value:$fallback)
-@php($logoUrl=$branding?->logo_path && Storage::disk('public')->exists($branding->logo_path) ? Storage::disk('public')->url($branding->logo_path) : null)
+@php($logoUrl=$branding?->logo_path && Storage::disk('public')->exists($branding->logo_path) ? route('tenant.branding.logo',[],false) : null)
 <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>@yield('title','Administración') · {{ $branding?->brand_name??$tenant->name }}</title>
 <link rel="stylesheet" href="{{ asset('css/zigo-design-system.css') }}"><style>
 :root{--tenant-primary:{{ $safeColor($branding?->primary_color,'#1769E0') }};--tenant-secondary:{{ $safeColor($branding?->secondary_color,'#0B2445') }};--tenant-accent:{{ $safeColor($branding?->accent_color,'#168CFF') }}}
