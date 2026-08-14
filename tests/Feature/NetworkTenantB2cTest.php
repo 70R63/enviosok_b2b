@@ -135,6 +135,19 @@ final class NetworkTenantB2cTest extends TestCase
             ->assertDontSee(route('tenant.customer.app.quote', [], false), false);
     }
 
+    public function test_landing_tagline_and_three_configurable_cards_use_only_tenant_routes(): void
+    {
+        $tenant=$this->tenant('landing-content',$this->storefrontEntitlements());
+        $defaults=$this->get($this->url($tenant,'/'))->assertOk()->assertSee('Cotización clara')->assertSee('Perfil personal')->assertSee('Seguimiento')->assertDontSee('SLOGAN-AUSENTE');
+        $tenant->branding()->create(['tagline'=>'Entregas que conectan','landing_cards'=>[
+            ['title'=>'Cotiza aquí','description'=>'Obtén opciones disponibles.','action'=>'QUOTE'],
+            ['title'=>'Crea tu perfil','description'=>'Continúa desde tu cuenta.','action'=>'REGISTER'],
+            ['title'=>'Sigue tu guía','description'=>'Consulta su avance.','action'=>'TRACKING'],
+        ]]);
+        $response=$this->get($this->url($tenant,'/'))->assertOk()->assertSee('Entregas que conectan');
+        $response->assertSee('href="/cotizar"',false)->assertSee('href="/registro"',false)->assertSee('href="/rastrear"',false)->assertDontSee('http://externo.test',false);
+    }
+
     public function test_subscription_and_entitlements_guard_channel_quote_and_tracking(): void
     {
         $suspended = $this->tenant('suspended', $this->storefrontEntitlements(), 'suspended');
@@ -399,7 +412,7 @@ final class NetworkTenantB2cTest extends TestCase
         Schema::create('network_modules', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->string('code')->unique(), $t->string('name'), $t->string('type'), $t->boolean('is_active'), $t->unsignedSmallInteger('sort_order'), $t->timestamps()]));
         Schema::create('network_tenants', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->uuid('uuid')->unique(), $t->string('name'), $t->string('slug')->unique(), $t->string('status'), $t->unsignedBigInteger('current_plan_id')->nullable(), $t->timestamps()]));
         Schema::create('network_tenant_domains', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->unsignedBigInteger('tenant_id'), $t->string('domain')->unique(), $t->string('type'), $t->string('environment'), $t->boolean('is_primary'), $t->string('status'), $t->timestamp('verified_at')->nullable(), $t->timestamps()]));
-        Schema::create('network_tenant_brandings', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->unsignedBigInteger('tenant_id')->unique(), $t->string('brand_name')->nullable(), $t->string('logo_path')->nullable(), $t->string('hero_image_path')->nullable(), $t->string('primary_color')->nullable(), $t->string('secondary_color')->nullable(), $t->string('accent_color')->nullable(), $t->string('favicon_path')->nullable(), $t->string('support_email')->nullable(), $t->string('support_phone')->nullable(), $t->timestamps()]));
+        Schema::create('network_tenant_brandings', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->unsignedBigInteger('tenant_id')->unique(), $t->string('brand_name')->nullable(), $t->string('tagline',120)->nullable(), $t->string('logo_path')->nullable(), $t->string('hero_image_path')->nullable(), $t->string('primary_color')->nullable(), $t->string('secondary_color')->nullable(), $t->string('accent_color')->nullable(), $t->string('favicon_path')->nullable(), $t->string('support_email')->nullable(), $t->string('support_phone')->nullable(), $t->json('landing_cards')->nullable(), $t->timestamps()]));
         Schema::create('network_tenant_memberships', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->unsignedBigInteger('tenant_id'), $t->unsignedBigInteger('user_id'), $t->string('role'), $t->string('status'), $t->timestamps()]));
         Schema::create('network_subscriptions', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->uuid('uuid')->unique(), $t->unsignedBigInteger('tenant_id'), $t->unsignedBigInteger('plan_id'), $t->string('status'), $t->unsignedInteger('operations_limit')->nullable(), $t->timestamp('started_at'), $t->timestamp('current_period_start'), $t->timestamp('current_period_end'), $t->timestamp('trial_ends_at')->nullable(), $t->timestamp('grace_ends_at')->nullable(), $t->timestamp('canceled_at')->nullable(), $t->timestamp('ended_at')->nullable(), $t->timestamps()]));
         Schema::create('network_entitlements', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->unsignedBigInteger('subscription_id'), $t->unsignedBigInteger('tenant_id'), $t->unsignedBigInteger('module_id'), $t->string('code'), $t->boolean('is_enabled'), $t->unsignedInteger('limit_value')->nullable(), $t->string('source'), $t->timestamps()]));

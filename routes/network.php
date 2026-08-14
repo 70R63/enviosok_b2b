@@ -216,7 +216,7 @@ Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:
         Route::delete('/direcciones/{address}', [CustomerAddressController::class, 'destroy'])->name('addresses.destroy');
         Route::get('/perfil', [CustomerPortalController::class, 'profile'])->name('profile');
         Route::patch('/perfil', [CustomerPortalController::class, 'updateProfile'])->name('profile.update');
-        Route::get('/ayuda', [CustomerPortalController::class, 'support'])->name('support');
+        Route::get('/ayuda', [CustomerSupportController::class, 'index'])->name('support');
         Route::get('/ayuda/tickets', [CustomerSupportController::class, 'index'])->name('support.tickets');
         Route::get('/ayuda/tickets/nuevo', [CustomerSupportController::class, 'create'])->name('support.create');
         Route::post('/ayuda/tickets', [CustomerSupportController::class, 'store'])->name('support.store');

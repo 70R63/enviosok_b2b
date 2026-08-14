@@ -158,6 +158,17 @@ final class NetworkTenantAdminTest extends TestCase
         $this->assertNull($tenant->fresh()->branding);
     }
 
+    public function test_tenant_admin_configures_tagline_and_exactly_three_allowlisted_landing_cards(): void
+    {
+        [$tenant,$owner]=$this->tenantOwner('landing-cards');
+        $cards=[['title'=>'Uno','description'=>'Primera','action'=>'QUOTE'],['title'=>'Dos','description'=>'Segunda','action'=>'REGISTER'],['title'=>'Tres','description'=>'Tercera','action'=>'TRACKING']];
+        $this->actingAs($owner)->patch($this->url($tenant,'/admin/configuracion'),['tagline'=>'Servicio cercano','landing_cards'=>$cards])->assertRedirect();
+        $this->assertSame('Servicio cercano',$tenant->fresh()->branding->tagline);
+        $this->assertSame($cards,$tenant->fresh()->branding->landing_cards);
+        $this->patch($this->url($tenant,'/admin/configuracion'),['landing_cards'=>array_replace($cards,[0=>['title'=>'Ataque','description'=>'No permitido','action'=>'https://externo.test']])])->assertSessionHasErrors('landing_cards.0.action');
+        $this->patch($this->url($tenant,'/admin/configuracion'),['landing_cards'=>array_slice($cards,0,2)])->assertSessionHasErrors('landing_cards');
+    }
+
     public function test_configuration_rejects_invalid_colors_svg_and_non_images(): void
     {
         Storage::fake('public');

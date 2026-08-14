@@ -6,6 +6,17 @@
     $heroUrl = $branding?->hero_image_path && Storage::disk('public')->exists($branding->hero_image_path) ? route('tenant.branding.hero', [], false) : null;
     $faviconUrl = $branding?->favicon_path && Storage::disk('public')->exists($branding->favicon_path) ? route('tenant.branding.favicon', [], false) : null;
     $supportUrl = $branding?->support_email ? 'mailto:'.$branding->support_email : '#faq';
+    $defaultCards = [
+        ['title'=>'Cotización clara','description'=>'Consulta opciones y precios disponibles según los datos de tu envío.','action'=>'QUOTE'],
+        ['title'=>'Perfil personal','description'=>'Consulta tus envíos, guías y seguimiento desde tu cuenta.','action'=>'REGISTER'],
+        ['title'=>'Seguimiento','description'=>'Consulta el estado de una guía desde la superficie pública del tenant.','action'=>'TRACKING'],
+    ];
+    $landingCards = is_array($branding?->landing_cards) && count($branding->landing_cards) === 3 ? $branding->landing_cards : $defaultCards;
+    $cardActions = [
+        'QUOTE'=>[route('tenant.b2c.quote.create',[],false),'Cotizar envío →'],
+        'REGISTER'=>[route('tenant.customer.register',[],false),'Crear cuenta →'],
+        'TRACKING'=>[route('tenant.b2c.tracking.public',[],false),'Rastrear envío →'],
+    ];
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -35,7 +46,7 @@
     <header class="top-header">
         <div class="nav">
             <a href="/" class="brand">
-                <div class="brand-logo-frame">@if($logoUrl)<img src="{{ $logoUrl }}" alt="{{ $brand }}" class="brand-logo">@else<span class="brand-name">{{ $brand }}</span>@endif</div>
+                <div class="brand-logo-frame">@if($logoUrl)<img src="{{ $logoUrl }}" alt="{{ $brand }}" class="brand-logo">@else<span class="brand-name">{{ $brand }}</span>@endif</div>@if(filled($branding?->tagline))<span class="brand-tagline">{{ $branding->tagline }}</span>@endif
             </a>
             <button type="button" class="mobile-nav-toggle" aria-label="Abrir menú" aria-controls="main-navigation" aria-expanded="false">☰</button>
             <nav class="main-nav" id="main-navigation">
@@ -83,7 +94,7 @@
 
     <section class="business-types"><div class="section-title"><h2>Cómo funciona</h2><h3>Tu envío, de principio a fin</h3><p>Sigue el journey existente para cotizar, elegir y completar tu envío.</p></div><div class="business-grid"><div class="business-card"><span class="business-step">PASOS 1 Y 2</span><h3>Cotiza y elige</h3><p>Captura los datos del paquete y selecciona el servicio disponible.</p></div><div class="business-card"><span class="business-step">PASOS 3 Y 4</span><h3>Ingresa y paga</h3><p>Inicia sesión o crea tu cuenta, completa el envío y revisa el total.</p></div><div class="business-card"><span class="business-step">PASOS 5 Y 6</span><h3>Obtén tu guía y rastrea</h3><p>Descarga la guía y consulta el avance de tu envío.</p></div></div></section>
 
-    <section class="solutions-section"><div class="section-container"><h2>Todo para tus envíos en un solo lugar</h2><div class="solutions-grid"><div class="solution-card"><h3>Cotización clara</h3><p>Consulta opciones y precios disponibles según los datos de tu envío.</p><a href="#cotizar">Cotizar envío →</a></div><div class="solution-card"><h3>Perfil personal</h3><p>Consulta tus envíos, guías y seguimiento desde tu cuenta.</p><a href="{{ route('tenant.customer.register',[],false) }}">Crear cuenta →</a></div><div class="solution-card"><h3>Seguimiento</h3><p>Consulta el estado de una guía desde la superficie pública del tenant.</p><a href="{{ route('tenant.b2c.tracking.public',[],false) }}">Rastrear envío →</a></div></div></div></section>
+    <section class="solutions-section"><div class="section-container"><h2>Todo para tus envíos en un solo lugar</h2><div class="solutions-grid">@foreach($landingCards as $card)<div class="solution-card"><h3>{{ $card['title'] }}</h3><p>{{ $card['description'] }}</p>@if(isset($cardActions[$card['action']]))<a href="{{ $cardActions[$card['action']][0] }}">{{ $cardActions[$card['action']][1] }}</a>@endif</div>@endforeach</div></div></section>
 
     <section class="faq-section" id="faq"><h2>Preguntas frecuentes</h2><div class="faq-grid"><div class="faq-item"><h3>¿Puedo cotizar sin registrarme?</h3><p>Sí. Puedes obtener opciones como visitante y tu cotización se conserva al iniciar sesión o crear una cuenta.</p></div><div class="faq-item"><h3>¿Qué tipo de envío puedo cotizar?</h3><p>Puedes seleccionar Sobre o Caja. Las dimensiones se solicitan únicamente para Caja.</p></div><div class="faq-item"><h3>¿Dónde consulto mi guía?</h3><p>Después de completar el pago y generarse el envío podrás descargar la guía desde tu cuenta.</p></div><div class="faq-item"><h3>¿Cómo doy seguimiento?</h3><p>Usa la opción Rastrear e ingresa el número de guía de tu envío.</p></div></div></section>
 
