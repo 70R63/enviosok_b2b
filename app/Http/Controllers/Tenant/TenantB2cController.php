@@ -69,7 +69,7 @@ final class TenantB2cController extends Controller
         }
         $request->session()->put('tenant_customer.pending_quote', ['tenant_id' => $context->id(), 'operation_uuid' => $operation->uuid]);
         $request->session()->put('url.intended', '/app/envio/nuevo');
-        return redirect('/ingresar')->with('status', 'Inicia sesión o crea tu cuenta para continuar con este servicio.');
+        return redirect('/ingresar')->with('status', 'Tu cotización está guardada. Inicia sesión o crea tu cuenta para continuar.');
     }
 
     public function postal(string $postalCode, ZigoPostalCodeService $postal){$result=$postal->lookup($postalCode);return response()->json($result,$result['status']??200);}
