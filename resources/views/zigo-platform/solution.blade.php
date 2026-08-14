@@ -2,7 +2,7 @@
 @section('title', 'Tu solución | ZIGO Platform')
 @section('content')
 <div class="wizard"><div class="steps"><span class="step active"></span><span class="step active"></span><span class="step"></span><span class="step"></span></div>
-<div class="card"><div class="eyebrow">Paso 2 de 4</div><h1>Tu plan</h1>
+<div class="card"><div class="eyebrow">Paso 2 de 4</div><h1>Confirma la solución para tu negocio</h1><p class="muted">Revisa capacidades, operación incluida y periodicidad antes de continuar.</p>
 @if($errors->any())<div class="errors">{{ $errors->first() }}</div>@endif
 @if(!$offer)
 <div class="empty-state"><h2>Estamos preparando nuestras opciones comerciales</h2><p class="muted">Aún no hay planes disponibles para continuar esta solicitud.</p><a class="btn btn-secondary" href="{{ route('zigo-platform.pricing') }}">Volver a precios</a></div>

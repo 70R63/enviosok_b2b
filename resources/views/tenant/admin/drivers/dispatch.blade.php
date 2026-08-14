@@ -1,16 +1,7 @@
 @extends('tenant.admin.layout')
-@section('title','Recolecciones pendientes')
+@section('title','Recolecciones y despacho')
 @section('content')
-<div class="eyebrow">DISPATCH</div><h1>Recolecciones pendientes</h1>
-<section class="card table-wrap"><table><thead><tr><th>Tracking</th><th>Servicio</th><th>Origen</th><th>Destino</th><th>Solicitada</th><th>Estado</th><th>Asignación</th></tr></thead><tbody>
-@forelse($shipments as $shipment)
-<tr><td><a href="{{ route('tenant.admin.operations.show',$shipment->operation->uuid) }}"><code>{{ $shipment->tracking_number }}</code></a></td><td>{{ $shipment->service_code }}</td><td>CP {{ $shipment->sender_snapshot['postal_code'] ?? '—' }}</td><td>CP {{ $shipment->recipient_snapshot['postal_code'] ?? '—' }}</td><td>{{ optional($shipment->events->first()?->occurred_at)->format('d/m/Y H:i') ?? '—' }}</td><td>{{ $shipment->status }}</td><td>
-@if($shipment->activeDriverAssignment)
-Asignado @if($canManage) · {{ $shipment->activeDriverAssignment->driverProfile->user->name }} @endif
-@else
-Sin asignar
-@endif
-</td></tr>
-@empty<tr><td colspan="7">No hay recolecciones pendientes.</td></tr>@endforelse
-</tbody></table></section>{{ $shipments->links() }}
+<header class="z-page-header"><div><div class="z-eyebrow">ÚLTIMA MILLA</div><h1>Recolecciones y despacho</h1><p class="z-muted">Da seguimiento a solicitudes listas para recolección, su asignación y motorista responsable.</p></div><span class="z-badge">{{ $shipments->total() }} pendientes</span></header>
+@if($shipments->isEmpty())<section class="z-card z-empty"><div class="z-empty__icon"><x-zigo.icon name="truck" /></div><h2>No hay recolecciones pendientes</h2><p>Cuando un envío creado solicite recolección aparecerá aquí para seguimiento y asignación.</p><a class="z-btn z-btn--outline" href="{{ route('tenant.admin.operations.index',[],false) }}">Revisar operaciones</a></section>@else<section class="z-card"><div class="z-table-wrap"><table class="z-table"><thead><tr><th>Tracking</th><th>Ruta</th><th>Solicitada</th><th>Estado</th><th>Motorista</th></tr></thead><tbody>@foreach($shipments as $shipment)<tr><td><a href="{{ route('tenant.admin.operations.show',$shipment->operation->uuid,false) }}"><strong>{{ $shipment->tracking_number }}</strong></a><small class="z-muted">{{ $shipment->service_code }}</small></td><td>CP {{ data_get($shipment->sender_snapshot,'postal_code','—') }} → CP {{ data_get($shipment->recipient_snapshot,'postal_code','—') }}</td><td>{{ optional($shipment->events->first()?->occurred_at)->format('d/m/Y H:i') ?? '—' }}</td><td><span class="z-badge z-badge--warning">Lista para recolección</span></td><td>@if($shipment->activeDriverAssignment)<strong>Asignado</strong>@if($canManage)<small class="z-muted">{{ $shipment->activeDriverAssignment->driverProfile->user->name }}</small>@endif @else<span class="z-badge z-badge--muted">Sin asignar</span>@endif</td></tr>@endforeach</tbody></table></div></section>{{ $shipments->links() }}@endif
+@push('styles')<style>.z-table td small{display:block;margin-top:.2rem}</style>@endpush
 @endsection

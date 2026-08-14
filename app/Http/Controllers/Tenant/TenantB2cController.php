@@ -26,11 +26,18 @@ final class TenantB2cController extends Controller
             'cp_origen' => ['required', 'regex:/^\d{5}$/'], 'cp_destino' => ['required', 'regex:/^\d{5}$/'],
             'origin_settlement' => ['required','string','max:160'], 'origin_address' => ['nullable','string','max:255'],
             'destination_settlement' => ['required','string','max:160'], 'destination_address' => ['nullable','string','max:255'],
-            'tipo_envio' => ['required', 'in:sobre,caja'], 'peso' => ['required', 'numeric', 'min:0.1', 'max:70'],
-            'length' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:300'],
-            'width' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:300'],
-            'height' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:300'],
+            'tipo_envio' => ['required', 'in:sobre,caja'], 'peso' => ['required', 'numeric', 'min:0.1', 'max:40'],
+            'length' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:60'],
+            'width' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:50'],
+            'height' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:40'],
         ]);
+        if ($data['tipo_envio'] === 'sobre') {
+            $data['peso'] = 1;
+            $data['length'] = $data['width'] = $data['height'] = null;
+        } else {
+            $volumetric = ((float) $data['length'] * (float) $data['width'] * (float) $data['height']) / 5000;
+            $data['peso'] = (float) ceil(max((float) $data['peso'], $volumetric));
+        }
         $tenant = $context->tenant()->load('branding');
         try {
             $result = $quotes->quote($tenant, $data);

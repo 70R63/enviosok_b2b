@@ -20,12 +20,17 @@ use Illuminate\Support\Facades\Schema;
 
 final class TenantOperationController extends Controller
 {
-    public function index(TenantContext $context)
+    public function index(Request $request, TenantContext $context)
     {
         $this->authorizeOperator($context);
         $tenant = $context->tenant()->load('branding');
 
-        return view('tenant.admin.operations', ['tenant' => $tenant, 'operations' => TenantOperation::where('tenant_id', $tenant->id)->latest()->paginate(30)]);
+        $query = TenantOperation::where('tenant_id', $tenant->id);
+        if (Schema::hasTable('tenant_customer_checkouts')) $query->with('customerCheckout');
+        $query->when($request->string('status')->toString(), fn ($q, $status) => $q->where('status', $status));
+        $query->when($request->string('search')->toString(), fn ($q, $search) => $q->where(fn ($nested) => $nested->where('uuid', 'like', "%{$search}%")->orWhere('external_reference', 'like', "%{$search}%")));
+        if (Schema::hasTable('tenant_customer_checkouts') && $request->filled('payment')) $query->whereHas('customerCheckout', fn ($q) => $q->where('payment_status', $request->string('payment')->toString()));
+        return view('tenant.admin.operations', ['tenant' => $tenant, 'operations' => $query->latest()->paginate(30)->withQueryString()]);
     }
 
     public function confirm(string $operation, TenantContext $context, TenantOperationService $service)
@@ -51,6 +56,8 @@ final class TenantOperationController extends Controller
 
         return view('tenant.admin.operation', [
             'tenant' => $context->tenant()->load('branding'), 'operation' => $item, 'shipment' => $shipment,
+            'canConfirm' => $item->status === 'quoted' && (! $item->customerCheckout || $item->customerCheckout->payment_status === 'APPROVED'),
+            'canGenerateShipment' => $item->status === 'confirmed' && strtoupper((string) $item->provider) === 'ZIGO_LOCAL' && (! $item->customerCheckout || $item->customerCheckout->payment_status === 'APPROVED'),
             'drivers' => $shipment && $shipment->status === 'READY_FOR_PICKUP'
                 ? app(\App\Domain\Shipping\LastMile\DriverDispatchService::class)->manualCandidates($context->tenant(), $shipment)
                 : collect(),
@@ -82,6 +89,8 @@ final class TenantOperationController extends Controller
     {
         $this->authorizeOperator($context);
         $item = TenantOperation::where('tenant_id', $context->tenant()->id)->where('uuid', $operation)->firstOrFail();
+        $checkout = Schema::hasTable('tenant_customer_checkouts') ? $item->customerCheckout()->first() : null;
+        abort_unless($item->status === 'confirmed' && strtoupper((string) $item->provider) === 'ZIGO_LOCAL' && (! $checkout || $checkout->payment_status === 'APPROVED'), 422, 'La operación no está lista para generar guía.');
         $data = $request->validate([
             'sender.name' => 'required|max:120', 'sender.address' => 'required|max:300', 'sender.postal_code' => 'required|regex:/^\d{5}$/', 'sender.phone' => 'nullable|max:30',
             'recipient.name' => 'required|max:120', 'recipient.address' => 'required|max:300', 'recipient.postal_code' => 'required|regex:/^\d{5}$/', 'recipient.phone' => 'nullable|max:30',

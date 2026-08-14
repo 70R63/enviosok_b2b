@@ -1,8 +1,7 @@
 @extends('layouts.zigo-platform')
 @section('title', 'Precios | ZIGO Platform')
 @section('content')
-<div class="eyebrow">Planes ZIGO Platform</div><h1>Elige una oferta para tu operación</h1>
-<p class="lead">Compara capacidades. Todos los importes provienen del catálogo comercial vigente.</p>
+<header class="section-heading"><div class="eyebrow">Planes ZIGO Platform</div><h1>Una solución alineada con tu operación</h1><p class="lead">Compara capacidades, operación incluida y periodicidad con información directa del catálogo comercial vigente.</p></header>
 @if($offers->isEmpty())
     <div class="card empty-state"><h2>Estamos preparando nuestras opciones comerciales</h2><p class="muted">Podemos ayudarte a identificar la solución adecuada para tu operación.</p><a class="btn btn-primary" href="{{ route('landing.empresas') }}">Hablar con un asesor</a></div>
 @else
