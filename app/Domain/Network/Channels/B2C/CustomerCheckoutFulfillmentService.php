@@ -3,13 +3,14 @@
 namespace App\Domain\Network\Channels\B2C;
 
 use App\Domain\Network\Channels\B2C\Models\TenantCustomerCheckout;
-use App\Domain\Shipping\Local\LocalShipmentService;
+use App\Domain\Shipping\Local\{LocalShipmentService,LocalTrackingService};
+use App\Domain\Shipping\LastMile\DriverDispatchService;
 use App\Domain\Shipping\Local\Models\LocalShipment;
 use Illuminate\Support\Facades\DB;
 
 final class CustomerCheckoutFulfillmentService
 {
-    public function __construct(private TenantOperationService $operations, private LocalShipmentService $shipments) {}
+    public function __construct(private TenantOperationService $operations, private LocalShipmentService $shipments, private LocalTrackingService $tracking, private DriverDispatchService $dispatch) {}
 
     /** Entry point reserved for a provider-verified APPROVED payment event. It has no web/customer route in ZN-UX-04. */
     public function approve(TenantCustomerCheckout $checkout, string $provider, string $reference): LocalShipment
@@ -30,7 +31,12 @@ final class CustomerCheckoutFulfillmentService
             $data = $locked->shipping_data_snapshot;
             $data['pricing'] = ['shipping_amount' => (float) $locked->shipping_amount, 'evidence_amount' => (float) $locked->evidence_amount, 'final_price' => (float) $locked->total_amount, 'currency' => $locked->currency];
             $data['delivery_requirement_snapshot'] = $locked->proof_option_snapshot;
-            return $this->shipments->create($locked->tenant, $operation, $data, $locked->customerProfile->user_id);
+            $shipment = $this->shipments->create($locked->tenant, $operation, $data, $locked->customerProfile->user_id);
+            if (($data['pickup_requested'] ?? false) && $shipment->status === 'CREATED') {
+                $this->tracking->transition($shipment, 'READY_FOR_PICKUP', $locked->customerProfile->user_id, 'Recolección solicitada después de pago aprobado.');
+                $this->dispatch->autoAssign($locked->tenant, $shipment->fresh(), $locked->customerProfile->user_id);
+            }
+            return $shipment->fresh();
         });
     }
 }

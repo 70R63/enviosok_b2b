@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Tenant;
 
 use App\Domain\Network\Channels\B2C\Exceptions\TenantQuoteUnavailableException;
 use App\Domain\Network\Channels\B2C\TenantB2cQuoteService;
+use App\Domain\Network\Channels\B2C\CustomerCheckoutService;
+use App\Domain\Network\Channels\B2C\TenantCustomerAddressService;
+use App\Domain\Network\Billing\EntitlementService;
 use App\Domain\Network\Tenancy\TenantContext;
 use App\Domain\Shipping\Local\Models\LocalShipment;
 use App\Http\Controllers\Controller;
@@ -22,7 +25,8 @@ final class TenantB2cController extends Controller
 
     public function store(Request $request, TenantContext $context, TenantB2cQuoteService $quotes)
     {
-        $data = $request->validate([
+        $customerPortal = $request->is('app/*');
+        $rules = [
             'cp_origen' => ['required', 'regex:/^\d{5}$/'], 'cp_destino' => ['required', 'regex:/^\d{5}$/'],
             'origin_settlement' => ['required','string','max:160'], 'origin_address' => ['nullable','string','max:255'],
             'destination_settlement' => ['required','string','max:160'], 'destination_address' => ['nullable','string','max:255'],
@@ -30,7 +34,19 @@ final class TenantB2cController extends Controller
             'length' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:60'],
             'width' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:50'],
             'height' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:40'],
+        ];
+        if ($customerPortal) foreach (['sender','recipient'] as $person) $rules += [
+            $person.'.name'=>['required','string','max:120'], $person.'.phone'=>['required','string','max:30'], $person.'.email'=>['nullable','email','max:160'],
+            $person.'.street'=>['required','string','max:180'], $person.'.exterior'=>['required','string','max:40'], $person.'.interior'=>['nullable','string','max:40'], $person.'.references'=>['nullable','string','max:300'],
+        ];
+        if ($customerPortal) $rules += ['pickup_requested'=>['nullable','boolean'],'save_sender_address'=>['nullable','boolean'],'save_recipient_address'=>['nullable','boolean']];
+        $data = $request->validate($rules, [
+            'peso.max'=>'El paquete excede los límites permitidos. Para caja se admite un máximo de 40 kg y dimensiones de hasta 60 × 50 × 40 cm.',
+            'length.max'=>'El paquete excede los límites permitidos. Para caja se admite un máximo de 40 kg y dimensiones de hasta 60 × 50 × 40 cm.',
+            'width.max'=>'El paquete excede los límites permitidos. Para caja se admite un máximo de 40 kg y dimensiones de hasta 60 × 50 × 40 cm.',
+            'height.max'=>'El paquete excede los límites permitidos. Para caja se admite un máximo de 40 kg y dimensiones de hasta 60 × 50 × 40 cm.',
         ]);
+        $realWeight = (float) $data['peso'];
         if ($data['tipo_envio'] === 'sobre') {
             $data['peso'] = 1;
             $data['length'] = $data['width'] = $data['height'] = null;
@@ -38,7 +54,14 @@ final class TenantB2cController extends Controller
             $volumetric = ((float) $data['length'] * (float) $data['width'] * (float) $data['height']) / 5000;
             $data['peso'] = (float) ceil(max((float) $data['peso'], $volumetric));
         }
+        if ($customerPortal) {
+            $data['origin_address'] = $this->streetAddress($data['sender']);
+            $data['destination_address'] = $this->streetAddress($data['recipient']);
+        }
         $tenant = $context->tenant()->load('branding');
+        if ($customerPortal && ! app(EntitlementService::class)->has($tenant, 'DRIVER')) {
+            $data['pickup_requested'] = false;
+        }
         try {
             $result = $quotes->quote($tenant, $data);
         } catch (TenantQuoteUnavailableException) {
@@ -51,10 +74,17 @@ final class TenantB2cController extends Controller
             'tenant_id' => $tenant->id, 'operation_uuid' => $result['operation']->uuid,
             'options' => collect($result['options'])->values()->all(),
         ]);
-        return view($request->is('app/*') ? 'tenant.b2c.quote' : 'tenant.home', ['tenant' => $tenant, 'result' => $result, 'customerPortal' => $request->is('app/*'), 'preview'=>false]);
+        if ($customerPortal) {
+            $operation = $result['operation'];
+            $operation->update(['customer_profile_id'=>$request->attributes->get('customer_profile')->id,'created_by_user_id'=>$request->user()->id,'metadata'=>($operation->metadata??[])+['shipping_draft'=>['sender'=>$data['sender'],'recipient'=>$data['recipient'],'pickup_requested'=>(bool)($data['pickup_requested']??false),'save_sender_address'=>(bool)($data['save_sender_address']??false),'save_recipient_address'=>(bool)($data['save_recipient_address']??false),'real_weight'=>$realWeight]]]);
+            $addresses = \App\Domain\Network\Channels\B2C\Models\TenantCustomerAddress::where('tenant_id',$context->id())->where('customer_profile_id',$request->attributes->get('customer_profile')->id)->where('is_active',true)->orderBy('alias')->get();
+        }
+        return view($customerPortal ? 'tenant.b2c.quote' : 'tenant.home', ['tenant' => $tenant, 'result' => $result, 'customerPortal' => $customerPortal, 'preview'=>false,
+            'originAddresses'=>$customerPortal?$addresses->whereIn('address_type',['origin','both'])->values():collect(), 'destinationAddresses'=>$customerPortal?$addresses->whereIn('address_type',['destination','both'])->values():collect(),
+            'pickupEnabled'=>$customerPortal && app(\App\Domain\Network\Billing\EntitlementService::class)->has($tenant,'DRIVER')]);
     }
 
-    public function select(Request $request, TenantContext $context)
+    public function select(Request $request, TenantContext $context, CustomerCheckoutService $checkouts, TenantCustomerAddressService $addresses)
     {
         $data = $request->validate(['operation_uuid' => ['required', 'uuid'], 'option' => ['required', 'integer', 'min:0']]);
         $quote = $request->session()->get('tenant_customer.quote_result');
@@ -65,13 +95,48 @@ final class TenantB2cController extends Controller
         $operation = TenantOperation::where('tenant_id', $context->id())->where('uuid', $data['operation_uuid'])->where('status', 'quoted')->firstOrFail();
         $snapshot=LocalShippingQuoteSnapshot::where('tenant_id',$context->id())->where('uuid',$option['snapshot_uuid'])->where('expires_at','>',now())->firstOrFail();
         $preliminary = (bool) data_get($snapshot->matched_tariff, '_quote_context.preliminary', false);
-        $metadata=$operation->metadata??[];$metadata['selected_quote_snapshot_uuid']=$snapshot->uuid;$metadata['preliminary_quote_snapshot_uuid']=$preliminary?$snapshot->uuid:null;$metadata['selected_quote']=['service'=>$option['service'],'price'=>(string)$snapshot->amount,'currency'=>$snapshot->currency,'preliminary'=>$preliminary];$metadata['final_price']=$preliminary?null:(string)$snapshot->amount;$metadata['origin_postal_code']=$snapshot->origin['postal_code'];$metadata['destination_postal_code']=$snapshot->destination['postal_code'];$metadata['quoted_package']=['type'=>$snapshot->package_type,'weight'=>(string)$snapshot->weight_kg]+($snapshot->dimensions??[]);
+        $commercial = data_get($snapshot->matched_tariff, '_commercial', ['subtotal'=>(string)$snapshot->amount,'tax'=>'0.00','total'=>(string)$snapshot->amount]);
+        $metadata=$operation->metadata??[];$metadata['selected_quote_snapshot_uuid']=$snapshot->uuid;$metadata['preliminary_quote_snapshot_uuid']=$preliminary?$snapshot->uuid:null;$metadata['selected_quote']=['service'=>$option['service'],'provider'=>$option['provider']??'ZIGO Local','subtotal'=>$commercial['subtotal'],'tax'=>$commercial['tax'],'price'=>$commercial['total'],'currency'=>$snapshot->currency,'preliminary'=>$preliminary];$metadata['final_price']=$preliminary?null:(string)$snapshot->amount;$metadata['origin_postal_code']=$snapshot->origin['postal_code'];$metadata['destination_postal_code']=$snapshot->destination['postal_code'];$metadata['quoted_package']=['type'=>$snapshot->package_type,'weight'=>(string)$snapshot->weight_kg]+($snapshot->dimensions??[]);
         $operation->update(['provider'=>'ZIGO_LOCAL','service_code'=>$option['service_code'],'metadata'=>$metadata]);
         if (auth()->check()) {
             $profile = TenantCustomerProfile::where('tenant_id', $context->id())->where('user_id', auth()->id())->where('status', 'active')->first();
             if ($profile) {
-                $operation->update(['customer_profile_id' => $profile->id, 'created_by_user_id' => auth()->id()]);
+                $metadata = $operation->fresh()->metadata ?? [];
+                $draft = $metadata['shipping_draft'] ?? null;
+                if (is_array($draft)) {
+                    $draft['sender']['address'] = $snapshot->origin;
+                    $draft['recipient']['address'] = $snapshot->destination;
+                    $draft['package'] = ['type'=>$snapshot->package_type,'weight'=>(string)$snapshot->weight_kg,'real_weight'=>(string)($draft['real_weight']??$snapshot->weight_kg)]+($snapshot->dimensions??[]);
+                    $metadata['shipping_data'] = ['sender'=>$draft['sender'],'recipient'=>$draft['recipient'],'package'=>$draft['package'],'pickup_requested'=>(bool)($draft['pickup_requested']??false)];
+                    $metadata['selected_quote']['provider'] = $option['provider'] ?? 'ZIGO Local';
+                    $metadata['selected_quote']['origin'] = $snapshot->origin;
+                    $metadata['selected_quote']['destination'] = $snapshot->destination;
+                    foreach (['sender' => 'origin', 'recipient' => 'destination'] as $person => $addressType) {
+                        if (! ($draft['save_'.$person.'_address'] ?? false)) continue;
+                        $route = $draft[$person]['address'];
+                        $addresses->save($context->tenant(), $profile, [
+                            'address_type' => $addressType,
+                            'alias' => ucfirst($addressType).' · '.$draft[$person]['name'],
+                            'contact_name' => $draft[$person]['name'],
+                            'phone' => $draft[$person]['phone'],
+                            'email' => $draft[$person]['email'] ?? null,
+                            'street' => $draft[$person]['street'],
+                            'exterior' => $draft[$person]['exterior'],
+                            'interior' => $draft[$person]['interior'] ?? null,
+                            'postal_code' => $route['postal_code'],
+                            'settlement' => $route['settlement'],
+                            'references' => $draft[$person]['references'] ?? null,
+                            'is_default_origin' => false,
+                            'is_default_destination' => false,
+                        ]);
+                    }
+                }
+                $operation->update(['customer_profile_id' => $profile->id, 'created_by_user_id' => auth()->id(), 'metadata'=>$metadata]);
                 $request->session()->put('tenant_customer.active_operation', $operation->uuid);
+                if (is_array($draft)) {
+                    $checkout = $checkouts->create($context->tenant(), $profile, $operation->fresh());
+                    return redirect('/app/checkout/'.$checkout->uuid.'/resumen')->with('success', 'Servicio seleccionado. Revisa los datos antes de pagar.');
+                }
                 return redirect('/app/envio/nuevo')->with('success', 'Servicio seleccionado. Completa los datos del envío.');
             }
         }
@@ -81,6 +146,11 @@ final class TenantB2cController extends Controller
     }
 
     public function postal(string $postalCode, ZigoPostalCodeService $postal){$result=$postal->lookup($postalCode);return response()->json($result,$result['status']??200);}
+
+    private function streetAddress(array $person): string
+    {
+        return trim($person['street'].' '.$person['exterior'].(filled($person['interior'] ?? null) ? ' Int. '.$person['interior'] : ''));
+    }
 
     public function tracking(TenantContext $context)
     {

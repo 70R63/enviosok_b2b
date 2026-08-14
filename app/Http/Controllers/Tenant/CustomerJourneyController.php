@@ -23,6 +23,7 @@ final class CustomerJourneyController extends Controller
     public function shipping(Request $request, TenantContext $context)
     {
         $operation = $this->activeOperation($request, $context);
+        if ($operation->customerCheckout) return redirect('/app/checkout/'.$operation->customerCheckout->uuid.'/resumen');
         $profile=$request->attributes->get('customer_profile');
         $addresses=TenantCustomerAddress::where('tenant_id',$context->id())->where('customer_profile_id',$profile->id)->where('is_active',true)->orderByDesc('is_default_origin')->orderByDesc('is_default_destination')->orderBy('alias')->get();
         return view('tenant.customer.journey.shipping', ['tenant' => $context->tenant()->load('branding'), 'operation' => $operation, 'package' => $operation->metadata['quoted_package'] ?? [], 'originAddresses'=>$addresses->whereIn('address_type',['origin','both'])->values(), 'destinationAddresses'=>$addresses->whereIn('address_type',['destination','both'])->values()]);

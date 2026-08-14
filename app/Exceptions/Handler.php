@@ -6,6 +6,7 @@ use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Throwable;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Session\TokenMismatchException;
 
 class Handler extends ExceptionHandler
 {
@@ -55,6 +56,12 @@ class Handler extends ExceptionHandler
         $this->renderable(function (ModelNotFoundException $e, $request) {
             if (! $request->is('api/hub/v1/*')) return null;
             return response()->json(['error'=>['code'=>'RESOURCE_NOT_FOUND','message'=>'El recurso no existe o no está autorizado.'],'meta'=>['request_id'=>$request->attributes->get('zigo_request_id')]],404);
+        });
+        $this->renderable(function (TokenMismatchException $e, $request) {
+            if ($request->is('admin/*')) return redirect('/admin/login')->with('status', 'Tu sesión expiró. Inicia sesión nuevamente.');
+            if ($request->is('driver/*')) return redirect('/driver/login')->with('status', 'Tu sesión expiró. Inicia sesión nuevamente.');
+            if ($request->is('app/*') || $request->is('ingresar') || $request->is('registro')) return redirect('/ingresar')->with('status', 'Tu sesión expiró. Inicia sesión nuevamente.');
+            return null;
         });
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Tenant;
 
 use App\Domain\Network\Channels\B2C\Models\{TenantOperation, TenantCustomerCheckout};
+use App\Domain\Network\Channels\B2C\Models\TenantCustomerAddress;
 use App\Domain\Network\Tenancy\TenantContext;
 use App\Domain\Shipping\LastMile\Models\TenantDeliveryProofOption;
 use App\Domain\Shipping\Local\LocalGuideService;
@@ -62,9 +63,15 @@ final class CustomerPortalController extends Controller
         return back()->with('success', 'Tu perfil fue actualizado.');
     }
 
-    public function quote(TenantContext $context)
+    public function quote(Request $request, TenantContext $context)
     {
-        return view('tenant.b2c.quote', ['tenant' => $context->tenant()->load('branding'), 'result' => null, 'customerPortal' => true]);
+        $profile = $request->attributes->get('customer_profile');
+        $addresses = TenantCustomerAddress::where('tenant_id', $context->id())->where('customer_profile_id', $profile->id)->where('is_active', true)->orderBy('alias')->get();
+        return view('tenant.b2c.quote', ['tenant' => $context->tenant()->load('branding'), 'result' => null, 'customerPortal' => true,
+            'originAddresses' => $addresses->whereIn('address_type', ['origin','both'])->values(),
+            'destinationAddresses' => $addresses->whereIn('address_type', ['destination','both'])->values(),
+            'pickupEnabled' => app(\App\Domain\Network\Billing\EntitlementService::class)->has($context->tenant(), 'DRIVER'),
+        ]);
     }
 
     public function support(TenantContext $context)
