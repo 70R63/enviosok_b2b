@@ -6,6 +6,7 @@ use App\Domain\Network\Billing\Models\{Entitlement, Subscription};
 use App\Domain\Network\Catalog\Models\{Module, Plan};
 use App\Domain\Network\Channels\B2C\Models\{TenantCustomerProfile, TenantOperation};
 use App\Domain\Network\Channels\B2C\Models\TenantCustomerCheckout;
+use App\Domain\Network\Channels\B2C\Models\TenantCustomerAddress;
 use App\Domain\Network\Channels\B2C\CustomerCheckoutService;
 use App\Domain\Network\Channels\B2C\CustomerCheckoutFulfillmentService;
 use App\Domain\Shipping\LastMile\Models\TenantDeliveryProofOption;
@@ -24,6 +25,10 @@ class ZigoCustomerPortalTest extends TestCase
         parent::setUp();
         if (config('database.default') !== 'sqlite' || config('database.connections.sqlite.database') !== ':memory:') $this->markTestSkipped('Requires SQLite :memory:.');
         $this->schema();
+        DB::table('zigo_postal_codes')->insert([
+            ['codigo_postal'=>'64000','asentamiento'=>'Centro','tipo_asentamiento'=>'Colonia','municipio'=>'Monterrey','estado'=>'Nuevo León','ciudad'=>'Monterrey','activo'=>true],
+            ['codigo_postal'=>'57300','asentamiento'=>'Benito Juárez','tipo_asentamiento'=>'Colonia','municipio'=>'Nezahualcóyotl','estado'=>'México','ciudad'=>'Nezahualcóyotl','activo'=>true],
+        ]);
     }
 
     public function test_tenant_root_is_branded_and_unknown_or_platform_hosts_are_not_hijacked(): void
@@ -124,6 +129,52 @@ class ZigoCustomerPortalTest extends TestCase
         $tenant = $this->tenant('logout'); $profile = $this->customer($tenant, 'logout@example.test');
         $this->actingAs($profile->user)->post($this->url($tenant, '/salir'))->assertRedirect('/');
         $this->assertGuest();
+    }
+
+    public function test_customer_address_crud_derives_sepomex_defaults_and_is_owner_scoped(): void
+    {
+        $tenant=$this->tenant('addresses');$owner=$this->customer($tenant,'address-owner@example.test');$other=$this->customer($tenant,'address-other@example.test');
+        $payload=$this->addressPayload(['alias'=>'Casa','is_default_origin'=>1]);
+        $this->actingAs($owner->user)->get($this->url($tenant,'/app/direcciones'))->assertOk()->assertSee('Mis direcciones')->assertDontSee('Drivers');
+        $this->post($this->url($tenant,'/app/direcciones'),$payload)->assertRedirect();
+        $address=TenantCustomerAddress::sole();
+        $this->assertSame('Monterrey',$address->municipality);$this->assertSame('Nuevo León',$address->state);$this->assertTrue($address->is_default_origin);
+        $this->post($this->url($tenant,'/app/direcciones'),$this->addressPayload(['alias'=>'Oficina','street'=>'Morelos','exterior'=>'20','is_default_origin'=>1]))->assertRedirect();
+        $this->assertFalse($address->fresh()->is_default_origin);$this->assertSame(1,TenantCustomerAddress::where('is_default_origin',true)->count());
+        $this->put($this->url($tenant,'/app/direcciones/'.$address->uuid),$this->addressPayload(['alias'=>'Casa actualizada','is_default_destination'=>1]))->assertRedirect();
+        $this->assertSame('Casa actualizada',$address->fresh()->alias);$this->assertTrue($address->fresh()->is_default_destination);
+        $this->actingAs($other->user)->get($this->url($tenant,'/app/direcciones/'.$address->uuid.'/editar'))->assertNotFound();
+        $foreign=$this->tenant('addresses-foreign');$foreignProfile=$this->customer($foreign,'address-foreign@example.test');
+        $this->actingAs($foreignProfile->user)->get($this->url($foreign,'/app/direcciones/'.$address->uuid.'/editar'))->assertNotFound();
+        $this->actingAs($owner->user)->delete($this->url($tenant,'/app/direcciones/'.$address->uuid))->assertRedirect();
+        $this->assertFalse($address->fresh()->is_active);
+    }
+
+    public function test_address_validation_rejects_invalid_postal_and_settlement(): void
+    {
+        $tenant=$this->tenant('address-validation');$profile=$this->customer($tenant,'address-validation@example.test');$this->actingAs($profile->user);
+        $this->post($this->url($tenant,'/app/direcciones'),$this->addressPayload(['postal_code'=>'00000']))->assertSessionHasErrors('postal_code');
+        $this->post($this->url($tenant,'/app/direcciones'),$this->addressPayload(['settlement'=>'Manipulada']))->assertSessionHasErrors('settlement');
+        $this->assertDatabaseCount('tenant_customer_addresses',0);
+    }
+
+    public function test_saved_address_options_respect_type_route_and_journey_save_is_deduplicated(): void
+    {
+        $tenant=$this->tenant('address-journey');$profile=$this->customer($tenant,'address-journey@example.test');$this->actingAs($profile->user);
+        foreach ([['Origen guardado','origin','Origen','1'],['Destino guardado','destination','Destino','2'],['Ambos','both','Común','3']] as [$alias,$type,$street,$exterior]) {
+            $this->post($this->url($tenant,'/app/direcciones'),$this->addressPayload(compact('alias','street','exterior')+['address_type'=>$type]))->assertRedirect();
+        }
+        [$operation]=$this->quotedOperation($tenant,$profile);$session=['tenant_customer.active_operation'=>$operation->uuid];
+        $shipping=$this->withSession($session)->get($this->url($tenant,'/app/envio/nuevo'))->assertOk();
+        $shipping->assertSee('Origen guardado')->assertSee('Destino guardado')->assertSee('Ambos');
+        $incompatible=TenantCustomerAddress::create(['tenant_id'=>$tenant->id,'customer_profile_id'=>$profile->id]+$this->addressPayload(['alias'=>'Otra ruta','address_type'=>'origin','postal_code'=>'57300','settlement'=>'Benito Juárez'])+['municipality'=>'Nezahualcóyotl','state'=>'México','is_active'=>true]);
+        $this->withSession($session)->post($this->url($tenant,'/app/envio/nuevo'),$this->shippingPayload()+['sender_address_uuid'=>$incompatible->uuid])->assertSessionHasErrors('sender_address_uuid');
+        $payload=$this->shippingPayload()+['save_sender_address'=>1,'sender_address_alias'=>'Nueva casa','save_recipient_address'=>1,'recipient_address_alias'=>'Nuevo destino'];
+        $this->withSession($session)->post($this->url($tenant,'/app/envio/nuevo'),$payload)->assertRedirect();
+        $this->assertDatabaseHas('tenant_customer_addresses',['tenant_id'=>$tenant->id,'customer_profile_id'=>$profile->id,'alias'=>'Nueva casa']);
+        $count=TenantCustomerAddress::where('tenant_id',$tenant->id)->where('customer_profile_id',$profile->id)->count();
+        $this->withSession($session)->post($this->url($tenant,'/app/envio/nuevo'),$payload)->assertRedirect();
+        $this->assertSame($count,TenantCustomerAddress::where('tenant_id',$tenant->id)->where('customer_profile_id',$profile->id)->count());
     }
 
     public function test_checkout_amounts_are_server_calculated_and_duplicate_submit_is_idempotent(): void
@@ -362,7 +413,7 @@ class ZigoCustomerPortalTest extends TestCase
     private function quotedOperation(Tenant $tenant, TenantCustomerProfile $profile): array
     {
         $snapshot = LocalShippingQuoteSnapshot::create([
-            'tenant_id' => $tenant->id, 'origin' => ['street' => 'Origen 1'], 'destination' => ['street' => 'Destino 2'],
+            'tenant_id' => $tenant->id, 'origin' => ['address'=>'Centro, 64000, Monterrey, Nuevo León, México','street' => null,'postal_code'=>'64000','settlement'=>'Centro','municipality'=>'Monterrey','state'=>'Nuevo León'], 'destination' => ['address'=>'Centro, 64000, Monterrey, Nuevo León, México','street' => null,'postal_code'=>'64000','settlement'=>'Centro','municipality'=>'Monterrey','state'=>'Nuevo León'],
             'package_type' => 'sobre', 'weight_kg' => 1, 'dimensions' => [], 'distance_meters' => 1000,
             'pricing_strategy' => 'flat', 'matched_tariff' => [], 'amount' => 179, 'currency' => 'MXN', 'expires_at' => now()->addHour(),
         ]);
@@ -384,6 +435,11 @@ class ZigoCustomerPortalTest extends TestCase
         ];
     }
 
+    private function addressPayload(array $overrides=[]): array
+    {
+        return array_replace(['address_type'=>'both','alias'=>'Casa','contact_name'=>'Customer','company'=>null,'phone'=>'8111111111','email'=>'customer@example.test','street'=>'Juárez','exterior'=>'10','interior'=>null,'postal_code'=>'64000','settlement'=>'Centro','references'=>'Portón azul'], $overrides);
+    }
+
     private function checkoutForView(Tenant $tenant, TenantCustomerProfile $profile, ?TenantDeliveryProofOption $proof = null): TenantCustomerCheckout
     {
         [$operation] = $this->quotedOperation($tenant, $profile);
@@ -400,6 +456,7 @@ class ZigoCustomerPortalTest extends TestCase
     private function schema(): void
     {
         Schema::create('users', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->string('name'),$t->string('email')->unique(),$t->string('password'),$t->unsignedBigInteger('empresa_id'),$t->rememberToken(),$t->timestamps()]));
+        Schema::create('zigo_postal_codes', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->string('codigo_postal',5),$t->string('asentamiento'),$t->string('tipo_asentamiento')->nullable(),$t->string('municipio'),$t->string('estado'),$t->string('ciudad')->nullable(),$t->boolean('activo')->default(true)]));
         Schema::create('network_plans', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->string('code'),$t->string('name'),$t->string('status'),$t->string('currency'),$t->unsignedInteger('included_operations')->nullable(),$t->timestamps()]));
         Schema::create('network_modules', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->string('code')->unique(),$t->string('name'),$t->string('type'),$t->boolean('is_active'),$t->unsignedSmallInteger('sort_order'),$t->timestamps()]));
         Schema::create('network_tenants', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->string('name'),$t->string('slug')->unique(),$t->string('status'),$t->unsignedBigInteger('current_plan_id')->nullable(),$t->timestamps()]));
@@ -410,6 +467,7 @@ class ZigoCustomerPortalTest extends TestCase
         Schema::create('network_entitlements', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->unsignedBigInteger('subscription_id'),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('module_id'),$t->string('code'),$t->boolean('is_enabled'),$t->unsignedInteger('limit_value')->nullable(),$t->string('source'),$t->timestamps()]));
         Schema::create('network_usage_events', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->nullable(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('subscription_id')->nullable(),$t->string('metric'),$t->unsignedInteger('quantity'),$t->string('idempotency_key')->nullable(),$t->timestamp('occurred_at'),$t->json('metadata')->nullable(),$t->timestamp('created_at')->nullable()]));
         Schema::create('tenant_customer_profiles', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('user_id'),$t->string('status'),$t->string('display_name')->nullable(),$t->string('phone')->nullable(),$t->timestamps(),$t->unique(['tenant_id','user_id'])]));
+        Schema::create('tenant_customer_addresses', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('customer_profile_id'),$t->string('address_type'),$t->string('alias'),$t->string('contact_name'),$t->string('company')->nullable(),$t->string('phone'),$t->string('email')->nullable(),$t->string('street'),$t->string('exterior'),$t->string('interior')->nullable(),$t->string('postal_code'),$t->string('settlement'),$t->string('municipality'),$t->string('state'),$t->string('references')->nullable(),$t->boolean('is_default_origin')->default(false),$t->boolean('is_default_destination')->default(false),$t->boolean('is_active')->default(true),$t->timestamps()]));
         Schema::create('tenant_customer_checkouts', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('customer_profile_id'),$t->unsignedBigInteger('tenant_operation_id')->unique(),$t->string('status'),$t->string('payment_status'),$t->string('currency'),$t->decimal('shipping_amount',12,2),$t->decimal('evidence_amount',12,2),$t->decimal('total_amount',12,2),$t->json('quote_snapshot'),$t->json('shipping_data_snapshot'),$t->json('proof_option_snapshot'),$t->string('payment_provider')->nullable(),$t->string('payment_reference')->nullable(),$t->timestamp('expires_at')->nullable(),$t->timestamp('paid_at')->nullable(),$t->timestamps()]));
         Schema::create('local_shipping_quote_snapshots', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('service_id')->nullable(),$t->json('origin'),$t->json('destination'),$t->string('package_type'),$t->decimal('weight_kg',8,2),$t->json('dimensions')->nullable(),$t->unsignedInteger('distance_meters')->nullable(),$t->string('pricing_strategy'),$t->json('matched_tariff')->nullable(),$t->decimal('amount',12,2),$t->char('currency',3),$t->timestamp('expires_at')->nullable(),$t->timestamps()]));
         Schema::create('network_tenant_operations', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('subscription_id')->nullable(),$t->string('channel'),$t->string('status'),$t->string('source_type')->nullable(),$t->unsignedBigInteger('source_id')->nullable(),$t->string('provider')->nullable(),$t->string('service_code')->nullable(),$t->string('external_reference')->nullable(),$t->unsignedBigInteger('created_by_user_id')->nullable(),$t->unsignedBigInteger('customer_profile_id')->nullable(),$t->json('metadata')->nullable(),$t->timestamps()]));

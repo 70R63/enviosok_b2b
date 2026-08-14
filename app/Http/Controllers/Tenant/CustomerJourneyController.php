@@ -12,6 +12,8 @@ use App\Domain\Shipping\Local\Models\LocalShippingQuoteSnapshot;
 use App\Http\Controllers\Controller;
 use App\Services\ZigoPostalCodeService;
 use App\Domain\Network\Channels\B2C\TenantB2cQuoteService;
+use App\Domain\Network\Channels\B2C\TenantCustomerAddressService;
+use App\Domain\Network\Channels\B2C\Models\TenantCustomerAddress;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -21,32 +23,48 @@ final class CustomerJourneyController extends Controller
     public function shipping(Request $request, TenantContext $context)
     {
         $operation = $this->activeOperation($request, $context);
-        return view('tenant.customer.journey.shipping', ['tenant' => $context->tenant()->load('branding'), 'operation' => $operation, 'package' => $operation->metadata['quoted_package'] ?? []]);
+        $profile=$request->attributes->get('customer_profile');
+        $addresses=TenantCustomerAddress::where('tenant_id',$context->id())->where('customer_profile_id',$profile->id)->where('is_active',true)->orderByDesc('is_default_origin')->orderByDesc('is_default_destination')->orderBy('alias')->get();
+        return view('tenant.customer.journey.shipping', ['tenant' => $context->tenant()->load('branding'), 'operation' => $operation, 'package' => $operation->metadata['quoted_package'] ?? [], 'originAddresses'=>$addresses->whereIn('address_type',['origin','both'])->values(), 'destinationAddresses'=>$addresses->whereIn('address_type',['destination','both'])->values()]);
     }
 
-    public function storeShipping(Request $request, TenantContext $context, CustomerCheckoutService $checkouts, TenantB2cQuoteService $quotes)
+    public function storeShipping(Request $request, TenantContext $context, CustomerCheckoutService $checkouts, TenantB2cQuoteService $quotes, TenantCustomerAddressService $addressBook)
     {
         $operation = $this->activeOperation($request, $context);
         $data = $request->validate([
             'sender.name' => ['required','string','max:120'], 'sender.phone' => ['required','string','max:30'], 'sender.email' => ['nullable','email','max:160'], 'sender.street' => ['required','string','max:180'], 'sender.exterior' => ['required','string','max:40'], 'sender.interior' => ['nullable','string','max:40'], 'sender.references' => ['nullable','string','max:300'],
             'recipient.name' => ['required','string','max:120'], 'recipient.phone' => ['required','string','max:30'], 'recipient.email' => ['nullable','email','max:160'], 'recipient.street' => ['required','string','max:180'], 'recipient.exterior' => ['required','string','max:40'], 'recipient.interior' => ['nullable','string','max:40'], 'recipient.references' => ['nullable','string','max:300'],
+            'sender_address_uuid'=>['nullable','uuid'],'recipient_address_uuid'=>['nullable','uuid'],
+            'save_sender_address'=>['nullable','boolean'],'save_recipient_address'=>['nullable','boolean'],
+            'sender_address_alias'=>['nullable','string','max:100'],'recipient_address_alias'=>['nullable','string','max:100'],
             'reference' => ['nullable','string','max:100'],
         ]);
         $profile = $request->attributes->get('customer_profile');
-        $checkout = DB::transaction(function () use ($operation, $data, $context, $profile, $checkouts, $quotes): TenantCustomerCheckout {
+        $checkout = DB::transaction(function () use ($operation, $data, $context, $profile, $checkouts, $quotes, $addressBook): TenantCustomerCheckout {
             $locked = TenantOperation::whereKey($operation->id)->where('status', 'quoted')->lockForUpdate()->firstOrFail();
             $existing = $locked->customerCheckout()->lockForUpdate()->first();
             if ($existing) return $existing;
 
             $metadata = $locked->metadata ?? [];
             $preliminary = LocalShippingQuoteSnapshot::where('tenant_id',$context->id())->where('uuid',$metadata['selected_quote_snapshot_uuid']??'')->firstOrFail();
+            foreach (['sender'=>['uuid'=>'sender_address_uuid','side'=>'origin','snapshot'=>$preliminary->origin],'recipient'=>['uuid'=>'recipient_address_uuid','side'=>'destination','snapshot'=>$preliminary->destination]] as $key=>$config) {
+                if (!filled($data[$config['uuid']]??null)) continue;
+                $saved=$addressBook->compatible($context->tenant(),$profile,$data[$config['uuid']],$config['side'],$config['snapshot'],$config['uuid']);
+                $data[$key]=array_merge($data[$key],['name'=>$saved->contact_name,'phone'=>$saved->phone,'email'=>$saved->email,'street'=>$saved->street,'exterior'=>$saved->exterior,'interior'=>$saved->interior,'references'=>$saved->references]);
+            }
             $needsFinalization = (bool) data_get($preliminary->matched_tariff, '_quote_context.preliminary', false);
             $final = $needsFinalization ? $quotes->finalize($context->tenant(), $preliminary, $data['sender'], $data['recipient']) : $preliminary;
             $data['sender']['address']=$final->origin;$data['recipient']['address']=$final->destination;$data['package']=['type'=>$final->package_type,'weight'=>(string)$final->weight_kg]+($final->dimensions??[]);
+            foreach (['sender'=>['side'=>'origin','save'=>'save_sender_address','uuid'=>'sender_address_uuid','alias'=>'sender_address_alias','type'=>'origin'],'recipient'=>['side'=>'destination','save'=>'save_recipient_address','uuid'=>'recipient_address_uuid','alias'=>'recipient_address_alias','type'=>'destination']] as $key=>$config) {
+                if (!($data[$config['save']]??false) || filled($data[$config['uuid']]??null)) continue;
+                $route=$final->{$config['side']};$person=$data[$key];
+                $addressBook->save($context->tenant(),$profile,['address_type'=>$config['type'],'alias'=>$data[$config['alias']]??($key==='sender'?'Origen':'Destino').' · '.$person['name'],'contact_name'=>$person['name'],'company'=>null,'phone'=>$person['phone'],'email'=>$person['email']??null,'street'=>$person['street'],'exterior'=>$person['exterior'],'interior'=>$person['interior']??null,'postal_code'=>$route['postal_code'],'settlement'=>$route['settlement'],'references'=>$person['references']??null,'is_default_origin'=>false,'is_default_destination'=>false]);
+            }
             if ($needsFinalization) $metadata['preliminary_quote_snapshot_uuid'] ??= $preliminary->uuid;
             $metadata['selected_quote_snapshot_uuid']=$final->uuid;
             $metadata['selected_quote']=array_merge($metadata['selected_quote']??[],['price'=>(string)$final->amount,'currency'=>$final->currency,'preliminary'=>false]);
             $metadata['final_price']=(string)$final->amount;
+            unset($data['sender_address_uuid'],$data['recipient_address_uuid'],$data['save_sender_address'],$data['save_recipient_address'],$data['sender_address_alias'],$data['recipient_address_alias']);
             $metadata['shipping_data'] = $data;
             $locked->update(['metadata' => $metadata]);
             return $checkouts->create($context->tenant(), $profile, $locked->fresh());
