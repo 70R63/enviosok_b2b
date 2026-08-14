@@ -122,6 +122,12 @@ final class NetworkTenantAdminTest extends TestCase
         $this->assertStringStartsWith('tenant-branding/'.$tenant->uuid.'/', $branding->logo_path);
         $this->assertStringNotContainsString('customer-logo', $branding->logo_path);
         Storage::disk('public')->assertExists($branding->logo_path);
+        $this->actingAs($owner)->get($this->url($tenant, '/admin'))->assertOk()
+            ->assertSee(Storage::disk('public')->url($branding->logo_path), false);
+
+        Storage::disk('public')->delete($branding->logo_path);
+        $this->get($this->url($tenant, '/admin'))->assertOk()
+            ->assertSee('Owner Brand')->assertDontSee('<img', false);
 
         $this->actingAs($admin)->patch($this->url($tenant, '/admin/configuracion'), [
             'brand_name' => 'Admin Brand', 'secondary_color' => '#445566', 'accent_color' => '#778899', 'support_email' => 'support@example.test', 'support_phone' => '8112345678',

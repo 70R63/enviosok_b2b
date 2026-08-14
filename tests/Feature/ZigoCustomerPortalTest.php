@@ -76,6 +76,10 @@ class ZigoCustomerPortalTest extends TestCase
         $foreign = $this->shipment($tenant, $other, 'ZLCUSTOMEROTHER1', 'DELIVERED');
         $this->actingAs($owner->user)->get($this->url($tenant, '/app'))->assertOk()->assertSee($own->tracking_number)->assertDontSee($foreign->tracking_number)->assertSee('En reparto')->assertDontSee('OUT_FOR_DELIVERY');
         $this->get($this->url($tenant, '/app/envios'))->assertOk()->assertSee($own->tracking_number)->assertDontSee($foreign->tracking_number);
+        $this->get($this->url($tenant, '/app/envios/'.$own->uuid))->assertOk()->assertSee('Secret address');
+        $senderSnapshot = $own->sender_snapshot;
+        $this->get($this->url($tenant, '/app/envios/'.$own->uuid.'/guia.pdf'))->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertSame($senderSnapshot, $own->fresh()->sender_snapshot);
         $this->get($this->url($tenant, '/app/envios/'.$foreign->uuid))->assertNotFound();
     }
 
@@ -280,6 +284,15 @@ class ZigoCustomerPortalTest extends TestCase
         $this->assertSame('PAID', $checkout->fresh()->status);
         $this->assertNotEmpty($shipment->guide_snapshot);
         $this->assertSame($shipment->tracking_number, $shipment->guide_snapshot['tracking_number']);
+        $senderBefore = $shipment->sender_snapshot;
+        $recipientBefore = $shipment->recipient_snapshot;
+
+        $this->actingAs($owner->user)->get($this->url($tenant, '/app/envios/'.$shipment->uuid))
+            ->assertOk()->assertSee('Origen 1')->assertSee('Destino 2');
+        $this->get($this->url($tenant, '/app/envios/'.$shipment->uuid.'/guia.pdf'))
+            ->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertSame($senderBefore, $shipment->fresh()->sender_snapshot);
+        $this->assertSame($recipientBefore, $shipment->fresh()->recipient_snapshot);
 
         $return = $this->actingAs($owner->user)->get($this->url($tenant, '/app/checkout/'.$checkout->uuid.'/pago/retorno/success'));
         $return->assertOk()->assertSee('Tu envío está listo')->assertSee($shipment->tracking_number)
@@ -308,7 +321,7 @@ class ZigoCustomerPortalTest extends TestCase
     private function shipment(Tenant $tenant, TenantCustomerProfile $profile, string $tracking, string $status): LocalShipment
     {
         $operation = TenantOperation::create(['tenant_id' => $tenant->id, 'subscription_id' => $tenant->subscriptions()->first()->id, 'customer_profile_id' => $profile->id, 'channel' => 'b2c', 'status' => 'confirmed', 'provider' => 'ZIGO_LOCAL', 'service_code' => 'LOCAL', 'metadata' => []]);
-        $shipment = LocalShipment::create(['tenant_id' => $tenant->id, 'tenant_operation_id' => $operation->id, 'tracking_number' => $tracking, 'service_code' => 'LOCAL', 'status' => $status, 'sender_snapshot' => ['name' => 'Sender', 'address' => 'Secret address', 'postal_code' => '64000', 'phone' => '8112345678'], 'recipient_snapshot' => ['name' => 'Recipient', 'address' => 'Secret address', 'postal_code' => '64000'], 'package_snapshot' => ['type' => 'caja', 'weight' => 1], 'pricing_snapshot' => ['final_price' => 120, 'provider_cost' => 80], 'guide_snapshot' => []]);
+        $shipment = LocalShipment::create(['tenant_id' => $tenant->id, 'tenant_operation_id' => $operation->id, 'tracking_number' => $tracking, 'service_code' => 'LOCAL', 'status' => $status, 'sender_snapshot' => ['name' => 'Sender', 'address' => 'Secret address', 'postal_code' => '64000', 'phone' => '8112345678'], 'recipient_snapshot' => ['name' => 'Recipient', 'address' => 'Secret address', 'postal_code' => '64000'], 'package_snapshot' => ['type' => 'caja', 'weight' => 1], 'pricing_snapshot' => ['final_price' => 120, 'provider_cost' => 80], 'guide_snapshot' => ['service_code' => 'LOCAL', 'sender' => ['name' => 'Sender', 'address' => 'Secret address', 'postal_code' => '64000', 'phone' => '8112345678'], 'recipient' => ['name' => 'Recipient', 'address' => 'Secret address', 'postal_code' => '64000'], 'package' => ['type' => 'caja', 'weight' => 1]]]);
         $shipment->events()->create(['status' => $status, 'event_code' => 'STATUS', 'occurred_at' => now()]);
         return $shipment;
     }

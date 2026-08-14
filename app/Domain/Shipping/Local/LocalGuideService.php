@@ -3,12 +3,17 @@
 namespace App\Domain\Shipping\Local;
 
 use App\Domain\Shipping\Local\Models\LocalShipment;
+use App\Support\Presentation\AddressPresenter;
 use TCPDF;
 
 final class LocalGuideService
 {
     public function pdf(LocalShipment $shipment, string $tenantHost): string
     {
+        if (! class_exists(TCPDF::class)) {
+            require_once base_path('vendor/tecnickcom/tcpdf/tcpdf.php');
+        }
+
         $guide = $shipment->guide_snapshot;
         $pdf = new TCPDF('P', 'mm', [101.6, 152.4], true, 'UTF-8', false);
         $pdf->SetCreator('ZIGO Local');
@@ -54,6 +59,6 @@ final class LocalGuideService
     private function address(TCPDF $pdf, array $address): void
     {
         $pdf->SetFont('helvetica', '', 8);
-        $pdf->MultiCell(0, 4, implode("\n", array_filter([$address['name'] ?? null, $address['address'] ?? null, isset($address['postal_code']) ? 'CP '.$address['postal_code'] : null, $address['phone'] ?? null])));
+        $pdf->MultiCell(0, 4, implode("\n", array_filter([$address['name'] ?? null, AddressPresenter::full($address['address'] ?? null), isset($address['postal_code']) ? 'CP '.$address['postal_code'] : null, $address['phone'] ?? null])));
     }
 }
