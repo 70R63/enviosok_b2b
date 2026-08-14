@@ -59,20 +59,24 @@ final class NetworkTenantB2cTest extends TestCase
         ]);
 
         $home = $this->get($this->url($tenant, '/'))->assertOk()
-            ->assertSee('Envía fácil con Storefront Express')
+            ->assertSee('Envía fácil con')
+            ->assertSee('Storefront Express')
             ->assertSee('Cotizar envío')
-            ->assertSee('Regístrate o inicia sesión')
+            ->assertSee('Inicia sesión o crea tu cuenta')
             ->assertSee('ayuda@storefront.test')
             ->assertSee('#123456', false)
+            ->assertSee('class="top-header"', false)
+            ->assertSee('class="quote-card"', false)
+            ->assertSee('class="faq-section"', false)
             ->assertDontSee('Tenant')
             ->assertDontSee('White Label')
             ->assertDontSee('Sandbox');
-        $this->assertSame(1, substr_count($home->getContent(), 'Cotiza</div>'));
+        $this->assertSame(1, substr_count($home->getContent(), 'id="cotizar"'));
 
         $this->get($this->url($tenant, '/cotizar'))->assertOk()->assertSee('Storefront Express');
         $this->get($this->url($tenant, '/rastrear'))->assertOk()->assertSee('Rastrea tu envío');
         $this->get($this->url($tenant, '/registro'))->assertOk()->assertSee('Crea tu cuenta');
-        $this->get($this->url($tenant, '/login'))->assertOk()->assertSee('Iniciar sesión');
+        $this->get($this->url($tenant, '/ingresar'))->assertOk()->assertSee('Iniciar sesión');
         $this->get($this->url($tenant, '/white-label'))->assertStatus(301)->assertRedirect('/');
         $this->get($this->url($tenant, '/admin'))->assertRedirect(route('tenant.admin.login', [], false));
         $this->get('http://unknown.zigo.local/')->assertNotFound();
@@ -95,7 +99,7 @@ final class NetworkTenantB2cTest extends TestCase
             ->assertSee('/branding/logo', false)
             ->assertDontSee(Storage::disk('public')->url($hero), false)
             ->assertSee('Iniciar sesión')->assertSee('Crear cuenta')
-            ->assertSee('¿Ya tienes una guía?')->assertSee('data-landing-tracking', false)
+            ->assertSee('href="/rastrear"', false)
             ->assertSee('data-dimensions hidden', false)
             ->assertSee('name="length"', false)->assertSee('name="width"', false)->assertSee('name="height"', false)
             ->assertDontSee('href="/#cotizar"', false);
@@ -109,7 +113,7 @@ final class NetworkTenantB2cTest extends TestCase
 
         Storage::disk('public')->delete($hero);
         $this->get($this->url($tenant, '/'))->assertOk()
-            ->assertSee('landing-visual__fallback', false)
+            ->assertSee('hero-placeholder', false)
             ->assertDontSee('tenant-hero-fallback.svg', false)
             ->assertDontSee('/branding/hero', false);
         $this->get($this->url($tenant, '/branding/hero'))->assertNotFound();
@@ -123,7 +127,7 @@ final class NetworkTenantB2cTest extends TestCase
 
         $customer = $this->user('premium-customer@test.local');
         $this->actingAs($customer)->get($this->url($tenant, '/'))->assertOk()
-            ->assertSee('Envíos')->assertSee('Mi cuenta')->assertDontSee('Crear cuenta')
+            ->assertSee('Mi cuenta')->assertDontSee('class="nav-register"', false)->assertDontSee('class="nav-login"', false)
             ->assertDontSee(route('tenant.customer.app.quote', [], false), false);
     }
 
@@ -144,11 +148,11 @@ final class NetworkTenantB2cTest extends TestCase
     {
         $landing = $this->tenant('landing-only', ['WHITE_LABEL']);
         $this->get($this->url($landing, '/'))->assertOk();
-        $this->get($this->url($landing, '/login'))->assertForbidden();
+        $this->get($this->url($landing, '/ingresar'))->assertForbidden();
 
         $noLanding = $this->tenant('no-landing', ['CUSTOMERS', 'QUOTES', 'SHIPPING', 'TRACKING']);
         $this->get($this->url($noLanding, '/'))->assertForbidden();
-        $this->get($this->url($noLanding, '/login'))->assertOk();
+        $this->get($this->url($noLanding, '/ingresar'))->assertOk();
         $this->get($this->url($noLanding, '/registro'))->assertOk();
         $this->get($this->url($noLanding, '/cotizar'))->assertOk();
         $this->get($this->url($noLanding, '/rastrear'))->assertOk();
@@ -167,7 +171,7 @@ final class NetworkTenantB2cTest extends TestCase
         $response = $this->post($this->url($tenant, '/cotizar'), $this->quote())->assertOk()
             ->assertSee('Entrega tenant')->assertSee('149.50')
             ->assertDontSee('999.00')->assertDontSee('FLAT')->assertDontSee('base_cost')->assertDontSee('matched_tariff');
-        $this->assertLessThan(strpos($response->getContent(), 'CÓMO FUNCIONA'), strpos($response->getContent(), 'SERVICIOS DISPONIBLES'));
+        $this->assertLessThan(strpos($response->getContent(), 'Cómo funciona'), strpos($response->getContent(), 'Opciones disponibles'));
         $operation = TenantOperation::firstOrFail();
         $snapshot = LocalShippingQuoteSnapshot::firstOrFail();
         $this->assertSame($tenant->id, $operation->tenant_id);

@@ -30,7 +30,7 @@ class ZigoCustomerPortalTest extends TestCase
     {
         $tenant = $this->tenant('pilot');
         $tenant->branding()->create(['brand_name' => 'RapidGo Local', 'primary_color' => '#2457D6']);
-        $this->get($this->url($tenant, '/'))->assertOk()->assertSee('Envía fácil con RapidGo Local')->assertSee('Powered by ZIGO');
+        $this->get($this->url($tenant, '/'))->assertOk()->assertSee('Envía fácil con')->assertSee('RapidGo Local')->assertSee('Powered by ZIGO');
         $this->get('http://unknown.zigo.local/')->assertNotFound();
         $this->get('http://'.config('zigo_driver.host').'/')->assertNotFound();
     }
