@@ -26,7 +26,7 @@ final class DriverAuthController extends Controller
         }
         $request->session()->regenerate();
 
-        return redirect()->intended(route('tenant.driver.dashboard'));
+        return redirect()->intended(route('tenant.driver.dashboard', [], false));
     }
 
     public function destroy(Request $request)
@@ -36,6 +36,6 @@ final class DriverAuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('tenant.driver.login');
+        return redirect(route('tenant.driver.login', [], false));
     }
 }

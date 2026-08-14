@@ -80,7 +80,8 @@ class ZigoCustomerPortalTest extends TestCase
         $owner = $this->customer($tenant, 'owner@example.test'); $other = $this->customer($tenant, 'other@example.test');
         $own = $this->shipment($tenant, $owner, 'ZLCUSTOMEROWN001', 'OUT_FOR_DELIVERY');
         $foreign = $this->shipment($tenant, $other, 'ZLCUSTOMEROTHER1', 'DELIVERED');
-        $this->actingAs($owner->user)->get($this->url($tenant, '/app'))->assertOk()->assertSee($own->tracking_number)->assertDontSee($foreign->tracking_number)->assertSee('En reparto')->assertDontSee('OUT_FOR_DELIVERY');
+        $this->actingAs($owner->user)->get($this->url($tenant, '/app'))->assertOk()->assertSee($own->tracking_number)->assertDontSee($foreign->tracking_number)->assertSee('En reparto')->assertDontSee('OUT_FOR_DELIVERY')
+            ->assertSee('Pendientes de pago')->assertSee('Cotiza tu próximo envío')->assertSee('action="/app/cotizar"', false)->assertSee('customer-links', false);
         $this->get($this->url($tenant, '/app/envios'))->assertOk()->assertSee($own->tracking_number)->assertDontSee($foreign->tracking_number);
         $this->get($this->url($tenant, '/app/envios/'.$own->uuid))->assertOk()->assertSee('Secret address');
         $senderSnapshot = $own->sender_snapshot;

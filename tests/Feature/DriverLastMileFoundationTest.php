@@ -63,6 +63,54 @@ final class DriverLastMileFoundationTest extends TestCase
         $this->patch($this->url($tenant, "/admin/drivers/{$profile->uuid}/toggle"))->assertForbidden();
     }
 
+    public function test_owner_creates_a_new_tenant_scoped_driver_with_hashed_password(): void
+    {
+        [$tenant, $owner] = $this->tenantOwner('create-driver');
+        $other = $this->tenant('create-driver-other');
+        $payload = [
+            'name' => 'Nueva Motorista', 'email' => 'new-driver@test.local',
+            'password' => 'Password!123', 'password_confirmation' => 'Password!123',
+            'code' => 'NEW-01', 'vehicle_label' => 'Moto azul', 'tenant_id' => $other->id,
+        ];
+
+        $this->actingAs($owner)->post($this->url($tenant, '/admin/drivers'), $payload)->assertRedirect();
+        $user = User::where('email', 'new-driver@test.local')->firstOrFail();
+        $this->assertTrue(Hash::check('Password!123', $user->password));
+        $this->assertNotSame('Password!123', $user->password);
+        $this->assertDatabaseHas('network_tenant_memberships', ['tenant_id' => $tenant->id, 'user_id' => $user->id, 'role' => 'driver', 'status' => 'active']);
+        $this->assertDatabaseMissing('network_tenant_memberships', ['tenant_id' => $other->id, 'user_id' => $user->id]);
+        $this->assertDatabaseHas('tenant_driver_profiles', ['tenant_id' => $tenant->id, 'user_id' => $user->id, 'code' => 'NEW-01', 'status' => 'ACTIVE']);
+
+        $this->post($this->url($tenant, '/driver/login'), ['email' => $user->email, 'password' => 'Password!123'])->assertRedirect('/driver');
+        $this->post($this->url($other, '/driver/login'), ['email' => $user->email, 'password' => 'Password!123'])->assertSessionHasErrors('email');
+    }
+
+    public function test_existing_email_is_not_claimed_or_modified_when_creating_driver(): void
+    {
+        [$tenant, $owner] = $this->tenantOwner('existing-driver-email');
+        $existing = $this->user('existing-driver@test.local');
+        $password = $existing->password;
+
+        $this->actingAs($owner)->post($this->url($tenant, '/admin/drivers'), [
+            'name' => 'Intento', 'email' => strtoupper($existing->email),
+            'password' => 'Different!123', 'password_confirmation' => 'Different!123', 'code' => 'EXISTS-01',
+        ])->assertSessionHasErrors('email');
+
+        $this->assertSame($password, $existing->fresh()->password);
+        $this->assertDatabaseMissing('network_tenant_memberships', ['tenant_id' => $tenant->id, 'user_id' => $existing->id]);
+        $this->assertDatabaseMissing('tenant_driver_profiles', ['tenant_id' => $tenant->id, 'user_id' => $existing->id]);
+    }
+
+    public function test_tenant_without_driver_entitlement_cannot_create_driver(): void
+    {
+        [$tenant, $owner] = $this->tenantOwner('create-without-driver', false);
+        $this->actingAs($owner)->post($this->url($tenant, '/admin/drivers'), [
+            'name' => 'Blocked', 'email' => 'blocked-driver@test.local',
+            'password' => 'Password!123', 'password_confirmation' => 'Password!123', 'code' => 'BLOCKED-01',
+        ])->assertForbidden();
+        $this->assertDatabaseMissing('users', ['email' => 'blocked-driver@test.local']);
+    }
+
     public function test_driver_capability_requires_entitlement_and_operational_subscription(): void
     {
         [$without,$owner] = $this->tenantOwner('without-driver', false);
@@ -77,9 +125,11 @@ final class DriverLastMileFoundationTest extends TestCase
 
     public function test_driver_login_reuses_user_identity_and_rejects_non_driver_membership(): void
     {
-        [$tenant,$driverUser] = $this->driverTenant('driver-login');
-        $this->post($this->url($tenant, '/driver/login'), ['email' => $driverUser->email, 'password' => 'tenant-secret'])->assertRedirect(route('tenant.driver.dashboard'));
-        $this->post($this->url($tenant, '/driver/logout'))->assertRedirect(route('tenant.driver.login'));
+        [$tenant,$driverUser,$profile] = $this->driverTenant('driver-login');
+        $this->post($this->url($tenant, '/driver/login'), ['email' => $driverUser->email, 'password' => 'tenant-secret'])->assertRedirect('/driver');
+        $this->post($this->url($tenant, '/driver/logout'))->assertRedirect('/driver/login');
+        $profile->update(['status' => 'INACTIVE']);
+        $this->post($this->url($tenant, '/driver/login'), ['email' => $driverUser->email, 'password' => 'tenant-secret'])->assertSessionHasErrors('email');
         $viewer = $this->member($tenant, 'viewer', 'viewer-login@test.local');
         $this->post($this->url($tenant, '/driver/login'), ['email' => $viewer->email, 'password' => 'tenant-secret'])->assertSessionHasErrors('email');
         $this->assertGuest();

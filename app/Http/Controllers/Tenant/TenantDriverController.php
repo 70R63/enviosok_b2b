@@ -13,8 +13,12 @@ use App\Domain\Shipping\LastMile\Models\DriverEarningEntry;
 use App\Domain\Shipping\Local\LocalTrackingService;
 use App\Domain\Shipping\Local\Models\LocalShipment;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 final class TenantDriverController extends Controller
@@ -70,13 +74,54 @@ final class TenantDriverController extends Controller
     public function store(Request $request, TenantContext $context, TenantAccessService $access)
     {
         $this->authorizeManage($access);
-        $data = $request->validate(['membership_id' => ['required', 'integer'], 'code' => ['required', 'alpha_dash', 'max:40', Rule::unique('tenant_driver_profiles')->where('tenant_id', $context->id())], 'vehicle_label' => ['nullable', 'string', 'max:120']]);
-        $membership = TenantMembership::where('tenant_id', $context->id())->where('status', 'active')->whereKey($data['membership_id'])->firstOrFail();
-        abort_if(in_array($membership->role, ['owner', 'admin'], true), 422);
-        $membership->update(['role' => 'driver']);
-        DriverProfile::updateOrCreate(['tenant_id' => $context->id(), 'user_id' => $membership->user_id], ['code' => $data['code'], 'vehicle_label' => $data['vehicle_label'] ?? null, 'status' => 'ACTIVE']);
+        $common = [
+            'code' => ['required', 'alpha_dash', 'max:40', Rule::unique('tenant_driver_profiles')->where('tenant_id', $context->id())],
+            'vehicle_label' => ['nullable', 'string', 'max:120'],
+        ];
 
-        return back()->with('success', 'Conductor habilitado.');
+        if ($request->filled('membership_id')) {
+            $data = $request->validate($common + ['membership_id' => ['required', 'integer']]);
+            DB::transaction(function () use ($data, $context): void {
+                $membership = TenantMembership::where('tenant_id', $context->id())->where('status', 'active')
+                    ->whereKey($data['membership_id'])->lockForUpdate()->firstOrFail();
+                abort_if(in_array($membership->role, ['owner', 'admin'], true), 422);
+                $membership->update(['role' => 'driver']);
+                DriverProfile::updateOrCreate(
+                    ['tenant_id' => $context->id(), 'user_id' => $membership->user_id],
+                    ['code' => $data['code'], 'vehicle_label' => $data['vehicle_label'] ?? null, 'status' => 'ACTIVE']
+                );
+            });
+
+            return back()->with('success', 'Conductor habilitado.');
+        }
+
+        $data = $request->validate($common + [
+            'name' => ['required', 'string', 'max:160'],
+            'email' => ['required', 'email', 'max:255'],
+            'password' => ['required', 'confirmed', Password::defaults()],
+        ]);
+        $email = mb_strtolower(trim($data['email']));
+        if (User::whereRaw('LOWER(email) = ?', [$email])->exists()) {
+            throw ValidationException::withMessages([
+                'email' => 'Este correo ya pertenece a un usuario. Si ya pertenece al tenant, usa “Habilitar usuario existente”; de lo contrario, sigue primero el flujo de membresía existente.',
+            ]);
+        }
+
+        DB::transaction(function () use ($data, $email, $context): void {
+            $empresaId = TenantMembership::where('tenant_id', $context->id())->where('role', 'owner')->where('status', 'active')
+                ->join('users', 'users.id', '=', 'network_tenant_memberships.user_id')->value('users.empresa_id');
+            abort_unless($empresaId, 409, 'El tenant no tiene empresa legacy vinculada.');
+            $user = User::create([
+                'name' => $data['name'], 'email' => $email, 'password' => Hash::make($data['password']), 'empresa_id' => $empresaId,
+            ]);
+            TenantMembership::create(['tenant_id' => $context->id(), 'user_id' => $user->id, 'role' => 'driver', 'status' => 'active']);
+            DriverProfile::create([
+                'tenant_id' => $context->id(), 'user_id' => $user->id, 'code' => $data['code'],
+                'vehicle_label' => $data['vehicle_label'] ?? null, 'status' => 'ACTIVE',
+            ]);
+        });
+
+        return back()->with('success', 'Motorista creado y habilitado.');
     }
 
     public function toggle(string $driver, TenantContext $context, TenantAccessService $access)

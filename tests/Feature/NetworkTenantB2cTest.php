@@ -79,8 +79,8 @@ final class NetworkTenantB2cTest extends TestCase
 
         $this->get($this->url($tenant, '/cotizar'))->assertOk()->assertSee('Storefront Express');
         $this->get($this->url($tenant, '/rastrear'))->assertOk()->assertSee('Rastrea tu envío');
-        $this->get($this->url($tenant, '/registro'))->assertOk()->assertSee('Crea tu cuenta');
-        $this->get($this->url($tenant, '/ingresar'))->assertOk()->assertSee('Iniciar sesión');
+        $this->get($this->url($tenant, '/registro'))->assertOk()->assertSee('Crea tu cuenta')->assertSee('Volver a Inicio')->assertDontSee('customer-links', false);
+        $this->get($this->url($tenant, '/ingresar'))->assertOk()->assertSee('Iniciar sesión')->assertSee('Volver a Inicio')->assertDontSee('customer-links', false);
         $this->get($this->url($tenant, '/white-label'))->assertStatus(301)->assertRedirect('/');
         $this->get($this->url($tenant, '/admin'))->assertRedirect(route('tenant.admin.login', [], false));
         $this->get('http://unknown.zigo.local/')->assertNotFound();

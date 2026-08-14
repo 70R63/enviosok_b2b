@@ -69,6 +69,22 @@ final class NetworkTenantAdminTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_admin_login_form_and_valid_csrf_session_preserve_tenant_path(): void
+    {
+        [$tenant, $owner] = $this->tenantOwner('admin-csrf');
+        $this->get($this->url($tenant, '/admin/login'))->assertOk()
+            ->assertSee('action="/admin/login"', false)
+            ->assertSee('name="_token"', false);
+
+        $token = 'tenant-admin-valid-csrf-token';
+        $this->withMiddleware(\App\Http\Middleware\VerifyCsrfToken::class)
+            ->withSession(['_token' => $token])
+            ->post($this->url($tenant, '/admin/login'), [
+                '_token' => $token, 'email' => $owner->email, 'password' => 'tenant-secret',
+            ])->assertRedirect('/admin');
+        $this->assertAuthenticatedAs($owner);
+    }
+
     public function test_suspended_membership_and_suspended_tenant_cannot_enter(): void
     {
         $user = $this->user('suspended@test.local');

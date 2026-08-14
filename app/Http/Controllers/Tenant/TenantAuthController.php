@@ -7,13 +7,14 @@ use App\Domain\Network\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use App\Domain\Network\Onboarding\Models\SaasOnboardingApplication;
 
 final class TenantAuthController extends Controller
 {
     public function create(TenantContext $context, TenantAccessService $access)
     {
-        if (Auth::check() && $access->hasMembership(Auth::user())) return redirect()->route($this->destination(Auth::id(), $context->id()));
+        if (Auth::check() && $access->hasMembership(Auth::user())) return redirect(route($this->destination(Auth::id(), $context->id()), [], false));
         $tenant = $context->tenant()->load('branding');
         return view('tenant.admin.auth.login', compact('tenant'));
     }
@@ -31,8 +32,8 @@ final class TenantAuthController extends Controller
         $request->session()->regenerate();
         $destination = $this->destination(Auth::id(), $context->id());
         return $destination === 'tenant.admin.setup'
-            ? redirect()->route($destination)
-            : redirect()->intended(route($destination));
+            ? redirect(route($destination, [], false))
+            : redirect()->intended(route($destination, [], false));
     }
 
     public function destroy(Request $request)
@@ -40,12 +41,12 @@ final class TenantAuthController extends Controller
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
-        return redirect()->route('tenant.admin.login');
+        return redirect(route('tenant.admin.login', [], false));
     }
 
     private function destination(int $userId, int $tenantId): string
     {
-        $needsSetup = SaasOnboardingApplication::where('owner_user_id', $userId)->where('tenant_id', $tenantId)
+        $needsSetup = Schema::hasTable('saas_onboarding_applications') && SaasOnboardingApplication::where('owner_user_id', $userId)->where('tenant_id', $tenantId)
             ->where('status', SaasOnboardingApplication::ACTIVE)->whereNull('setup_completed_at')->exists();
         return $needsSetup ? 'tenant.admin.setup' : 'tenant.admin.dashboard';
     }
