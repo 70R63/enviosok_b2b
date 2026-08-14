@@ -23,27 +23,36 @@ final class ZigoDriverPwaTest extends TestCase
             ->assertJsonPath('scope', '/driver/')
             ->assertJsonPath('display', 'standalone')
             ->assertJsonPath('prefer_related_applications', false)
-            ->assertJsonPath('icons.0.src', '/images/driver/zigo-driver-192.png')
+            ->assertJsonPath('icons.0.src', '/driver/assets/zigo-driver-192.png')
             ->assertJsonPath('icons.0.sizes', '192x192')
             ->assertJsonPath('icons.0.type', 'image/png')
             ->assertJsonPath('icons.0.purpose', 'any')
-            ->assertJsonPath('icons.1.src', '/images/driver/zigo-driver-512.png')
+            ->assertJsonPath('icons.1.src', '/driver/assets/zigo-driver-512.png')
             ->assertJsonPath('icons.1.sizes', '512x512')
             ->assertJsonPath('icons.1.type', 'image/png')
             ->assertJsonPath('icons.1.purpose', 'any')
-            ->assertJsonPath('icons.2.src', '/images/driver/zigo-driver-maskable-512.png')
+            ->assertJsonPath('icons.2.src', '/driver/assets/zigo-driver-maskable-512.png')
             ->assertJsonPath('icons.2.sizes', '512x512')
             ->assertJsonPath('icons.2.type', 'image/png')
             ->assertJsonPath('icons.2.purpose', 'maskable');
 
         foreach ([
-            'images/driver/zigo-driver-192.png' => [192, 192],
-            'images/driver/zigo-driver-512.png' => [512, 512],
-            'images/driver/zigo-driver-maskable-512.png' => [512, 512],
-        ] as $path => $dimensions) {
+            '/driver/assets/zigo-driver-192.png' => 'images/driver/zigo-driver-192.png',
+            '/driver/assets/zigo-driver-512.png' => 'images/driver/zigo-driver-512.png',
+            '/driver/assets/zigo-driver-maskable-512.png' => 'images/driver/zigo-driver-maskable-512.png',
+        ] as $uri => $path) {
             $this->assertFileExists(public_path($path));
-            $this->assertSame($dimensions, array_slice(getimagesize(public_path($path)), 0, 2));
+            $icon = $this->get("https://{$host}{$uri}");
+            $icon
+                ->assertOk()
+                ->assertHeader('Content-Type', 'image/png')
+                ->assertHeader('Cache-Control', 'max-age=86400, public')
+                ->assertHeader('X-Content-Type-Options', 'nosniff');
+            $this->assertGreaterThan(0, $icon->baseResponse->getFile()->getSize());
         }
+
+        $this->get("https://{$host}/driver/assets/not-allowed.png")->assertNotFound();
+        $this->get("https://{$host}/driver/assets/../../.env")->assertNotFound();
 
         $this->get("https://{$host}/driver/offline")->assertOk()->assertSee('Sin conexión.')->assertSee('Revisa tu conexión para continuar operando.');
         $this->get("https://{$host}/driver/service-worker.js")

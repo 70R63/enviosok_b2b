@@ -51,6 +51,9 @@ use App\Http\Controllers\Support\{CustomerSupportController,DriverSupportControl
 
 Route::domain(config('zigo_driver.host'))->prefix('driver')->name('driver.')->group(function (): void {
     Route::get('/manifest.webmanifest', [DriverPwaController::class, 'manifest'])->name('manifest');
+    Route::get('/assets/zigo-driver-192.png', [DriverPwaController::class, 'icon192'])->name('assets.icon192');
+    Route::get('/assets/zigo-driver-512.png', [DriverPwaController::class, 'icon512'])->name('assets.icon512');
+    Route::get('/assets/zigo-driver-maskable-512.png', [DriverPwaController::class, 'iconMaskable'])->name('assets.iconMaskable');
     Route::get('/offline', [DriverPwaController::class, 'offline'])->name('offline');
     Route::get('/service-worker.js', [DriverPwaController::class, 'serviceWorker'])->name('service-worker');
     Route::get('/login', [CentralDriverAuthController::class, 'create'])->name('login');
