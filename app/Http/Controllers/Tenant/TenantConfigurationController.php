@@ -26,12 +26,15 @@ final class TenantConfigurationController extends Controller
     public function update(UpdateTenantConfigurationRequest $request, TenantContext $context)
     {
         $tenant = $context->tenant();
-        $data = $request->safe()->except(['logo', 'favicon']);
+        $data = $request->safe()->except(['logo', 'hero_image', 'favicon']);
         if ($request->hasFile('logo')) {
             $data['logo_path'] = $request->file('logo')->store("tenant-branding/{$tenant->uuid}", 'public');
         }
         if ($request->hasFile('favicon')) {
             $data['favicon_path'] = $request->file('favicon')->store("tenant-branding/{$tenant->uuid}", 'public');
+        }
+        if ($request->hasFile('hero_image')) {
+            $data['hero_image_path'] = $request->file('hero_image')->store("tenant-branding/{$tenant->uuid}", 'public');
         }
         $tenant->branding()->updateOrCreate(['tenant_id' => $tenant->id], $data);
 

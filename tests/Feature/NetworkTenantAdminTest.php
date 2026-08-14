@@ -116,12 +116,15 @@ final class NetworkTenantAdminTest extends TestCase
         $tenant->memberships()->create(['user_id' => $admin->id, 'role' => 'admin', 'status' => 'active']);
         $this->actingAs($owner)->patch($this->url($tenant, '/admin/configuracion'), [
             'brand_name' => 'Owner Brand', 'primary_color' => '#112233', 'logo' => UploadedFile::fake()->image('customer-logo.png')->size(100),
+            'hero_image' => UploadedFile::fake()->image('hero.webp', 1200, 750)->size(500),
         ])->assertRedirect();
         $branding = $tenant->fresh()->branding;
         $this->assertSame('Owner Brand', $branding->brand_name);
         $this->assertStringStartsWith('tenant-branding/'.$tenant->uuid.'/', $branding->logo_path);
         $this->assertStringNotContainsString('customer-logo', $branding->logo_path);
         Storage::disk('public')->assertExists($branding->logo_path);
+        Storage::disk('public')->assertExists($branding->hero_image_path);
+        $this->assertStringStartsWith('tenant-branding/'.$tenant->uuid.'/', $branding->hero_image_path);
         $this->actingAs($owner)->get($this->url($tenant, '/admin'))->assertOk()
             ->assertSee(Storage::disk('public')->url($branding->logo_path), false);
 

@@ -20,6 +20,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Mockery\MockInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\TestCase;
@@ -76,6 +77,32 @@ final class NetworkTenantB2cTest extends TestCase
         $this->get('http://unknown.zigo.local/')->assertNotFound();
         $this->get('http://stage.zigo-envios.com/')->assertDontSee('Storefront Express');
         $this->get('http://zigo-envios.com/')->assertDontSee('Storefront Express');
+    }
+
+    public function test_landing_uses_safe_tenant_hero_and_contextual_navigation(): void
+    {
+        Storage::fake('public');
+        $tenant = $this->tenant('premium-landing', $this->storefrontEntitlements());
+        $hero = 'tenant-branding/'.$tenant->uuid.'/hero.webp';
+        Storage::disk('public')->put($hero, 'image');
+        $tenant->branding()->create(['brand_name' => 'Premium Express', 'hero_image_path' => $hero]);
+
+        $guest = $this->get($this->url($tenant, '/'))->assertOk()
+            ->assertSee(Storage::disk('public')->url($hero), false)
+            ->assertSee('Iniciar sesión')->assertSee('Crear cuenta')
+            ->assertSee('¿Ya tienes una guía?')->assertSee('data-landing-tracking', false)
+            ->assertDontSee('href="/#cotizar"', false);
+        $guest->assertSee('action="/cotizar"', false);
+
+        Storage::disk('public')->delete($hero);
+        $this->get($this->url($tenant, '/'))->assertOk()
+            ->assertSee(asset('images/tenant-hero-fallback.svg'), false)
+            ->assertDontSee(Storage::disk('public')->url($hero), false);
+
+        $customer = $this->user('premium-customer@test.local');
+        $this->actingAs($customer)->get($this->url($tenant, '/'))->assertOk()
+            ->assertSee('Envíos')->assertSee('Mi cuenta')->assertDontSee('Crear cuenta')
+            ->assertDontSee(route('tenant.customer.app.quote', [], false), false);
     }
 
     public function test_subscription_and_entitlements_guard_channel_quote_and_tracking(): void
@@ -307,7 +334,7 @@ final class NetworkTenantB2cTest extends TestCase
         Schema::create('network_modules', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->string('code')->unique(), $t->string('name'), $t->string('type'), $t->boolean('is_active'), $t->unsignedSmallInteger('sort_order'), $t->timestamps()]));
         Schema::create('network_tenants', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->uuid('uuid')->unique(), $t->string('name'), $t->string('slug')->unique(), $t->string('status'), $t->unsignedBigInteger('current_plan_id')->nullable(), $t->timestamps()]));
         Schema::create('network_tenant_domains', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->unsignedBigInteger('tenant_id'), $t->string('domain')->unique(), $t->string('type'), $t->string('environment'), $t->boolean('is_primary'), $t->string('status'), $t->timestamp('verified_at')->nullable(), $t->timestamps()]));
-        Schema::create('network_tenant_brandings', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->unsignedBigInteger('tenant_id')->unique(), $t->string('brand_name')->nullable(), $t->string('logo_path')->nullable(), $t->string('primary_color')->nullable(), $t->string('secondary_color')->nullable(), $t->string('accent_color')->nullable(), $t->string('favicon_path')->nullable(), $t->string('support_email')->nullable(), $t->string('support_phone')->nullable(), $t->timestamps()]));
+        Schema::create('network_tenant_brandings', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->unsignedBigInteger('tenant_id')->unique(), $t->string('brand_name')->nullable(), $t->string('logo_path')->nullable(), $t->string('hero_image_path')->nullable(), $t->string('primary_color')->nullable(), $t->string('secondary_color')->nullable(), $t->string('accent_color')->nullable(), $t->string('favicon_path')->nullable(), $t->string('support_email')->nullable(), $t->string('support_phone')->nullable(), $t->timestamps()]));
         Schema::create('network_tenant_memberships', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->unsignedBigInteger('tenant_id'), $t->unsignedBigInteger('user_id'), $t->string('role'), $t->string('status'), $t->timestamps()]));
         Schema::create('network_subscriptions', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->uuid('uuid')->unique(), $t->unsignedBigInteger('tenant_id'), $t->unsignedBigInteger('plan_id'), $t->string('status'), $t->unsignedInteger('operations_limit')->nullable(), $t->timestamp('started_at'), $t->timestamp('current_period_start'), $t->timestamp('current_period_end'), $t->timestamp('trial_ends_at')->nullable(), $t->timestamp('grace_ends_at')->nullable(), $t->timestamp('canceled_at')->nullable(), $t->timestamp('ended_at')->nullable(), $t->timestamps()]));
         Schema::create('network_entitlements', fn (Blueprint $t) => tap($t, fn ($t) => [$t->id(), $t->unsignedBigInteger('subscription_id'), $t->unsignedBigInteger('tenant_id'), $t->unsignedBigInteger('module_id'), $t->string('code'), $t->boolean('is_enabled'), $t->unsignedInteger('limit_value')->nullable(), $t->string('source'), $t->timestamps()]));

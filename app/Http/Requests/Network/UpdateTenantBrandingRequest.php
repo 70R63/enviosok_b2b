@@ -20,6 +20,6 @@ final class UpdateTenantBrandingRequest extends FormRequest
     {
         $hex = ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'];
 
-        return ['brand_name' => ['nullable', 'string', 'max:191'], 'primary_color' => $hex, 'secondary_color' => $hex, 'accent_color' => $hex, 'support_email' => ['nullable', 'email', 'max:191'], 'support_phone' => ['nullable', 'string', 'max:50'], 'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'], 'favicon' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:512']];
+        return ['brand_name' => ['nullable', 'string', 'max:191'], 'primary_color' => $hex, 'secondary_color' => $hex, 'accent_color' => $hex, 'support_email' => ['nullable', 'email', 'max:191'], 'support_phone' => ['nullable', 'string', 'max:50'], 'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'], 'hero_image' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:4096'], 'favicon' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:512']];
     }
 }
