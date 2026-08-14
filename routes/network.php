@@ -190,10 +190,10 @@ Route::middleware('tenant.resolve')->prefix('branding')->name('tenant.branding.'
     Route::get('/favicon', [TenantBrandingAssetController::class, 'favicon'])->name('favicon');
 });
 
-Route::get('/', [TenantHomeController::class, 'home'])->middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:WHITE_LABEL'])->name('tenant.customer.landing');
+Route::get('/', [TenantHomeController::class, 'home'])->middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:B2C'])->name('tenant.customer.landing');
 Route::permanentRedirect('/white-label', '/')->middleware('tenant.resolve')->name('tenant.home');
 
-Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:CUSTOMERS'])->name('tenant.customer.')->group(function (): void {
+Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:B2C'])->name('tenant.customer.')->group(function (): void {
     Route::get('/ingresar', [CustomerAuthController::class, 'create'])->name('login');
     Route::post('/ingresar', [CustomerAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
     Route::get('/registro', [CustomerAuthController::class, 'registration'])->name('register');
@@ -230,7 +230,7 @@ Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:
     });
 });
 
-Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:QUOTES'])->name('tenant.b2c.')->group(function (): void {
+Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:SHIPPING'])->name('tenant.b2c.')->group(function (): void {
     Route::get('/codigos-postales/{postalCode}', [TenantB2cController::class, 'postal'])->where('postalCode','[0-9]{5}')->name('postal.show');
     Route::get('/cotizar', [TenantB2cController::class, 'create'])->name('quote.create');
     Route::post('/cotizar', [TenantB2cController::class, 'store'])->middleware(['tenant.entitlement:SHIPPING', 'throttle:20,1'])->name('quote.store');

@@ -11,6 +11,7 @@ use App\Domain\Shipping\Local\Models\LocalShipment;
 use App\Domain\Shipping\Local\Models\LocalShippingQuoteSnapshot;
 use App\Http\Controllers\Controller;
 use App\Services\ZigoPostalCodeService;
+use App\Domain\Network\Channels\B2C\TenantB2cQuoteService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -23,23 +24,31 @@ final class CustomerJourneyController extends Controller
         return view('tenant.customer.journey.shipping', ['tenant' => $context->tenant()->load('branding'), 'operation' => $operation, 'package' => $operation->metadata['quoted_package'] ?? []]);
     }
 
-    public function storeShipping(Request $request, TenantContext $context, CustomerCheckoutService $checkouts)
+    public function storeShipping(Request $request, TenantContext $context, CustomerCheckoutService $checkouts, TenantB2cQuoteService $quotes)
     {
         $operation = $this->activeOperation($request, $context);
         $data = $request->validate([
-            'sender.name' => ['required','string','max:120'], 'sender.phone' => ['required','string','max:30'], 'sender.interior' => ['nullable','string','max:40'], 'sender.references' => ['nullable','string','max:300'],
-            'recipient.name' => ['required','string','max:120'], 'recipient.phone' => ['required','string','max:30'], 'recipient.interior' => ['nullable','string','max:40'], 'recipient.references' => ['nullable','string','max:300'],
+            'sender.name' => ['required','string','max:120'], 'sender.phone' => ['required','string','max:30'], 'sender.email' => ['nullable','email','max:160'], 'sender.street' => ['required','string','max:180'], 'sender.exterior' => ['required','string','max:40'], 'sender.interior' => ['nullable','string','max:40'], 'sender.references' => ['nullable','string','max:300'],
+            'recipient.name' => ['required','string','max:120'], 'recipient.phone' => ['required','string','max:30'], 'recipient.email' => ['nullable','email','max:160'], 'recipient.street' => ['required','string','max:180'], 'recipient.exterior' => ['required','string','max:40'], 'recipient.interior' => ['nullable','string','max:40'], 'recipient.references' => ['nullable','string','max:300'],
             'reference' => ['nullable','string','max:100'],
         ]);
-        $metadata=$operation->metadata??[];$snapshot=LocalShippingQuoteSnapshot::where('tenant_id',$context->id())->where('uuid',$metadata['selected_quote_snapshot_uuid']??'')->firstOrFail();
-        $data['sender']['address']=$snapshot->origin;$data['recipient']['address']=$snapshot->destination;$data['package']=['type'=>$snapshot->package_type,'weight'=>(string)$snapshot->weight_kg]+($snapshot->dimensions??[]);
         $profile = $request->attributes->get('customer_profile');
-        $checkout = DB::transaction(function () use ($operation, $data, $context, $profile, $checkouts): TenantCustomerCheckout {
+        $checkout = DB::transaction(function () use ($operation, $data, $context, $profile, $checkouts, $quotes): TenantCustomerCheckout {
             $locked = TenantOperation::whereKey($operation->id)->where('status', 'quoted')->lockForUpdate()->firstOrFail();
             $existing = $locked->customerCheckout()->lockForUpdate()->first();
             if ($existing) return $existing;
 
-            $metadata = $locked->metadata ?? []; $metadata['shipping_data'] = $data; $locked->update(['metadata' => $metadata]);
+            $metadata = $locked->metadata ?? [];
+            $preliminary = LocalShippingQuoteSnapshot::where('tenant_id',$context->id())->where('uuid',$metadata['selected_quote_snapshot_uuid']??'')->firstOrFail();
+            $needsFinalization = (bool) data_get($preliminary->matched_tariff, '_quote_context.preliminary', false);
+            $final = $needsFinalization ? $quotes->finalize($context->tenant(), $preliminary, $data['sender'], $data['recipient']) : $preliminary;
+            $data['sender']['address']=$final->origin;$data['recipient']['address']=$final->destination;$data['package']=['type'=>$final->package_type,'weight'=>(string)$final->weight_kg]+($final->dimensions??[]);
+            if ($needsFinalization) $metadata['preliminary_quote_snapshot_uuid'] ??= $preliminary->uuid;
+            $metadata['selected_quote_snapshot_uuid']=$final->uuid;
+            $metadata['selected_quote']=array_merge($metadata['selected_quote']??[],['price'=>(string)$final->amount,'currency'=>$final->currency,'preliminary'=>false]);
+            $metadata['final_price']=(string)$final->amount;
+            $metadata['shipping_data'] = $data;
+            $locked->update(['metadata' => $metadata]);
             return $checkouts->create($context->tenant(), $profile, $locked->fresh());
         });
         return redirect('/app/checkout/'.$checkout->uuid.'/resumen');

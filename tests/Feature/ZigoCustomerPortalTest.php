@@ -141,6 +141,25 @@ class ZigoCustomerPortalTest extends TestCase
         $this->assertSame('sobre',$first->quote_snapshot['package']['type']); $this->assertDatabaseCount('tenant_customer_checkouts',1);
     }
 
+    public function test_preliminary_quote_cannot_create_checkout_or_reach_payment(): void
+    {
+        $tenant = $this->tenant('preliminary-gate');
+        $profile = $this->customer($tenant, 'preliminary-gate@example.test');
+        [$operation] = $this->quotedOperation($tenant, $profile);
+        $metadata = $operation->metadata;
+        $metadata['selected_quote']['preliminary'] = true;
+        $metadata['shipping_data'] = ['sender'=>[],'recipient'=>[],'package'=>[]];
+        $operation->update(['metadata'=>$metadata]);
+
+        try {
+            app(CustomerCheckoutService::class)->create($tenant,$profile,$operation->fresh());
+            $this->fail('A preliminary quote must not create a checkout.');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+            $this->assertSame(422,$exception->getStatusCode());
+        }
+        $this->assertDatabaseMissing('tenant_customer_checkouts',['tenant_operation_id'=>$operation->id]);
+    }
+
     public function test_optional_evidence_summary_renders_without_evidence_and_keeps_server_total(): void
     {
         $tenant = $this->tenant('summary-no-proof');
@@ -334,7 +353,7 @@ class ZigoCustomerPortalTest extends TestCase
         $subscription = Subscription::create(['tenant_id' => $tenant->id, 'plan_id' => $plan->id, 'status' => 'active', 'started_at' => now(), 'current_period_start' => now(), 'current_period_end' => now()->addMonth()]);
         $legacyOwner = User::create(['name'=>'Legacy owner','email'=>'owner-'.$slug.'@example.test','password'=>Hash::make('secret-pass'),'empresa_id'=>1000+$tenant->id]);
         $tenant->memberships()->create(['user_id'=>$legacyOwner->id,'role'=>'owner','status'=>'active']);
-        foreach (['WHITE_LABEL','CUSTOMERS','SHIPPING','TRACKING'] as $code) { $module = Module::create(['code' => $code.$tenant->id, 'name' => $code, 'type' => 'addon', 'is_active' => true, 'sort_order' => 1]); Entitlement::create(['subscription_id' => $subscription->id, 'tenant_id' => $tenant->id, 'module_id' => $module->id, 'code' => $code, 'is_enabled' => true, 'source' => 'plan']); }
+        foreach (['B2C','SHIPPING','TRACKING'] as $code) { $module = Module::create(['code' => $code.$tenant->id, 'name' => $code, 'type' => 'addon', 'is_active' => true, 'sort_order' => 1]); Entitlement::create(['subscription_id' => $subscription->id, 'tenant_id' => $tenant->id, 'module_id' => $module->id, 'code' => $code, 'is_enabled' => true, 'source' => 'plan']); }
         return $tenant;
     }
 
@@ -359,8 +378,8 @@ class ZigoCustomerPortalTest extends TestCase
     private function shippingPayload(): array
     {
         return [
-            'sender' => ['name' => 'Remitente', 'phone' => '8111111111', 'interior' => '2', 'references' => 'Puerta azul'],
-            'recipient' => ['name' => 'Destinatario', 'phone' => '8222222222', 'interior' => null, 'references' => 'Frente al parque'],
+            'sender' => ['name' => 'Remitente', 'phone' => '8111111111', 'email' => 'remitente@example.test', 'street' => 'Origen', 'exterior' => '1', 'interior' => '2', 'references' => 'Puerta azul'],
+            'recipient' => ['name' => 'Destinatario', 'phone' => '8222222222', 'email' => null, 'street' => 'Destino', 'exterior' => '2', 'interior' => null, 'references' => 'Frente al parque'],
             'reference' => 'Pedido RC4.9.1',
         ];
     }

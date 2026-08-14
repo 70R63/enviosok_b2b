@@ -21,6 +21,7 @@ final class CustomerCheckoutService
             if ($existing) return $existing;
             $metadata = $operation->metadata ?? [];
             abort_unless(isset($metadata['shipping_data'], $metadata['selected_quote']), 422);
+            abort_if(($metadata['selected_quote']['preliminary'] ?? false) === true, 422, 'La cotización preliminar debe finalizarse antes del pago.');
             $amounts = $this->pricing->calculate($operation, $proof);
             return TenantCustomerCheckout::create(array_merge($amounts, [
                 'tenant_id' => $tenant->id, 'customer_profile_id' => $profile->id, 'tenant_operation_id' => $operation->id,

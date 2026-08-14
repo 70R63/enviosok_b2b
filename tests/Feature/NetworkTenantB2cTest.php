@@ -68,6 +68,10 @@ final class NetworkTenantB2cTest extends TestCase
             ->assertSee('class="top-header"', false)
             ->assertSee('class="quote-card"', false)
             ->assertSee('class="faq-section"', false)
+            ->assertDontSee('Tecnología • Logística • Conexión')
+            ->assertDontSee('Cotizar ahora')
+            ->assertDontSee('name="origin_address"', false)
+            ->assertDontSee('name="destination_address"', false)
             ->assertDontSee('Tenant')
             ->assertDontSee('White Label')
             ->assertDontSee('Sandbox');
@@ -135,29 +139,30 @@ final class NetworkTenantB2cTest extends TestCase
     {
         $suspended = $this->tenant('suspended', $this->storefrontEntitlements(), 'suspended');
         $this->get($this->url($suspended, '/cotizar'))->assertStatus(503);
-        $noQuotes = $this->tenant('no-quotes', ['CUSTOMERS', 'SHIPPING', 'TRACKING', 'WHITE_LABEL']);
-        $this->get($this->url($noQuotes, '/cotizar'))->assertForbidden();
-        $noShipping = $this->tenant('no-shipping', ['CUSTOMERS', 'QUOTES', 'TRACKING', 'WHITE_LABEL']);
-        $this->get($this->url($noShipping, '/cotizar'))->assertOk();
+        $noShipping = $this->tenant('no-shipping', ['B2C', 'TRACKING']);
+        $this->get($this->url($noShipping, '/cotizar'))->assertForbidden();
         $this->post($this->url($noShipping, '/cotizar'), $this->quote())->assertForbidden();
-        $noTracking = $this->tenant('no-tracking', ['CUSTOMERS', 'QUOTES', 'SHIPPING', 'WHITE_LABEL']);
+        $noTracking = $this->tenant('no-tracking', ['B2C', 'SHIPPING']);
         $this->get($this->url($noTracking, '/rastrear'))->assertForbidden();
     }
 
     public function test_storefront_capabilities_are_independent_and_do_not_require_b2c(): void
     {
-        $landing = $this->tenant('landing-only', ['WHITE_LABEL']);
+        $landing = $this->tenant('landing-only', ['B2C']);
         $this->get($this->url($landing, '/'))->assertOk();
-        $this->get($this->url($landing, '/ingresar'))->assertForbidden();
+        $this->get($this->url($landing, '/ingresar'))->assertOk();
+        $this->get($this->url($landing, '/cotizar'))->assertForbidden();
 
-        $noLanding = $this->tenant('no-landing', ['CUSTOMERS', 'QUOTES', 'SHIPPING', 'TRACKING']);
+        $noLanding = $this->tenant('no-landing', ['SHIPPING', 'TRACKING']);
         $this->get($this->url($noLanding, '/'))->assertForbidden();
-        $this->get($this->url($noLanding, '/ingresar'))->assertOk();
-        $this->get($this->url($noLanding, '/registro'))->assertOk();
+        $this->get($this->url($noLanding, '/ingresar'))->assertForbidden();
+        $this->get($this->url($noLanding, '/registro'))->assertForbidden();
         $this->get($this->url($noLanding, '/cotizar'))->assertOk();
         $this->get($this->url($noLanding, '/rastrear'))->assertOk();
         $this->get($this->url($noLanding, '/admin/login'))->assertOk();
-        $this->assertDatabaseMissing('network_entitlements', ['code' => 'B2C']);
+        foreach (['WHITE_LABEL','CUSTOMERS','QUOTES'] as $legacyCode) {
+            $this->assertDatabaseMissing('network_entitlements', ['code' => $legacyCode]);
+        }
     }
 
     public function test_tenant_quote_returns_only_its_published_service_and_creates_owned_snapshot_without_usage(): void
@@ -170,6 +175,7 @@ final class NetworkTenantB2cTest extends TestCase
 
         $response = $this->post($this->url($tenant, '/cotizar'), $this->quote())->assertOk()
             ->assertSee('Entrega tenant')->assertSee('149.50')
+            ->assertSee('Precio preliminar. La tarifa puede cambiar')
             ->assertDontSee('999.00')->assertDontSee('FLAT')->assertDontSee('base_cost')->assertDontSee('matched_tariff');
         $this->assertLessThan(strpos($response->getContent(), 'Cómo funciona'), strpos($response->getContent(), 'Opciones disponibles'));
         $operation = TenantOperation::firstOrFail();
@@ -195,10 +201,8 @@ final class NetworkTenantB2cTest extends TestCase
             ->assertSessionHasErrors('quote')
             ->assertSessionHasInput('cp_origen', '64000')
             ->assertSessionHasInput('origin_settlement', 'Centro')
-            ->assertSessionHasInput('origin_address', 'Avenida Juárez 123')
             ->assertSessionHasInput('cp_destino', '57300')
             ->assertSessionHasInput('destination_settlement', 'Benito Juárez')
-            ->assertSessionHasInput('destination_address', 'Avenida Pantitlán 456')
             ->assertSessionHasInput('tipo_envio', 'caja')
             ->assertSessionHasInput('peso', 2.5)
             ->assertSessionHasInput('length', 20)
@@ -208,6 +212,42 @@ final class NetworkTenantB2cTest extends TestCase
         $this->assertDatabaseCount('local_shipping_quote_snapshots', 0);
         $this->assertDatabaseCount('network_tenant_operations', 0);
         $this->assertDatabaseCount('network_usage_events', 0);
+    }
+
+    public function test_public_quote_rejects_invalid_colony_and_requires_box_dimensions_without_street(): void
+    {
+        $tenant = $this->tenant('public-contract', $this->storefrontEntitlements());
+        $this->tenantService($tenant, published: true, amount: '149.50');
+
+        $this->post($this->url($tenant, '/cotizar'), $this->quote(['origin_settlement' => 'Colonia ajena']))
+            ->assertSessionHasErrors('origin_settlement');
+        $this->post($this->url($tenant, '/cotizar'), $this->quote(['tipo_envio' => 'caja']))
+            ->assertSessionHasErrors(['length','width','height']);
+        $this->post($this->url($tenant, '/cotizar'), $this->quote())->assertOk();
+    }
+
+    public function test_distance_quote_is_preliminary_and_exact_addresses_create_auditable_final_snapshot(): void
+    {
+        $tenant = $this->tenant('distance-final', $this->storefrontEntitlements());
+        $this->tenantService($tenant, published: true, amount: '100.00', strategy: 'BASE_PLUS_OVERAGE');
+        $this->mock(RouteDistanceProvider::class, fn (MockInterface $mock) => $mock->shouldReceive('distance')->twice()->andReturn(
+            ['distance_meters'=>10000,'duration_seconds'=>900],
+            ['distance_meters'=>30000,'duration_seconds'=>1800],
+        ));
+        $quotes = app(\App\Domain\Network\Channels\B2C\TenantB2cQuoteService::class);
+        $quoted = $quotes->quote($tenant, $this->quote());
+        $preliminary = LocalShippingQuoteSnapshot::where('uuid',$quoted['options'][0]['snapshot_uuid'])->sole();
+        $final = $quotes->finalize($tenant,$preliminary,
+            ['street'=>'Avenida Juárez','exterior'=>'123','interior'=>null],
+            ['street'=>'Avenida Pantitlán','exterior'=>'456','interior'=>'2'],
+        );
+
+        $this->assertTrue((bool)data_get($preliminary->matched_tariff,'_quote_context.preliminary'));
+        $this->assertFalse((bool)data_get($final->matched_tariff,'_quote_context.preliminary'));
+        $this->assertSame($preliminary->uuid,data_get($final->matched_tariff,'_quote_context.source_snapshot_uuid'));
+        $this->assertSame($tenant->id,$final->tenant_id);
+        $this->assertSame(30000,$final->distance_meters);
+        $this->assertNotSame((string)$preliminary->amount,(string)$final->amount);
     }
 
     public function test_unpublished_tenant_service_returns_controlled_error_without_national_fallback_or_artifacts(): void
@@ -288,10 +328,8 @@ final class NetworkTenantB2cTest extends TestCase
         return array_replace([
             'cp_origen' => '64000',
             'origin_settlement' => 'Centro',
-            'origin_address' => 'Avenida Juárez 123',
             'cp_destino' => '57300',
             'destination_settlement' => 'Benito Juárez',
-            'destination_address' => 'Avenida Pantitlán 456',
             'tipo_envio' => 'sobre',
             'peso' => 1,
         ], $overrides);
@@ -312,7 +350,7 @@ final class NetworkTenantB2cTest extends TestCase
             LocalShippingZonePostalCode::create(['tenant_id' => $tenant->id, 'zone_id' => $zone->id, 'postal_code' => $postalCode, 'active' => true]);
         }
         $service = LocalShippingService::create(['tenant_id' => $tenant->id, 'code' => 'tenant-delivery', 'name' => 'Entrega tenant', 'origin_zone_id' => $zone->id, 'destination_zone_id' => $zone->id, 'service_level' => 'same_day', 'base_cost' => '80.00', 'base_price' => '100.00', 'currency' => 'MXN', 'status' => 'active', 'published' => $published, 'pricing_strategy' => $strategy, 'sort_order' => 1, 'sla_text' => 'Mismo día']);
-        LocalShippingPricingRule::create(['tenant_id' => $tenant->id, 'service_id' => $service->id, 'from_km' => $strategy === 'DISTANCE_TIERS_OVERAGE' ? '0' : null, 'to_km' => $strategy === 'DISTANCE_TIERS_OVERAGE' ? '25' : null, 'amount' => $amount, 'active' => true]);
+        LocalShippingPricingRule::create(['tenant_id' => $tenant->id, 'service_id' => $service->id, 'from_km' => $strategy === 'DISTANCE_TIERS_OVERAGE' ? '0' : null, 'to_km' => $strategy === 'DISTANCE_TIERS_OVERAGE' ? '25' : null, 'included_distance_km' => $strategy === 'BASE_PLUS_OVERAGE' ? '10' : null, 'overage_price_per_km' => $strategy === 'BASE_PLUS_OVERAGE' ? '2' : null, 'overage_rounding' => $strategy === 'BASE_PLUS_OVERAGE' ? 'CEIL' : null, 'amount' => $amount, 'active' => true]);
         foreach ([['sobre', '1', null, null, null], ['caja', '40', '60', '50', '40']] as $package) {
             LocalShippingPackageRule::create(['tenant_id' => $tenant->id, 'service_id' => $service->id, 'package_type' => $package[0], 'max_weight_kg' => $package[1], 'max_dimension_1_cm' => $package[2], 'max_dimension_2_cm' => $package[3], 'max_dimension_3_cm' => $package[4], 'active' => true]);
         }
@@ -321,7 +359,7 @@ final class NetworkTenantB2cTest extends TestCase
 
     private function storefrontEntitlements(): array
     {
-        return ['CUSTOMERS', 'QUOTES', 'SHIPPING', 'TRACKING', 'WHITE_LABEL'];
+        return ['B2C', 'SHIPPING', 'TRACKING'];
     }
 
     private function url(Tenant $tenant, string $path): string

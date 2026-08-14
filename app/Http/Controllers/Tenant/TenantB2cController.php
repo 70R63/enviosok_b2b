@@ -24,8 +24,8 @@ final class TenantB2cController extends Controller
     {
         $data = $request->validate([
             'cp_origen' => ['required', 'regex:/^\d{5}$/'], 'cp_destino' => ['required', 'regex:/^\d{5}$/'],
-            'origin_settlement' => ['required','string','max:160'], 'origin_address' => ['required','string','max:255'],
-            'destination_settlement' => ['required','string','max:160'], 'destination_address' => ['required','string','max:255'],
+            'origin_settlement' => ['required','string','max:160'], 'origin_address' => ['nullable','string','max:255'],
+            'destination_settlement' => ['required','string','max:160'], 'destination_address' => ['nullable','string','max:255'],
             'tipo_envio' => ['required', 'in:sobre,caja'], 'peso' => ['required', 'numeric', 'min:0.1', 'max:70'],
             'length' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:300'],
             'width' => ['required_if:tipo_envio,caja', 'nullable', 'numeric', 'min:1', 'max:300'],
@@ -57,7 +57,8 @@ final class TenantB2cController extends Controller
         abort_unless(is_array($option), 404);
         $operation = TenantOperation::where('tenant_id', $context->id())->where('uuid', $data['operation_uuid'])->where('status', 'quoted')->firstOrFail();
         $snapshot=LocalShippingQuoteSnapshot::where('tenant_id',$context->id())->where('uuid',$option['snapshot_uuid'])->where('expires_at','>',now())->firstOrFail();
-        $metadata=$operation->metadata??[];$metadata['selected_quote_snapshot_uuid']=$snapshot->uuid;$metadata['selected_quote']=['service'=>$option['service'],'price'=>(string)$snapshot->amount,'currency'=>$snapshot->currency];$metadata['final_price']=(string)$snapshot->amount;$metadata['origin_postal_code']=$snapshot->origin['postal_code'];$metadata['destination_postal_code']=$snapshot->destination['postal_code'];$metadata['quoted_package']=['type'=>$snapshot->package_type,'weight'=>(string)$snapshot->weight_kg]+($snapshot->dimensions??[]);
+        $preliminary = (bool) data_get($snapshot->matched_tariff, '_quote_context.preliminary', false);
+        $metadata=$operation->metadata??[];$metadata['selected_quote_snapshot_uuid']=$snapshot->uuid;$metadata['preliminary_quote_snapshot_uuid']=$preliminary?$snapshot->uuid:null;$metadata['selected_quote']=['service'=>$option['service'],'price'=>(string)$snapshot->amount,'currency'=>$snapshot->currency,'preliminary'=>$preliminary];$metadata['final_price']=$preliminary?null:(string)$snapshot->amount;$metadata['origin_postal_code']=$snapshot->origin['postal_code'];$metadata['destination_postal_code']=$snapshot->destination['postal_code'];$metadata['quoted_package']=['type'=>$snapshot->package_type,'weight'=>(string)$snapshot->weight_kg]+($snapshot->dimensions??[]);
         $operation->update(['provider'=>'ZIGO_LOCAL','service_code'=>$option['service_code'],'metadata'=>$metadata]);
         if (auth()->check()) {
             $profile = TenantCustomerProfile::where('tenant_id', $context->id())->where('user_id', auth()->id())->where('status', 'active')->first();
