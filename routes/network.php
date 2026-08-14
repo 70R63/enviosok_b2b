@@ -194,7 +194,6 @@ Route::get('/', [TenantHomeController::class, 'home'])->middleware(['tenant.reso
 Route::permanentRedirect('/white-label', '/')->middleware('tenant.resolve')->name('tenant.home');
 
 Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:CUSTOMERS'])->name('tenant.customer.')->group(function (): void {
-    Route::get('/login', [CustomerAuthController::class, 'create'])->name('login.public');
     Route::get('/ingresar', [CustomerAuthController::class, 'create'])->name('login');
     Route::post('/ingresar', [CustomerAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
     Route::get('/registro', [CustomerAuthController::class, 'registration'])->name('register');
