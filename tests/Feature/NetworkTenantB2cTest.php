@@ -43,8 +43,8 @@ final class NetworkTenantB2cTest extends TestCase
         $tenant = $this->tenant('alpha', $this->storefrontEntitlements());
         $tenant->branding()->create(['brand_name' => 'Rapid Alpha', 'primary_color' => '#123456']);
         $this->get($this->url($tenant, '/cotizar'))->assertOk()->assertSee('Rapid Alpha')->assertSee('Código postal de origen')
-            ->assertSee('data-settlement-wrap="origin"', false)
-            ->assertSee('aria-live="polite"', false)
+            ->assertSee('data-options="origin"', false)
+            ->assertSee('role="combobox"', false)
             ->assertSee('colonies.length===1', false)
             ->assertSee('Consultando colonias…');
         $this->get('http://unknown.zigo.local/cotizar')->assertNotFound();
