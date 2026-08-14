@@ -14,7 +14,7 @@
         <h2>{{ $offer->name }}</h2><p>{{ $offer->description }}</p>
         <div class="price">${{ number_format((float)$offer->price, 2) }} {{ $offer->currency }}</div>
         @if($offer->plan?->included_operations)<p><strong>{{ $offer->metadata['allowance_label'] ?? ('Hasta '.number_format($offer->plan->included_operations).' envíos incluidos por periodo') }}</strong></p>@endif
-        @if($offer->plan?->modules?->isNotEmpty())<ul class="feature-list">@foreach($offer->plan->modules->where('pivot.is_included', true) as $module)<li>{{ $module->code==='API'?'Integraciones con tus sistemas':($module->code==='DRIVER'?'App para conductores':$module->name) }}</li>@endforeach</ul>@endif
+        @if($offer->plan?->modules?->isNotEmpty())<ul class="feature-list">@foreach(\App\Support\Network\ModulePresentation::labels($offer->plan->modules->where('pivot.is_included', true)) as $label)<li>{{ $label }}</li>@endforeach</ul>@endif
         <a class="btn btn-primary" href="{{ route('zigo-platform.start', ['offer'=>$offer->uuid]) }}">Comenzar</a>
     </article>
 @endforeach

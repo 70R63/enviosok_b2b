@@ -10,7 +10,7 @@
 <form method="post" action="{{ route('zigo-platform.onboarding.solution.store',$application->public_token) }}">@csrf @method('PATCH')
 <article class="choice" style="margin:24px 0"><div class="muted">{{ $offer->billing_type==='ANNUAL'?'Plan anual':'Plan mensual' }}</div><h2>{{ $offer->name }}</h2><p>{{ $offer->description }}</p><div class="price">${{ number_format((float)$offer->price,2) }} {{ $offer->currency }}</div>
 @if($offer->plan->included_operations)<p><strong>{{ $offer->metadata['allowance_label'] ?? ('Hasta '.number_format($offer->plan->included_operations).' envíos incluidos por periodo') }}</strong></p>@endif
-@if($offer->plan->modules->isNotEmpty())<ul class="feature-list">@foreach($offer->plan->modules->where('pivot.is_included',true) as $module)<li>{{ $module->code==='API'?'Integraciones con tus sistemas':($module->code==='DRIVER'?'App para conductores':$module->name) }}</li>@endforeach</ul>@endif
+@if($offer->plan->modules->isNotEmpty())<ul class="feature-list">@foreach(\App\Support\Network\ModulePresentation::labels($offer->plan->modules->where('pivot.is_included',true)) as $label)<li>{{ $label }}</li>@endforeach</ul>@endif
 </article>
 <div class="actions"><a class="btn btn-secondary" href="{{ route('zigo-platform.pricing') }}">Cambiar plan</a><button class="btn btn-primary" type="submit">Continuar</button></div></form>
 @endif

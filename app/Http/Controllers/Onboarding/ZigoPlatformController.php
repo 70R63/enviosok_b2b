@@ -24,7 +24,7 @@ final class ZigoPlatformController extends Controller
 {
     public function landing()
     {
-        return view('zigo-platform.landing');
+        return view('zigo-platform.landing', ['offers' => $this->planOffers()]);
     }
 
     public function pricing()

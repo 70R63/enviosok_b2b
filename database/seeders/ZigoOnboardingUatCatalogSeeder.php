@@ -102,10 +102,11 @@ final class ZigoOnboardingUatCatalogSeeder extends Seeder
     private function modules(): array
     {
         return [
-            ['code'=>'WHITE_LABEL','name'=>'Portal white-label','description'=>'Portal bajo la marca del tenant.','type'=>'core','is_active'=>true,'sort_order'=>10],
-            ['code'=>'QUOTES','name'=>'Cotizaciones','description'=>'Cotización de servicios.','type'=>'core','is_active'=>true,'sort_order'=>20],
-            ['code'=>'CUSTOMERS','name'=>'Clientes','description'=>'Gestión de clientes.','type'=>'core','is_active'=>true,'sort_order'=>30],
-            ['code'=>'SHIPPING','name'=>'Envíos','description'=>'Operación de envíos.','type'=>'core','is_active'=>true,'sort_order'=>40],
+            ['code'=>'WHITE_LABEL','name'=>'Portal bajo tu marca','description'=>'Portal bajo la marca del tenant.','type'=>'core','is_active'=>true,'sort_order'=>10],
+            ['code'=>'B2C','name'=>'Portal y clientes','description'=>'Landing tenant, acceso y Customer App.','type'=>'channel','is_active'=>true,'sort_order'=>15],
+            ['code'=>'QUOTES','name'=>'Cotización y envíos','description'=>'Cotización de servicios.','type'=>'core','is_active'=>true,'sort_order'=>20],
+            ['code'=>'CUSTOMERS','name'=>'Portal y clientes','description'=>'Gestión de clientes.','type'=>'core','is_active'=>true,'sort_order'=>30],
+            ['code'=>'SHIPPING','name'=>'Cotización y envíos','description'=>'Operación de envíos.','type'=>'core','is_active'=>true,'sort_order'=>40],
             ['code'=>'TRACKING','name'=>'Tracking','description'=>'Seguimiento de envíos.','type'=>'core','is_active'=>true,'sort_order'=>50],
             ['code'=>'CRM','name'=>'CRM','description'=>'Gestión comercial.','type'=>'addon','is_active'=>true,'sort_order'=>60],
             ['code'=>'LOCAL_SHIPPING','name'=>'Envíos locales','description'=>'Operación local.','type'=>'channel','is_active'=>true,'sort_order'=>70],
@@ -118,9 +119,9 @@ final class ZigoOnboardingUatCatalogSeeder extends Seeder
     private function plans(): array
     {
         return [
-            ['code'=>'UAT-ZIGO-ESENCIAL','name'=>'ZIGO Esencial','description'=>'Base white-label para comenzar a vender y operar.','monthly'=>'100.00','annual'=>'1000.00','operations'=>100,'modules'=>['WHITE_LABEL','QUOTES','CUSTOMERS','SHIPPING','TRACKING']],
-            ['code'=>'UAT-ZIGO-OPERACION','name'=>'ZIGO Operación','description'=>'Más herramientas para coordinar una operación en crecimiento.','monthly'=>'500.00','annual'=>'5000.00','operations'=>500,'modules'=>['WHITE_LABEL','QUOTES','CUSTOMERS','SHIPPING','TRACKING','CRM','LOCAL_SHIPPING','SUPPORT']],
-            ['code'=>'UAT-ZIGO-PLATFORM','name'=>'ZIGO Platform','description'=>'Capacidades completas para integrar y escalar tu plataforma.','monthly'=>'999.00','annual'=>'9990.00','operations'=>1000,'modules'=>['WHITE_LABEL','QUOTES','CUSTOMERS','SHIPPING','TRACKING','CRM','LOCAL_SHIPPING','DRIVER','SUPPORT','API']],
+            ['code'=>'UAT-ZIGO-ESENCIAL','name'=>'ZIGO Esencial','description'=>'Base bajo tu marca para comenzar a vender y operar.','monthly'=>'100.00','annual'=>'1000.00','operations'=>100,'modules'=>['WHITE_LABEL','QUOTES','CUSTOMERS','B2C','SHIPPING','TRACKING']],
+            ['code'=>'UAT-ZIGO-OPERACION','name'=>'ZIGO Operación','description'=>'Más herramientas para coordinar una operación en crecimiento.','monthly'=>'500.00','annual'=>'5000.00','operations'=>500,'modules'=>['WHITE_LABEL','QUOTES','CUSTOMERS','B2C','SHIPPING','TRACKING','CRM','LOCAL_SHIPPING','SUPPORT']],
+            ['code'=>'UAT-ZIGO-PLATFORM','name'=>'ZIGO Platform','description'=>'Capacidades completas para integrar y escalar tu plataforma.','monthly'=>'999.00','annual'=>'9990.00','operations'=>1000,'modules'=>['WHITE_LABEL','QUOTES','CUSTOMERS','B2C','SHIPPING','TRACKING','CRM','LOCAL_SHIPPING','DRIVER','SUPPORT','API']],
         ];
     }
 }

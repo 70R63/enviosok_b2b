@@ -39,7 +39,10 @@ final class ZigoSaasOnboardingCheckoutTest extends TestCase
         $rapidPlan = Plan::create(['code'=>'RAPIDGO','name'=>'RapidGo','status'=>'active','monthly_price'=>'1.00','currency'=>'MXN']);
         NetworkCommercialProduct::create(['code'=>'RAPIDGO-DEMO','name'=>'RapidGo Demo','type'=>'PLAN','billing_type'=>'MONTHLY','price'=>'1.00','currency'=>'MXN','plan_id'=>$rapidPlan->id,'is_active'=>true]);
         $this->get($this->base.'/zigo-platform')->assertOk()
-            ->assertSee('Opera tu propia plataforma de envíos con ZIGO')->assertDontSee('RapidGo');
+            ->assertSeeText('Opera tu propia plataforma de envíos con ZIGO')->assertSee('Portal y clientes')
+            ->assertSee('Cotización y envíos')->assertSee('ZIGO Driver')->assertSee('Pon tu operación en marcha')
+            ->assertSee($offer->name)->assertSee('/zigo-platform/comenzar?offer=', false)
+            ->assertDontSee('WHITE_LABEL')->assertDontSee('CUSTOMERS')->assertDontSee('QUOTES')->assertDontSee('RapidGo');
         $this->get($this->base.'/zigo-platform/precios')->assertOk()
             ->assertSee($offer->name)->assertDontSee('RapidGo');
         $this->get($this->base.'/zigo-platform/comenzar')->assertOk()->assertSee('Tu empresa');
