@@ -20,4 +20,6 @@
 </div></nav></header>
 <main class="z-container customer-main">@if(session('success'))<div class="z-alert z-alert--success" role="status">{{ session('success') }}</div>@endif @if(session('status'))<div class="z-alert" role="status">{{ session('status') }}</div>@endif @yield('content')</main>
 @auth @unless(request()->routeIs('tenant.customer.landing'))<nav class="customer-bottom" aria-label="Navegación del portal"><a href="{{ route('tenant.customer.app.dashboard',[],false) }}" @if(request()->is('app')) aria-current="page" @endif><x-zigo.icon name="home" /><span>Inicio</span></a><a href="{{ route('tenant.customer.app.quote',[],false) }}" @if(request()->is('app/cotizar*')) aria-current="page" @endif><x-zigo.icon name="quote" /><span>Cotizar</span></a><a href="{{ route('tenant.customer.app.shipments',[],false) }}" @if(request()->is('app/envios*')) aria-current="page" @endif><x-zigo.icon name="shipments" /><span>Envíos</span></a><a href="{{ route('tenant.customer.app.profile',[],false) }}" @if(request()->is('app/perfil*')) aria-current="page" @endif><x-zigo.icon name="user" /><span>Perfil</span></a></nav>@endunless @endauth
-@yield('footer') @stack('scripts')</body></html>
+@yield('footer') @stack('scripts')
+<script>if(location.pathname==='/app'||location.pathname.startsWith('/app/'))document.querySelector('.customer-brand')?.setAttribute('href','/app');</script>
+</body></html>
