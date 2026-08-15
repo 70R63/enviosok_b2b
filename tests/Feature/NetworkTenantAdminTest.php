@@ -131,20 +131,40 @@ final class NetworkTenantAdminTest extends TestCase
         $faviconPath = 'tenant-branding/'.$tenant->uuid.'/favicon.png';
         $favicon = UploadedFile::fake()->image('favicon.png', 256, 256);
         Storage::disk('public')->put($faviconPath, file_get_contents($favicon->getRealPath()));
-        Storage::disk('public')->put('tenant-branding/hero.png', 'hero');
+        $heroPath = 'tenant-branding/'.$tenant->uuid.'/hero.png';
+        $hero = UploadedFile::fake()->image('hero.png', 1280, 720);
+        Storage::disk('public')->put($heroPath, file_get_contents($hero->getRealPath()));
         $tenant->branding()->updateOrCreate(['tenant_id' => $tenant->id], [
             'brand_name' => 'Admin Favicon',
             'favicon_path' => $faviconPath,
-            'hero_image_path' => 'tenant-branding/hero.png',
+            'hero_image_path' => $heroPath,
         ]);
 
         $layout = $this->actingAs($owner)->get($this->url($tenant, '/admin'))
-            ->assertOk()->assertSee('rel="icon" href="/branding/favicon"', false)
+            ->assertOk()->assertSee('rel="icon" href="/branding/favicon?v=', false)
             ->assertSee('zigo-design-system.css?v=', false)
             ->assertDontSee('/branding/hero"', false);
         $this->get($this->url($tenant, '/admin/configuracion'))->assertOk()
             ->assertSee('Logo')->assertSee('Imagen principal')->assertSee('Favicon actual')
-            ->assertSee('/branding/favicon', false)->assertSee('/branding/hero', false);
+            ->assertSee('/branding/favicon?v=', false)->assertSee('/branding/hero?v=', false);
+    }
+
+    public function test_branding_asset_urls_change_with_each_current_path(): void
+    {
+        Storage::fake('public');
+        [$tenant] = $this->tenantOwner('branding-versions');
+
+        foreach (['logo-a.png', 'logo-b.png', 'hero-a.png', 'hero-b.png', 'favicon-a.png', 'favicon-b.png'] as $name) {
+            $image = UploadedFile::fake()->image($name, 256, 256);
+            Storage::disk('public')->put('tenant-branding/'.$tenant->uuid.'/'.$name, file_get_contents($image->getRealPath()));
+        }
+
+        foreach (['logo', 'hero', 'favicon'] as $kind) {
+            $first = \App\Support\Presentation\TenantBrandingAsset::url($tenant, $kind, 'tenant-branding/'.$tenant->uuid.'/'.$kind.'-a.png');
+            $second = \App\Support\Presentation\TenantBrandingAsset::url($tenant, $kind, 'tenant-branding/'.$tenant->uuid.'/'.$kind.'-b.png');
+            $this->assertNotSame($first, $second);
+            $this->assertStringContainsString('?v=', $first);
+        }
     }
 
     public function test_legacy_invalid_favicon_uses_zigo_fallback_and_shows_warning(): void

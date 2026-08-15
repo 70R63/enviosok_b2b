@@ -1,8 +1,8 @@
 @php($branding=$tenant->branding)
 @php($brand=$branding?->brand_name ?: $tenant->name)
 @php($safeColor=fn($value,$fallback)=>is_string($value)&&preg_match('/^#[0-9A-Fa-f]{6}$/',$value)?$value:$fallback)
-@php($logoUrl=$branding?->logo_path && Storage::disk('public')->exists($branding->logo_path) ? route('tenant.branding.logo',[],false) : null)
-@php($faviconUrl=$branding?->favicon_path && Storage::disk('public')->exists($branding->favicon_path) ? route('tenant.branding.favicon',[],false) : null)
+@php($logoUrl=\App\Support\Presentation\TenantBrandingAsset::url($tenant,'logo',$branding?->logo_path))
+@php($faviconUrl=\App\Support\Presentation\TenantBrandingAsset::url($tenant,'favicon',$branding?->favicon_path))
 <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>@yield('title',$brand)</title>
 @if($faviconUrl)<link rel="icon" href="{{ $faviconUrl }}">@endif

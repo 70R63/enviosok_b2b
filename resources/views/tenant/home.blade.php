@@ -2,9 +2,9 @@
     $branding = $tenant->branding;
     $brand = $branding?->brand_name ?: $tenant->name;
     $safeColor = fn ($value, $fallback) => is_string($value) && preg_match('/^#[0-9A-Fa-f]{6}$/', $value) ? $value : $fallback;
-    $logoUrl = $branding?->logo_path && Storage::disk('public')->exists($branding->logo_path) ? route('tenant.branding.logo', [], false) : null;
-    $heroUrl = $branding?->hero_image_path && Storage::disk('public')->exists($branding->hero_image_path) ? route('tenant.branding.hero', [], false) : null;
-    $faviconUrl = $branding?->favicon_path && Storage::disk('public')->exists($branding->favicon_path) ? route('tenant.branding.favicon', [], false) : null;
+    $logoUrl = \App\Support\Presentation\TenantBrandingAsset::url($tenant, 'logo', $branding?->logo_path);
+    $heroUrl = \App\Support\Presentation\TenantBrandingAsset::url($tenant, 'hero', $branding?->hero_image_path);
+    $faviconUrl = \App\Support\Presentation\TenantBrandingAsset::url($tenant, 'favicon', $branding?->favicon_path);
     $supportUrl = $branding?->support_email ? 'mailto:'.$branding->support_email : '#faq';
     $defaultCards = [
         ['title'=>'Cotización clara','description'=>'Consulta opciones y precios disponibles según los datos de tu envío.','action'=>'QUOTE'],

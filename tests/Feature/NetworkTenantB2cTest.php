@@ -108,8 +108,8 @@ final class NetworkTenantB2cTest extends TestCase
         $tenant->branding()->create(['brand_name' => 'Premium Express', 'hero_image_path' => $hero, 'logo_path' => $logo]);
 
         $guest = $this->get($this->url($tenant, '/'))->assertOk()
-            ->assertSee('/branding/hero', false)
-            ->assertSee('/branding/logo', false)
+            ->assertSee('/branding/hero?v=', false)
+            ->assertSee('/branding/logo?v=', false)
             ->assertDontSee(Storage::disk('public')->url($hero), false)
             ->assertSee('Iniciar sesión')->assertSee('Crear cuenta')
             ->assertSee('href="/rastrear"', false)

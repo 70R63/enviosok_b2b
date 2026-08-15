@@ -13,8 +13,10 @@ use App\Domain\Shipping\Local\Models\LocalShippingService;
 use App\Domain\Shipping\Local\Models\LocalShippingZone;
 use App\Services\ZigoPostalCodeService;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Mockery\MockInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\TestCase;
@@ -103,6 +105,54 @@ final class NetworkLocalShippingTest extends TestCase
         $pdf = app(LocalGuideService::class)->pdf($shipment->fresh(), 'cliente.zigo.local');
         $this->assertStringStartsWith('%PDF-', $pdf);
         $this->assertGreaterThan(2000, strlen($pdf));
+    }
+
+    public function test_professional_guide_supports_nested_addresses_packages_and_safe_logos(): void
+    {
+        Storage::fake('public');
+        [$tenant, $operation] = $this->operation();
+        $logoPath = 'tenant-branding/'.$tenant->uuid.'/guide-logo.png';
+        $logo = UploadedFile::fake()->image('guide-logo.png', 320, 100);
+        Storage::disk('public')->put($logoPath, file_get_contents($logo->getRealPath()));
+        $tenant->branding()->update(['logo_path' => $logoPath]);
+
+        $shipment = app(LocalShipmentService::class)->create($tenant, $operation, [
+            'sender' => ['name' => 'JORGE ROMERO', 'phone' => '5512345678', 'address' => ['address' => 'V SANTA ROSA DE LIMA 70B', 'settlement' => 'Tamaulipas Sección Virgencitas', 'postal_code' => '57300', 'municipality' => 'Nezahualcóyotl', 'state' => 'México']],
+            'recipient' => ['name' => 'LILIANNA', 'phone' => '8112345678', 'address' => ['address' => 'CUMBRES DEL NORTE 4344', 'settlement' => 'Monterrey Centro', 'postal_code' => '64000', 'municipality' => 'Monterrey', 'state' => 'Nuevo León']],
+            'package' => ['type' => 'caja', 'weight' => 3, 'length' => 20, 'width' => 20, 'height' => 20],
+            'pricing' => ['final_price' => 179],
+            'reference' => 'MERCANCIA DE BODA',
+        ]);
+
+        $pdf = app(LocalGuideService::class)->pdf($shipment, 'bruniverse.zigo.local');
+        $this->assertStringStartsWith('%PDF-', $pdf);
+        $this->assertGreaterThan(3000, strlen($pdf));
+        $this->assertSame('57300', data_get($shipment->guide_snapshot, 'sender.address.postal_code'));
+        $this->assertSame('64000', data_get($shipment->guide_snapshot, 'recipient.address.postal_code'));
+        $this->assertSame(20, data_get($shipment->guide_snapshot, 'package.length'));
+        $this->assertSame('https://bruniverse.zigo.local/rastreo/'.$shipment->tracking_number, app(LocalGuideService::class)->trackingUrl($shipment, 'bruniverse.zigo.local'));
+    }
+
+    public function test_guide_falls_back_from_invalid_logo_and_envelope_omits_dimensions(): void
+    {
+        Storage::fake('public');
+        [$tenant, $operation] = $this->operation();
+        $invalidPath = 'tenant-branding/'.$tenant->uuid.'/invalid-logo.png';
+        Storage::disk('public')->put($invalidPath, 'not-an-image');
+        $tenant->branding()->update(['logo_path' => $invalidPath]);
+        $shipment = app(LocalShipmentService::class)->create($tenant, $operation, [
+            'sender' => ['name' => 'Origen', 'address' => 'Calle 1', 'postal_code' => '57300'],
+            'recipient' => ['name' => 'Destino', 'address' => 'Calle 2', 'postal_code' => '64000'],
+            'package' => ['type' => 'sobre', 'weight' => 1],
+            'pricing' => ['final_price' => 120],
+        ]);
+
+        $pdf = app(LocalGuideService::class)->pdf($shipment, 'cliente.zigo.local');
+        $this->assertStringStartsWith('%PDF-', $pdf);
+        $this->assertGreaterThan(2000, strlen($pdf));
+        $this->assertArrayNotHasKey('length', $shipment->guide_snapshot['package']);
+        $this->assertArrayNotHasKey('width', $shipment->guide_snapshot['package']);
+        $this->assertArrayNotHasKey('height', $shipment->guide_snapshot['package']);
     }
 
     private function operation(): array

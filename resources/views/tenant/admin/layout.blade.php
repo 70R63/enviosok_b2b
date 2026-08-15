@@ -1,9 +1,8 @@
 @php($branding=$tenant->branding)
 @php($membership=app(\App\Domain\Network\Tenancy\TenantAccessService::class)->membership(auth()->user()))
 @php($safeColor=fn($value,$fallback)=>is_string($value)&&preg_match('/^#[0-9A-Fa-f]{6}$/',$value)?$value:$fallback)
-@php($logoUrl=$branding?->logo_path && Storage::disk('public')->exists($branding->logo_path) ? route('tenant.branding.logo',[],false) : null)
-@php($hasValidFavicon=\App\Support\Presentation\TenantFavicon::isValid($tenant,$branding?->favicon_path))
-@php($faviconUrl=$hasValidFavicon ? route('tenant.branding.favicon',[],false) : asset('favicon.ico'))
+@php($logoUrl=\App\Support\Presentation\TenantBrandingAsset::url($tenant,'logo',$branding?->logo_path))
+@php($faviconUrl=\App\Support\Presentation\TenantBrandingAsset::url($tenant,'favicon',$branding?->favicon_path) ?? asset('favicon.ico'))
 @php($designSystemPath=public_path('css/zigo-design-system.css'))
 @php($designSystemVersion=is_file($designSystemPath) ? filemtime($designSystemPath) : '1')
 <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>@yield('title','Administración') · {{ $branding?->brand_name??$tenant->name }}</title>
