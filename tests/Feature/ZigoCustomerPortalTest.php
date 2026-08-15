@@ -360,7 +360,7 @@ class ZigoCustomerPortalTest extends TestCase
         $this->assertDatabaseCount('network_usage_events',0); $this->assertDatabaseCount('local_shipments',0);
         $this->actingAs($other->user)->get($this->url($tenant,'/app/checkout/'.$checkout->uuid.'/pago'))->assertNotFound();
         $this->actingAs($owner->user)->get($this->url($tenant,'/app'))->assertOk()->assertSee('Pago pendiente')->assertSee('Continuar pago');
-        $this->get($this->url($tenant,'/app/envios'))->assertOk()->assertSee('Pendientes de pago')->assertSee('Local')->assertSee('Continuar pago')->assertDontSee('ZL000PENDING');
+        $this->get($this->url($tenant,'/app/envios'))->assertOk()->assertSeeInOrder(['GUÍAS GENERADAS','Pendientes de pago'])->assertSee('Local')->assertSee('Continuar pago')->assertDontSee('ZL000PENDING');
     }
 
     public function test_expired_checkout_never_creates_shipment(): void
