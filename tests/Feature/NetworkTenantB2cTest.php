@@ -379,6 +379,7 @@ final class NetworkTenantB2cTest extends TestCase
     {
         $a = $this->tenant('private-a', $this->storefrontEntitlements());
         $b = $this->tenant('private-b', $this->storefrontEntitlements());
+        $operationWithoutShipment = TenantOperation::create(['tenant_id' => $b->id, 'subscription_id' => $b->subscriptions()->first()->id, 'channel' => 'b2c', 'status' => 'quoted']);
         $operation = TenantOperation::create(['tenant_id' => $b->id, 'subscription_id' => $b->subscriptions()->first()->id, 'channel' => 'b2c', 'status' => 'confirmed', 'provider' => 'ZIGO_LOCAL', 'service_code' => 'LOCAL64000SD', 'metadata' => ['final_price' => 120]]);
         $shipment = LocalShipment::create([
             'tenant_id' => $b->id, 'tenant_operation_id' => $operation->id, 'tracking_number' => 'ZL260808PRIVATE001', 'service_code' => 'LOCAL64000SD', 'status' => 'CREATED',
@@ -396,6 +397,19 @@ final class NetworkTenantB2cTest extends TestCase
         $this->post($this->url($a, '/admin/operations/'.$operation->uuid.'/local-shipment'), [])->assertNotFound();
         $this->get($this->url($a, '/admin/operations/'.$operation->uuid.'/guide.pdf'))->assertNotFound();
         $this->get($this->url($a, '/tracking/'.$shipment->tracking_number))->assertNotFound();
+
+        $b->memberships()->create(['user_id' => $user->id, 'role' => 'operator', 'status' => 'active']);
+        $operations = $this->get($this->url($b, '/admin/operations'))->assertOk()
+            ->assertSee('/admin/operations/'.$operation->uuid.'/guide.pdf', false)
+            ->assertSee('Descargar guía')
+            ->assertSee('/tracking/'.$shipment->tracking_number, false)
+            ->assertDontSee('/admin/operations/'.$operationWithoutShipment->uuid.'/guide.pdf', false);
+        $this->assertSame(1, substr_count($operations->getContent(), 'Descargar guía'));
+        $guideSnapshot = $shipment->guide_snapshot;
+        $guide = $this->get($this->url($b, '/admin/operations/'.$operation->uuid.'/guide.pdf'))
+            ->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $guide->getContent());
+        $this->assertSame($guideSnapshot, $shipment->fresh()->guide_snapshot);
 
         $response = $this->get($this->url($b, '/tracking/'.$shipment->tracking_number))->assertOk()->assertSee($shipment->tracking_number)->assertSee('CREATED');
         foreach (['Secret Sender', 'Private Street', '8112345678', '8187654321', '$80.00', 'internal-margin-secret', 'never-public', 'private event note'] as $private) {

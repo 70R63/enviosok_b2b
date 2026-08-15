@@ -27,6 +27,7 @@ final class TenantOperationController extends Controller
 
         $query = TenantOperation::where('tenant_id', $tenant->id);
         if (Schema::hasTable('tenant_customer_checkouts')) $query->with('customerCheckout');
+        if (Schema::hasTable('local_shipments')) $query->with('localShipment');
         $query->when($request->string('status')->toString(), fn ($q, $status) => $q->where('status', $status));
         $query->when($request->string('search')->toString(), fn ($q, $search) => $q->where(fn ($nested) => $nested->where('uuid', 'like', "%{$search}%")->orWhere('external_reference', 'like', "%{$search}%")));
         if (Schema::hasTable('tenant_customer_checkouts') && $request->filled('payment')) $query->whereHas('customerCheckout', fn ($q) => $q->where('payment_status', $request->string('payment')->toString()));

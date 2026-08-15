@@ -88,11 +88,17 @@ class ZigoCustomerPortalTest extends TestCase
             ->assertSee('name="origin_city"', false)->assertSee('name="destination_state"', false)
             ->assertDontSee('name="pickup_requested"', false)->assertSee("municipalityField.value=''", false);
         $this->get($this->url($tenant, '/app/envios'))->assertOk()->assertSee($own->tracking_number)->assertDontSee($foreign->tracking_number)->assertSee('customer-shipment-card', false);
-        $this->get($this->url($tenant, '/app/envios/'.$own->uuid))->assertOk()->assertSee('Secret address');
+        $this->get($this->url($tenant, '/app/envios/'.$own->uuid))->assertOk()->assertSee('Secret address')->assertSeeInOrder(['Descargar guía','Rastrear','Ayuda']);
         $senderSnapshot = $own->sender_snapshot;
-        $this->get($this->url($tenant, '/app/envios/'.$own->uuid.'/guia.pdf'))->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $guide = $this->get($this->url($tenant, '/app/envios/'.$own->uuid.'/guia.pdf'))->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $guide->getContent());
         $this->assertSame($senderSnapshot, $own->fresh()->sender_snapshot);
         $this->get($this->url($tenant, '/app/envios/'.$foreign->uuid))->assertNotFound();
+        $this->get($this->url($tenant, '/app/envios/'.$foreign->uuid.'/guia.pdf'))->assertNotFound();
+        $foreignTenant = $this->tenant('ownership-foreign');
+        $foreignProfile = $this->customer($foreignTenant, 'ownership-foreign@example.test');
+        $foreignTenantShipment = $this->shipment($foreignTenant, $foreignProfile, 'ZLCUSTOMERFOREIGN', 'CREATED');
+        $this->get($this->url($tenant, '/app/envios/'.$foreignTenantShipment->uuid.'/guia.pdf'))->assertNotFound();
     }
 
     public function test_public_tracking_is_private_and_spanish_route_matches_legacy(): void

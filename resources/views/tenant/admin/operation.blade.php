@@ -10,7 +10,7 @@
 <div class="card"><h2>Envío local</h2><p><strong>Tracking:</strong> <code>{{ $shipment->tracking_number }}</code></p><p><strong>Servicio:</strong> {{ $shipment->service_code }}</p><p><strong>Estado:</strong> {{ $shipment->status }}</p>
 @if($shipment->status === 'CREATED')<form method="POST" action="{{ route('tenant.admin.operations.pickup-request',$operation->uuid) }}">@csrf<button class="btn">Solicitar recolección</button></form>
 @elseif($shipment->status === 'READY_FOR_PICKUP')<p class="notice">Recolección solicitada. Estamos asignando un repartidor.</p>@endif
-<a class="btn" href="{{ route('tenant.admin.operations.guide',$operation->uuid) }}">Descargar guía PDF</a><a class="btn" href="{{ route('tenant.b2c.tracking.show',$shipment->tracking_number) }}">Ver tracking</a>
+<div class="z-actions"><a class="z-btn" href="{{ route('tenant.admin.operations.guide',$operation->uuid,false) }}">Descargar guía PDF</a><a class="z-btn z-btn--outline" href="{{ route('tenant.b2c.tracking.show',$shipment->tracking_number,false) }}">Ver tracking</a></div>
 @if($canManageDrivers && app(\App\Domain\Network\Billing\EntitlementService::class)->has($tenant,'DRIVER'))<h3>Despacho Last Mile</h3>
 @if($shipment->status === 'READY_FOR_PICKUP')
 @php($activeAssignment=$shipment->activeDriverAssignment)
