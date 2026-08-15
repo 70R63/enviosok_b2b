@@ -1,8 +1,7 @@
 @extends('tenant.driver.layout')
 @section('title','Entregas')
 @section('content')
-@php($central=request()->routeIs('driver.*'))
-@php($shipmentUrl=fn($uuid)=>route(($central?'driver.':'tenant.driver.').'shipments.show',$uuid))
+@php($shipmentUrl=fn($uuid)=>route('driver.shipments.show',$uuid))
 @php($statusLabels=['READY_FOR_PICKUP'=>'Listo para recolectar','PICKED_UP'=>'Recolectado','IN_TRANSIT'=>'En tránsito','OUT_FOR_DELIVERY'=>'En reparto','DELIVERY_FAILED'=>'Intento fallido','DELIVERED'=>'Entregado'])
 <header class="z-page-header"><div><div class="z-eyebrow">Mi jornada</div><h1>Entregas</h1><p class="z-muted">Asignaciones activas e historial sin datos personales.</p></div></header>
 <section class="z-stack"><h2>Activas</h2>@forelse($assignments as $assignment)@php($shipment=$assignment->shipment)<a class="z-card z-card--interactive driver-delivery" href="{{ $shipmentUrl($shipment->uuid) }}"><div class="driver-status-line"><div><div class="driver-delivery__tracking">{{ $shipment->tracking_number }}</div><strong>{{ $tenant->branding?->brand_name??$tenant->name }}</strong></div><span class="z-badge">{{ $statusLabels[$shipment->status]??str_replace('_',' ',$shipment->status) }}</span></div><p><strong>Ver entrega →</strong></p></a>@empty<div class="z-empty"><h3>Sin entregas activas</h3><p class="z-muted">Tus próximas asignaciones aparecerán aquí.</p></div>@endforelse</section>

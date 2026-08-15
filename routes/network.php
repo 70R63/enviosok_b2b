@@ -14,7 +14,6 @@ use App\Http\Controllers\Network\TenantBrandingController;
 use App\Http\Controllers\Network\TenantController;
 use App\Http\Controllers\Network\TenantDomainController;
 use App\Http\Controllers\Network\TenantMembershipController as NetworkTenantMembershipController;
-use App\Http\Controllers\Tenant\DriverAuthController;
 use App\Http\Controllers\Tenant\DriverConsoleController;
 use App\Http\Controllers\Tenant\TenantAdminController;
 use App\Http\Controllers\Tenant\TenantAuthController;
@@ -36,6 +35,7 @@ use App\Http\Controllers\Tenant\CustomerAddressController;
 use App\Http\Controllers\DeliveryEvidenceController;
 use App\Http\Controllers\Driver\CentralDriverAuthController;
 use App\Http\Controllers\Driver\DriverPwaController;
+use App\Http\Controllers\Driver\LegacyDriverRedirectController;
 use App\Http\Controllers\Driver\DriverWorkspaceController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Tenant\TenantPaymentConnectionController;
@@ -335,26 +335,6 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
     });
 });
 
-Route::middleware('tenant.resolve')->prefix('driver')->name('tenant.driver.')->group(function (): void {
-    Route::get('/login', [DriverAuthController::class, 'create'])->name('login');
-    Route::post('/login', [DriverAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
-    Route::middleware(['tenant.driver', 'tenant.subscription', 'tenant.entitlement:DRIVER', 'driver.private'])->group(function (): void {
-        Route::post('/logout', [DriverAuthController::class, 'destroy'])->name('logout');
-        Route::get('/', [DriverConsoleController::class, 'index'])->name('dashboard');
-        Route::get('/deliveries', [DriverConsoleController::class, 'deliveries'])->name('deliveries');
-        Route::get('/earnings', [DriverConsoleController::class, 'earnings'])->name('earnings');
-        Route::get('/profile', [DriverConsoleController::class, 'profile'])->name('profile');
-        Route::get('/support', [DriverSupportController::class, 'index'])->name('support');
-        Route::post('/support/tickets', [DriverSupportController::class, 'store'])->name('support.store');
-        Route::get('/support/tickets/{ticket}', [DriverSupportController::class, 'show'])->name('support.show');
-        Route::post('/support/tickets/{ticket}/respuestas', [DriverSupportController::class, 'reply'])->name('support.reply');
-        Route::get('/support/tickets/{ticket}/adjuntos/{attachment}', [DriverSupportController::class, 'attachment'])->name('support.attachment');
-        Route::post('/availability', [DriverConsoleController::class, 'availability'])->name('availability');
-        Route::get('/shipments/{shipment}', [DriverConsoleController::class, 'show'])->name('shipments.show');
-        Route::post('/shipments/{shipment}/transition', [DriverConsoleController::class, 'transition'])->name('shipments.transition');
-        Route::get('/shipments/{shipment}/proof', [DriverConsoleController::class, 'proofForm'])->name('shipments.proof');
-        Route::post('/shipments/{shipment}/proof', [DriverConsoleController::class, 'storeProof'])->name('shipments.proof.store');
-        Route::get('/shipments/{shipment}/failure', [DriverConsoleController::class, 'failureForm'])->name('shipments.failure');
-        Route::post('/shipments/{shipment}/failure', [DriverConsoleController::class, 'storeFailure'])->name('shipments.failure.store');
-    });
-});
+Route::get('/driver/{path?}', LegacyDriverRedirectController::class)
+    ->where('path', '.*')
+    ->name('tenant.driver.legacy');

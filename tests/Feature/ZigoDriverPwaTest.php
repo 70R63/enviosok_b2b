@@ -103,8 +103,11 @@ final class ZigoDriverPwaTest extends TestCase
             $this->assertFileExists(resource_path("views/tenant/driver/{$view}.blade.php"));
         }
         $routes = app('router')->getRoutes();
-        foreach (['driver.dashboard','driver.deliveries','driver.earnings','driver.profile','driver.support','tenant.driver.dashboard','tenant.driver.deliveries'] as $name) {
+        foreach (['driver.dashboard','driver.deliveries','driver.earnings','driver.profile','driver.support','tenant.driver.legacy'] as $name) {
             $this->assertNotNull($routes->getByName($name));
+        }
+        foreach (glob(resource_path('views/tenant/driver/*.blade.php')) as $view) {
+            $this->assertStringNotContainsString("route('tenant.driver.", file_get_contents($view));
         }
         $privacy = file_get_contents(app_path('Http/Middleware/ProtectDriverResponse.php'));
         $this->assertStringContainsString('private, no-store', $privacy);

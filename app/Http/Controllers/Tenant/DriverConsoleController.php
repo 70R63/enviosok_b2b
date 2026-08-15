@@ -123,7 +123,7 @@ final class DriverConsoleController extends Controller
         $signature = ! empty($data['signature']) ? $this->signatureBinary($data['signature']) : null;
         $requirements->assertEvidence($requirement, $data, $request->file('photo'), $signature);
         $evidence->deliver($assignment, auth()->id(), $data, $request->file('photo'), $signature);
-        return redirect()->route('tenant.driver.dashboard')->with('success', 'Entrega completada correctamente.');
+        return redirect()->route('driver.dashboard')->with('success', 'Entrega completada correctamente.');
     }
 
     public function failureForm(Request $request, string $shipment, DeliveryRequirementService $requirements)
@@ -152,7 +152,7 @@ final class DriverConsoleController extends Controller
         ]);
         if ($request->file('photo')) $this->validateImageContent($request->file('photo'));
         $evidence->fail($assignment, auth()->id(), $data, $request->file('photo'));
-        return redirect()->route('tenant.driver.dashboard')->with('success', 'Intento de entrega registrado.');
+        return redirect()->route('driver.dashboard')->with('success', 'Intento de entrega registrado.');
     }
 
     private function signatureBinary(string $payload): string

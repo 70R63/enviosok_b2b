@@ -8,5 +8,5 @@ final class DriverSupportController extends Controller{
  public function reply(Request$r,string$ticket,SupportTicketService$s){$item=$this->ticket($r,$ticket);$d=$r->validate(['message'=>['required','string','max:10000'],'attachment'=>['nullable','file','max:'.config('zigo_support.attachment_max_kb')]]);$s->reply($item,$r->user(),$d['message'],'PUBLIC',$r->file('attachment'));return back()->with('success','Respuesta enviada.');}
  public function attachment(Request$r,string$ticket,SupportTicketAttachment$a,SupportTicketService$s){$item=$this->ticket($r,$ticket);abort_unless($a->ticket_id===$item->id,404);abort_if($a->message_id&&$a->message()->where('visibility','!=','PUBLIC')->exists(),404);return$s->download($a);}
  private function ticket(Request$r,string$uuid){$p=$r->attributes->get('driver_profile');return SupportTicket::where('uuid',$uuid)->where('tenant_id',$p->tenant_id)->where('requester_user_id',$r->user()->id)->where('related_driver_profile_id',$p->id)->firstOrFail();}
- private function route(Request$r,string$suffix):string{return$r->routeIs('driver.*')?'driver.support.'.$suffix:'tenant.driver.support.'.$suffix;}
+ private function route(Request$r,string$suffix):string{return'driver.support.'.$suffix;}
 }
