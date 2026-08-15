@@ -7,6 +7,7 @@ use App\Domain\Network\Tenancy\{TenantAccessService, TenantContext};
 use App\Domain\Payments\Contracts\PaymentProvider;
 use App\Domain\Payments\Exceptions\MercadoPagoOAuthException;
 use App\Domain\Payments\Models\TenantPaymentConnection;
+use App\Domain\Payments\MercadoPagoTokenKind;
 use App\Http\Controllers\Controller;
 use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Http\Request;
@@ -17,11 +18,15 @@ final class TenantPaymentConnectionController extends Controller
 {
     public function index(TenantContext $context, TenantAccessService $access)
     {
+        $connection = TenantPaymentConnection::where('tenant_id', $context->id())->where('provider', 'MERCADO_PAGO')->first();
+        $environment = (string) config('zigo_payments.providers.mercado_pago.environment');
+        $oauthTestToken = $environment === 'sandbox' && (bool) config('zigo_payments.providers.mercado_pago.oauth_test_token', true);
         return view('tenant.admin.payments', [
             'tenant' => $context->tenant()->load('branding'),
-            'connection' => TenantPaymentConnection::where('tenant_id', $context->id())->where('provider', 'MERCADO_PAGO')->first(),
+            'connection' => $connection,
             'canManage' => $access->canManageTenant(auth()->user()),
-            'environment' => config('zigo_payments.providers.mercado_pago.environment'),
+            'environment' => $environment,
+            'connectionRequiresReconnect' => $connection?->isConnected() && ! $oauthTestToken && MercadoPagoTokenKind::detect($connection->access_token) === 'TEST',
         ]);
     }
 

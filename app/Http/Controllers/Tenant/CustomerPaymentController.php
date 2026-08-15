@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Tenant;
 use App\Domain\Network\Channels\B2C\Models\TenantCustomerCheckout;
 use App\Domain\Network\Tenancy\TenantContext;
 use App\Domain\Payments\Models\TenantPaymentConnection;
+use App\Domain\Payments\Exceptions\IncompatibleMercadoPagoConnectionException;
 use App\Domain\Payments\TenantPaymentService;
 use App\Domain\Shipping\Local\Models\LocalShipment;
 use App\Http\Controllers\Controller;
@@ -17,8 +18,12 @@ final class CustomerPaymentController extends Controller
     {
         $item = $this->checkout($request, $context, $checkout);
         $connection = TenantPaymentConnection::where('tenant_id', $context->id())->where('provider', 'MERCADO_PAGO')->where('status', 'CONNECTED')->firstOrFail();
-        $attempt = $payments->createAttempt($item, $connection);
-        if (! $attempt->init_point) $attempt = $payments->initialize($attempt);
+        try {
+            $attempt = $payments->createAttempt($item, $connection);
+            if (! $attempt->init_point) $attempt = $payments->initialize($attempt);
+        } catch (IncompatibleMercadoPagoConnectionException $exception) {
+            return back()->with('status', $exception->getMessage());
+        }
         return redirect()->away($attempt->getRawOriginal('init_point'));
     }
 

@@ -10,8 +10,14 @@ final class ZigoMercadoPagoProviderTest extends TestCase{
   $this->assertSame('seller-access',$tokens['access_token']);$this->assertSame('seller-refresh',$tokens['refresh_token']);
   Http::assertSent(function($r){$body=$r->data();return $r->url()==='https://api.mercadopago.com/oauth/token'&&$body['client_id']==='public-client-id'&&$body['client_secret']==='server-secret'&&$body['grant_type']==='authorization_code'&&$body['code']==='authorization-code'&&$body['redirect_uri']==='https://payments.example.test/payments/mercado-pago/oauth/callback'&&$body['code_verifier']==='pkce-verifier'&&$body['test_token']===true;});
  }
+ public function test_sandbox_authorization_code_exchange_can_request_app_usr_credentials():void{
+  config()->set('zigo_payments.providers.mercado_pago.oauth_test_token',false);
+  Http::fake(['api.mercadopago.com/oauth/token'=>Http::response(['access_token'=>'APP_USR-safe-example','user_id'=>3611213311],200)]);
+  (new MercadoPagoPaymentProvider)->exchangeAuthorizationCode('authorization-code','pkce-verifier');
+  Http::assertSent(fn($r)=>$r->url()==='https://api.mercadopago.com/oauth/token'&&!array_key_exists('test_token',$r->data()));
+ }
  public function test_production_authorization_code_exchange_omits_test_token():void{
-  config()->set('zigo_payments.providers.mercado_pago.environment','production');Http::fake(['api.mercadopago.com/oauth/token'=>Http::response(['access_token'=>'live-access'],200)]);
+  config()->set('zigo_payments.providers.mercado_pago.environment','production');config()->set('zigo_payments.providers.mercado_pago.oauth_test_token',true);Http::fake(['api.mercadopago.com/oauth/token'=>Http::response(['access_token'=>'APP_USR-live-access'],200)]);
   (new MercadoPagoPaymentProvider)->exchangeAuthorizationCode('authorization-code','pkce-verifier');
   Http::assertSent(fn($r)=>$r->url()==='https://api.mercadopago.com/oauth/token'&&!array_key_exists('test_token',$r->data()));
  }
@@ -20,8 +26,13 @@ final class ZigoMercadoPagoProviderTest extends TestCase{
   try{(new MercadoPagoPaymentProvider)->exchangeAuthorizationCode('leaked-code','leaked-verifier');$this->fail('Expected OAuth exception.');}catch(MercadoPagoOAuthException $e){$this->assertSame('Mercado Pago rechazó el intercambio OAuth.',$e->getMessage());$this->assertStringNotContainsString('leaked',$e->getMessage());}
   Log::shouldHaveReceived('warning')->once()->with('Mercado Pago OAuth token exchange failed',['status'=>400,'error'=>'invalid_grant','message'=>'PKCE verification failed','cause_code'=>'invalid_verifier']);
  }
+ public function test_successful_token_exchange_logs_kind_without_exposing_token():void{
+  config()->set('zigo_payments.providers.mercado_pago.oauth_test_token',false);Log::spy();Http::fake(['api.mercadopago.com/oauth/token'=>Http::response(['access_token'=>'APP_USR-secret-value','user_id'=>3611213311],200)]);
+  (new MercadoPagoPaymentProvider)->exchangeAuthorizationCode('authorization-code','pkce-verifier');
+  Log::shouldHaveReceived('info')->once()->withArgs(function(string $message,array $context):bool{return $message==='Mercado Pago OAuth token exchanged'&&$context===['environment'=>'sandbox','oauth_test_token'=>false,'token_kind'=>'APP_USR','provider_account_id'=>'3611213311']&&!str_contains(json_encode($context),'secret-value');});
+ }
  public function test_preference_uses_frozen_server_values_and_seller_token():void{
-  Log::spy();Http::fake(['api.mercadopago.com/checkout/preferences'=>Http::response(['id'=>'pref-1','collector_id'=>3611213311,'sandbox_init_point'=>'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=pref-1','init_point'=>'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=live'],201)]);
+  config()->set('zigo_payments.providers.mercado_pago.oauth_test_token',false);config()->set('zigo_payments.providers.mercado_pago.use_sandbox_init_point',false);Log::spy();Http::fake(['api.mercadopago.com/checkout/preferences'=>Http::response(['id'=>'pref-1','collector_id'=>3611213311,'sandbox_init_point'=>'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=pref-1','init_point'=>'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=live'],201)]);
   $connection=new TenantPaymentConnection(['status'=>'CONNECTED','access_token'=>'seller-oauth-token']);$checkout=$this->checkoutWithEmail('customer@example.test');$attempt=new TenantPaymentAttempt(['uuid'=>'48b6df10-6954-419c-bb29-09527efffd52','external_reference'=>'zg_opaque_reference','marketplace_fee_amount'=>'5.00']);
   (new MercadoPagoPaymentProvider)->createCheckout($connection,$attempt,$checkout);
   Http::assertSent(function($r){$body=$r->data();return $r->url()==='https://api.mercadopago.com/checkout/preferences'&&$r->hasHeader('Authorization','Bearer seller-oauth-token')&&$body['items'][0]['unit_price']===207.64&&$body['items'][0]['currency_id']==='MXN'&&$body['marketplace_fee']===5.0&&$body['external_reference']==='zg_opaque_reference'&&!isset($body['payer'])&&!isset($body['tenant_id'])&&isset($body['notification_url'],$body['back_urls']['success'],$body['back_urls']['failure'],$body['back_urls']['pending']);});
