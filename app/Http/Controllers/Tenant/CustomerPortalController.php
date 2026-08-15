@@ -18,12 +18,14 @@ final class CustomerPortalController extends Controller
     {
         $profile = $request->attributes->get('customer_profile');
         $shipments = $this->shipments($context, $profile->id);
+        $pendingQuery = $this->pendingCheckouts($context, $profile->id);
         return view('tenant.customer.dashboard', [
             'tenant' => $context->tenant()->load('branding'), 'profile' => $profile,
             'activeCount' => (clone $shipments)->whereNotIn('local_shipments.status', ['DELIVERED', 'CANCELED'])->count(),
             'deliveredCount' => (clone $shipments)->where('local_shipments.status', 'DELIVERED')->count(),
             'shipments' => $shipments->latest('local_shipments.created_at')->limit(5)->get(),
-            'pendingCheckouts' => Schema::hasTable('tenant_customer_checkouts') ? TenantCustomerCheckout::where('tenant_id', $context->id())->where('customer_profile_id', $profile->id)->whereIn('status', ['DRAFT','PENDING_PAYMENT'])->latest()->limit(5)->get() : collect(),
+            'pendingCount' => $pendingQuery ? (clone $pendingQuery)->count() : 0,
+            'pendingCheckouts' => $pendingQuery ? $pendingQuery->limit(5)->get() : collect(),
         ]);
     }
 
@@ -34,7 +36,13 @@ final class CustomerPortalController extends Controller
         $query = $this->shipments($context, $profile->id);
         if ($filter === 'activos') $query->whereNotIn('local_shipments.status', ['DELIVERED', 'CANCELED']);
         if ($filter === 'entregados') $query->where('local_shipments.status', 'DELIVERED');
-        return view('tenant.customer.shipments', ['tenant' => $context->tenant()->load('branding'), 'shipments' => $query->latest('local_shipments.created_at')->paginate(15), 'filter' => $filter]);
+        $pendingQuery = $this->pendingCheckouts($context, $profile->id);
+        return view('tenant.customer.shipments', [
+            'tenant' => $context->tenant()->load('branding'),
+            'shipments' => $query->latest('local_shipments.created_at')->paginate(15, ['*'], 'envios'),
+            'pendingCheckouts' => $pendingQuery ? $pendingQuery->paginate(10, ['*'], 'pendientes') : collect(),
+            'filter' => $filter,
+        ]);
     }
 
     public function show(Request $request, string $shipment, TenantContext $context)
@@ -97,5 +105,15 @@ final class CustomerPortalController extends Controller
             ->where('local_shipments.tenant_id', $context->id())
             ->where('customer_operations.tenant_id', $context->id())
             ->where('customer_operations.customer_profile_id', $profileId);
+    }
+
+    private function pendingCheckouts(TenantContext $context, int $profileId)
+    {
+        if (! Schema::hasTable('tenant_customer_checkouts')) return null;
+        return TenantCustomerCheckout::query()
+            ->where('tenant_id', $context->id())
+            ->where('customer_profile_id', $profileId)
+            ->whereIn('status', ['DRAFT', 'PENDING_PAYMENT'])
+            ->latest('created_at');
     }
 }

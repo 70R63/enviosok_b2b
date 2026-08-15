@@ -23,10 +23,11 @@ final class CustomerCheckoutService
             abort_unless(isset($metadata['shipping_data'], $metadata['selected_quote']), 422);
             abort_if(($metadata['selected_quote']['preliminary'] ?? false) === true, 422, 'La cotización preliminar debe finalizarse antes del pago.');
             $amounts = $this->pricing->calculate($operation, $proof);
+            $commercial = ['subtotal' => $amounts['subtotal_amount'], 'tax_rate' => $amounts['tax_rate'], 'tax_amount' => $amounts['tax_amount'], 'total' => $amounts['total_amount']];
             return TenantCustomerCheckout::create(array_merge($amounts, [
                 'tenant_id' => $tenant->id, 'customer_profile_id' => $profile->id, 'tenant_operation_id' => $operation->id,
                 'status' => 'DRAFT', 'payment_status' => 'PENDING', 'expires_at' => now()->addHours(24),
-                'quote_snapshot' => $metadata['selected_quote'] + ['route' => ['origin' => data_get($metadata,'shipping_data.sender.address'), 'destination' => data_get($metadata,'shipping_data.recipient.address')], 'package' => data_get($metadata,'shipping_data.package',$metadata['quoted_package'] ?? [])],
+                'quote_snapshot' => array_merge($metadata['selected_quote'], ['route' => ['origin' => data_get($metadata,'shipping_data.sender.address'), 'destination' => data_get($metadata,'shipping_data.recipient.address')], 'package' => data_get($metadata,'shipping_data.package',$metadata['quoted_package'] ?? [])], $commercial),
                 'shipping_data_snapshot' => $metadata['shipping_data'],
                 'proof_option_snapshot' => $proof ? ['uuid' => $proof->uuid, 'code' => $proof->code, 'name' => $proof->name, 'description' => $proof->description, 'receiver_policy' => $proof->receiver_policy, 'require_receiver_name' => $proof->require_receiver_name, 'require_receiver_type' => $proof->require_receiver_type, 'require_signature' => $proof->require_signature, 'require_photo' => $proof->require_photo, 'require_gps' => $proof->require_gps, 'max_delivery_attempts' => $proof->max_delivery_attempts, 'surcharge_amount' => (float) $proof->surcharge_amount, 'currency' => $proof->currency] : [],
             ]));

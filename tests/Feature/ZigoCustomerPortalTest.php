@@ -214,8 +214,8 @@ class ZigoCustomerPortalTest extends TestCase
         $proof = TenantDeliveryProofOption::create(['tenant_id'=>$tenant->id,'code'=>'SIGN','name'=>'Firma','require_receiver_name'=>true,'require_receiver_type'=>false,'require_signature'=>true,'require_photo'=>false,'require_gps'=>false,'receiver_policy'=>'RECIPIENT_ONLY','max_delivery_attempts'=>2,'surcharge_amount'=>15,'currency'=>'MXN','is_default'=>true,'is_active'=>true,'sort_order'=>1]);
         $service = app(CustomerCheckoutService::class);
         $first = $service->create($tenant,$profile,$operation,$proof); $second = $service->create($tenant,$profile,$operation,$proof);
-        $this->assertTrue($first->is($second)); $this->assertSame('120.00',$first->shipping_amount); $this->assertSame('15.00',$first->evidence_amount); $this->assertSame('135.00',$first->total_amount);
-        $this->assertSame('sobre',$first->quote_snapshot['package']['type']); $this->assertDatabaseCount('tenant_customer_checkouts',1);
+        $this->assertTrue($first->is($second)); $this->assertSame('120.00',$first->shipping_amount); $this->assertSame('15.00',$first->evidence_amount); $this->assertSame('135.00',$first->subtotal_amount); $this->assertSame('0.1600',$first->tax_rate); $this->assertSame('21.60',$first->tax_amount); $this->assertSame('156.60',$first->total_amount);
+        $this->assertSame('sobre',$first->quote_snapshot['package']['type']); $this->assertEquals(135.0,$first->quote_snapshot['subtotal']); $this->assertEquals(0.16,$first->quote_snapshot['tax_rate']); $this->assertEquals(21.6,$first->quote_snapshot['tax_amount']); $this->assertEquals(156.6,$first->quote_snapshot['total']); $this->assertDatabaseCount('tenant_customer_checkouts',1);
     }
 
     public function test_preliminary_quote_cannot_create_checkout_or_reach_payment(): void
@@ -246,9 +246,11 @@ class ZigoCustomerPortalTest extends TestCase
         $this->assertSame([], $checkout->proof_option_snapshot);
         $this->assertSame('179.00', $checkout->shipping_amount);
         $this->assertSame('0.00', $checkout->evidence_amount);
-        $this->assertSame('179.00', $checkout->total_amount);
+        $this->assertSame('179.00', $checkout->subtotal_amount);
+        $this->assertSame('28.64', $checkout->tax_amount);
+        $this->assertSame('207.64', $checkout->total_amount);
         $this->actingAs($profile->user)->get($this->url($tenant, '/app/checkout/'.$checkout->uuid.'/resumen'))
-            ->assertOk()->assertSee('TOTAL')->assertSee('$179.00 MXN')->assertDontSee('Evidencia');
+            ->assertOk()->assertSee('IVA (16%)')->assertSee('$28.64')->assertSee('TOTAL')->assertSee('$207.64 MXN')->assertDontSee('Evidencia');
     }
 
     public function test_optional_evidence_summary_renders_selected_evidence(): void
@@ -262,9 +264,11 @@ class ZigoCustomerPortalTest extends TestCase
         ]);
         $checkout = $this->checkoutForView($tenant, $profile, $proof);
 
-        $this->assertSame('204.00', $checkout->total_amount);
+        $this->assertSame('204.00', $checkout->subtotal_amount);
+        $this->assertSame('32.64', $checkout->tax_amount);
+        $this->assertSame('236.64', $checkout->total_amount);
         $this->actingAs($profile->user)->get($this->url($tenant, '/app/checkout/'.$checkout->uuid.'/resumen'))
-            ->assertOk()->assertSee('Evidencia')->assertSee('Fotografía de entrega')->assertSee('$25.00')->assertSee('$204.00 MXN');
+            ->assertOk()->assertSee('Evidencia')->assertSee('Fotografía de entrega')->assertSee('$25.00')->assertSee('$236.64 MXN');
     }
 
     public function test_optional_evidence_payment_renders_without_proof_or_misleading_copy(): void
@@ -274,7 +278,7 @@ class ZigoCustomerPortalTest extends TestCase
         $checkout = $this->checkoutForView($tenant, $profile);
 
         $this->actingAs($profile->user)->get($this->url($tenant, '/app/checkout/'.$checkout->uuid.'/pago'))
-            ->assertOk()->assertSee('Servicio seleccionado')->assertSee('$179.00 MXN')
+            ->assertOk()->assertSee('Servicio seleccionado')->assertSee('IVA (16%)')->assertSee('$28.64')->assertSee('$207.64 MXN')
             ->assertDontSee('Servicio y evidencia seleccionados');
     }
 
@@ -355,7 +359,8 @@ class ZigoCustomerPortalTest extends TestCase
         $this->assertSame('PENDING_PAYMENT',$checkout->status); $this->assertSame('quoted',$operation->fresh()->status);
         $this->assertDatabaseCount('network_usage_events',0); $this->assertDatabaseCount('local_shipments',0);
         $this->actingAs($other->user)->get($this->url($tenant,'/app/checkout/'.$checkout->uuid.'/pago'))->assertNotFound();
-        $this->actingAs($owner->user)->get($this->url($tenant,'/app'))->assertOk()->assertSee('Pago pendiente');
+        $this->actingAs($owner->user)->get($this->url($tenant,'/app'))->assertOk()->assertSee('Pago pendiente')->assertSee('Continuar pago');
+        $this->get($this->url($tenant,'/app/envios'))->assertOk()->assertSee('Pendientes de pago')->assertSee('Local')->assertSee('Continuar pago')->assertDontSee('ZL000PENDING');
     }
 
     public function test_expired_checkout_never_creates_shipment(): void
@@ -378,6 +383,7 @@ class ZigoCustomerPortalTest extends TestCase
         $shipment = app(CustomerCheckoutFulfillmentService::class)->approve($checkout, 'MERCADO_PAGO', 'verified-payment-1');
 
         $this->assertSame('PAID', $checkout->fresh()->status);
+        $this->actingAs($owner->user)->get($this->url($tenant, '/app/envios'))->assertOk()->assertSee('Sin pagos pendientes')->assertSee($shipment->tracking_number);
         $this->assertNotEmpty($shipment->guide_snapshot);
         $this->assertSame($shipment->tracking_number, $shipment->guide_snapshot['tracking_number']);
         $senderBefore = $shipment->sender_snapshot;
@@ -392,7 +398,7 @@ class ZigoCustomerPortalTest extends TestCase
 
         $return = $this->actingAs($owner->user)->get($this->url($tenant, '/app/checkout/'.$checkout->uuid.'/pago/retorno/success'));
         $return->assertOk()->assertSee('Tu envío está listo')->assertSee($shipment->tracking_number)
-            ->assertSee($shipment->service_code)->assertSee('Origen')->assertSee('Destino')->assertSee('$179.00 MXN')
+            ->assertSee($shipment->service_code)->assertSee('Origen')->assertSee('Destino')->assertSee('$207.64 MXN')
             ->assertSee('Descargar guía')->assertSee('Rastrear envío')->assertSee('Ver mis envíos');
 
         $this->actingAs($other->user)->get($this->url($tenant, '/app/checkout/'.$checkout->uuid.'/pago/retorno/success'))->assertNotFound();
@@ -498,7 +504,7 @@ class ZigoCustomerPortalTest extends TestCase
         Schema::create('support_ticket_messages', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->unsignedBigInteger('ticket_id'),$t->unsignedBigInteger('author_user_id'),$t->string('visibility')->default('PUBLIC'),$t->text('message'),$t->timestamps()]));
         Schema::create('support_ticket_attachments', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->unsignedBigInteger('ticket_id'),$t->unsignedBigInteger('message_id')->nullable(),$t->unsignedBigInteger('uploaded_by_user_id'),$t->string('original_name'),$t->string('stored_path'),$t->string('mime'),$t->unsignedBigInteger('size'),$t->timestamps()]));
         Schema::create('support_ticket_events', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->unsignedBigInteger('ticket_id'),$t->unsignedBigInteger('actor_user_id')->nullable(),$t->string('type'),$t->json('metadata')->nullable(),$t->timestamp('created_at')->nullable()]));
-        Schema::create('tenant_customer_checkouts', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('customer_profile_id'),$t->unsignedBigInteger('tenant_operation_id')->unique(),$t->string('status'),$t->string('payment_status'),$t->string('currency'),$t->decimal('shipping_amount',12,2),$t->decimal('evidence_amount',12,2),$t->decimal('total_amount',12,2),$t->json('quote_snapshot'),$t->json('shipping_data_snapshot'),$t->json('proof_option_snapshot'),$t->string('payment_provider')->nullable(),$t->string('payment_reference')->nullable(),$t->timestamp('expires_at')->nullable(),$t->timestamp('paid_at')->nullable(),$t->timestamps()]));
+        Schema::create('tenant_customer_checkouts', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('customer_profile_id'),$t->unsignedBigInteger('tenant_operation_id')->unique(),$t->string('status'),$t->string('payment_status'),$t->string('currency'),$t->decimal('shipping_amount',12,2),$t->decimal('evidence_amount',12,2),$t->decimal('subtotal_amount',12,2)->nullable(),$t->decimal('tax_rate',5,4)->nullable(),$t->decimal('tax_amount',12,2)->nullable(),$t->decimal('total_amount',12,2),$t->json('quote_snapshot'),$t->json('shipping_data_snapshot'),$t->json('proof_option_snapshot'),$t->string('payment_provider')->nullable(),$t->string('payment_reference')->nullable(),$t->timestamp('expires_at')->nullable(),$t->timestamp('paid_at')->nullable(),$t->timestamps()]));
         Schema::create('local_shipping_quote_snapshots', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('service_id')->nullable(),$t->json('origin'),$t->json('destination'),$t->string('package_type'),$t->decimal('weight_kg',8,2),$t->json('dimensions')->nullable(),$t->unsignedInteger('distance_meters')->nullable(),$t->string('pricing_strategy'),$t->json('matched_tariff')->nullable(),$t->decimal('amount',12,2),$t->char('currency',3),$t->timestamp('expires_at')->nullable(),$t->timestamps()]));
         Schema::create('network_tenant_operations', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('subscription_id')->nullable(),$t->string('channel'),$t->string('status'),$t->string('source_type')->nullable(),$t->unsignedBigInteger('source_id')->nullable(),$t->string('provider')->nullable(),$t->string('service_code')->nullable(),$t->string('external_reference')->nullable(),$t->unsignedBigInteger('created_by_user_id')->nullable(),$t->unsignedBigInteger('customer_profile_id')->nullable(),$t->json('metadata')->nullable(),$t->timestamps()]));
         Schema::create('local_shipments', fn(Blueprint $t) => tap($t, fn($t) => [$t->id(),$t->uuid('uuid')->unique(),$t->unsignedBigInteger('tenant_id'),$t->unsignedBigInteger('tenant_operation_id'),$t->string('tracking_number')->unique(),$t->string('service_code'),$t->string('status'),$t->json('sender_snapshot'),$t->json('recipient_snapshot'),$t->json('package_snapshot'),$t->json('pricing_snapshot'),$t->json('guide_snapshot'),$t->unsignedBigInteger('created_by_user_id')->nullable(),$t->timestamps()]));
