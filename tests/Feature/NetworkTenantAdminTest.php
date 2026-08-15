@@ -124,6 +124,65 @@ final class NetworkTenantAdminTest extends TestCase
         $response->assertSee('class="active" href="'.route('tenant.admin.configuration.edit').'"', false);
     }
 
+    public function test_tenant_admin_uses_independent_favicon_preview_and_versioned_design_system(): void
+    {
+        Storage::fake('public');
+        [$tenant, $owner] = $this->tenantOwner('admin-favicon');
+        $faviconPath = 'tenant-branding/'.$tenant->uuid.'/favicon.png';
+        $favicon = UploadedFile::fake()->image('favicon.png', 256, 256);
+        Storage::disk('public')->put($faviconPath, file_get_contents($favicon->getRealPath()));
+        Storage::disk('public')->put('tenant-branding/hero.png', 'hero');
+        $tenant->branding()->updateOrCreate(['tenant_id' => $tenant->id], [
+            'brand_name' => 'Admin Favicon',
+            'favicon_path' => $faviconPath,
+            'hero_image_path' => 'tenant-branding/hero.png',
+        ]);
+
+        $layout = $this->actingAs($owner)->get($this->url($tenant, '/admin'))
+            ->assertOk()->assertSee('rel="icon" href="/branding/favicon"', false)
+            ->assertSee('zigo-design-system.css?v=', false)
+            ->assertDontSee('/branding/hero"', false);
+        $this->get($this->url($tenant, '/admin/configuracion'))->assertOk()
+            ->assertSee('Logo')->assertSee('Imagen principal')->assertSee('Favicon actual')
+            ->assertSee('/branding/favicon', false)->assertSee('/branding/hero', false);
+    }
+
+    public function test_legacy_invalid_favicon_uses_zigo_fallback_and_shows_warning(): void
+    {
+        Storage::fake('public');
+        [$tenant, $owner] = $this->tenantOwner('legacy-invalid-favicon');
+        $faviconPath = 'tenant-branding/'.$tenant->uuid.'/favicon.png';
+        $favicon = UploadedFile::fake()->image('favicon.png', 1280, 642);
+        Storage::disk('public')->put($faviconPath, file_get_contents($favicon->getRealPath()));
+        $tenant->branding()->updateOrCreate(['tenant_id' => $tenant->id], ['favicon_path' => $faviconPath]);
+
+        $this->actingAs($owner)->get($this->url($tenant, '/admin'))
+            ->assertOk()
+            ->assertSee('rel="icon" href="http://legacy-invalid-favicon.zigo.local/favicon.ico"', false)
+            ->assertDontSee('rel="icon" href="/branding/favicon"', false);
+        $this->get($this->url($tenant, '/admin/configuracion'))
+            ->assertOk()
+            ->assertSee('El favicon configurado anteriormente no cumple el formato actual.')
+            ->assertDontSee('alt="Favicon actual"', false);
+    }
+
+    public function test_favicon_must_be_square_and_at_most_512_pixels(): void
+    {
+        Storage::fake('public');
+        [$tenant, $owner] = $this->tenantOwner('favicon-dimensions');
+        $url = $this->url($tenant, '/admin/configuracion');
+
+        $this->actingAs($owner)->patch($url, [
+            'favicon' => UploadedFile::fake()->image('wide.png', 128, 64)->size(50),
+        ])->assertSessionHasErrors('favicon');
+        $this->assertNull($tenant->fresh()->branding);
+
+        $this->patch($url, [
+            'favicon' => UploadedFile::fake()->image('square.png', 512, 512)->size(100),
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        Storage::disk('public')->assertExists($tenant->fresh()->branding->favicon_path);
+    }
+
     public function test_owner_and_admin_can_update_only_current_tenant_branding_with_safe_uploads(): void
     {
         Storage::fake('public');

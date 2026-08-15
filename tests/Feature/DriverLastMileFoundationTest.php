@@ -223,6 +223,8 @@ final class DriverLastMileFoundationTest extends TestCase
     {
         [$tenant, $operator] = $this->tenantOwner('pickup');
         $shipment = $this->shipment($tenant, 'ZL260810PICKUP01');
+        DB::table('local_shipments')->where('id', $shipment->id)->update(['sender_snapshot' => json_encode(['name'=>'Pickup Sender','address'=>['address'=>'Av. Tamaulipas 10','settlement'=>'Tamaulipas Sección Virgencitas','postal_code'=>'57300','municipality'=>'Nezahualcóyotl','state'=>'México']], JSON_UNESCAPED_UNICODE)]);
+        $shipment->refresh();
         $url = $this->url($tenant, "/admin/operations/{$shipment->operation->uuid}/pickup-request");
 
         $this->actingAs($operator)->post($url, ['status' => 'DELIVERED', 'driver_uuid' => '00000000-0000-0000-0000-000000000000', 'tenant_id' => 999])->assertRedirect();
@@ -230,12 +232,14 @@ final class DriverLastMileFoundationTest extends TestCase
         $events = DB::table('local_tracking_events')->where('local_shipment_id', $shipment->id)->count();
         $this->post($url)->assertRedirect();
         $this->assertSame($events, DB::table('local_tracking_events')->where('local_shipment_id', $shipment->id)->count());
-        $this->get($this->url($tenant, '/admin/dispatch/pickups'))->assertOk()->assertSee($shipment->tracking_number)->assertSee('Sin asignar');
+        $this->get($this->url($tenant, '/admin/dispatch/pickups'))->assertOk()->assertSee($shipment->tracking_number)->assertSee('Sin asignar')->assertSee('Tamaulipas Sección Virgencitas')->assertSee('CP 57300')->assertSee('Nezahualcóyotl, México');
         $driver = $this->driver($tenant, 'pickup-driver@test.local', 'PICKUP-DRV');
         $this->post($this->url($tenant, "/admin/local-shipments/{$shipment->uuid}/driver"), ['driver_uuid' => $driver->uuid])->assertRedirect();
         $this->assertSame($driver->id, $shipment->fresh()->activeDriverAssignment->driver_profile_id);
-        $this->get($this->url($tenant, '/admin/dispatch/pickups'))->assertOk()->assertSee('Asignado')->assertSee('pickup-driver@test.local');
+        $this->get($this->url($tenant, '/admin/dispatch/pickups'))->assertOk()->assertSee('pickup-driver@test.local')->assertSee('Lista para recolectar');
         $this->get($this->url($tenant, "/tracking/{$shipment->tracking_number}"))->assertOk()->assertSee('READY FOR PICKUP');
+        app(LocalTrackingService::class)->transition($shipment->fresh(), 'PICKED_UP', $driver->user_id);
+        $this->get($this->url($tenant, '/admin/dispatch/pickups'))->assertOk()->assertDontSee($shipment->tracking_number);
         $this->assertDatabaseCount('network_usage_events', 0);
 
         [$otherTenant, $otherOwner] = $this->tenantOwner('pickup-other');

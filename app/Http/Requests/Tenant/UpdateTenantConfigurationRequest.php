@@ -17,4 +17,11 @@ final class UpdateTenantConfigurationRequest extends FormRequest
     {
         return UpdateTenantBrandingRequest::brandingRules();
     }
+
+    public function messages(): array
+    {
+        return [
+            'favicon.dimensions' => 'El favicon debe ser una imagen cuadrada de hasta 512 × 512 px.',
+        ];
+    }
 }
