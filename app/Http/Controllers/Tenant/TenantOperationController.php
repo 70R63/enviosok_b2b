@@ -68,6 +68,24 @@ final class TenantOperationController extends Controller
         ]);
     }
 
+    public function tracking(string $operation, TenantContext $context)
+    {
+        $this->authorizeOperator($context);
+        $item = TenantOperation::where('tenant_id', $context->id())
+            ->where('uuid', $operation)
+            ->firstOrFail();
+        $shipment = LocalShipment::with('events')
+            ->where('tenant_id', $context->id())
+            ->where('tenant_operation_id', $item->id)
+            ->firstOrFail();
+
+        return view('tenant.admin.tracking', [
+            'tenant' => $context->tenant()->load('branding'),
+            'operation' => $item,
+            'shipment' => $shipment,
+        ]);
+    }
+
     public function requestPickup(string $operation, TenantContext $context, LocalTrackingService $tracking, \App\Domain\Shipping\LastMile\DriverDispatchService $dispatch)
     {
         $this->authorizeOperator($context);

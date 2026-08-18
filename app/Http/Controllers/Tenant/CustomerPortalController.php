@@ -56,6 +56,20 @@ final class CustomerPortalController extends Controller
         ]);
     }
 
+    public function tracking(Request $request, string $shipment, TenantContext $context)
+    {
+        $profile = $request->attributes->get('customer_profile');
+        $item = $this->shipments($context, $profile->id)
+            ->with('events')
+            ->where('local_shipments.uuid', $shipment)
+            ->firstOrFail();
+
+        return view('tenant.customer.tracking', [
+            'tenant' => $context->tenant()->load('branding'),
+            'shipment' => $item,
+        ]);
+    }
+
     public function guide(Request $request, string $shipment, TenantContext $context, LocalGuideService $guides)
     {
         $profile = $request->attributes->get('customer_profile');

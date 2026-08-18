@@ -394,6 +394,7 @@ final class NetworkTenantB2cTest extends TestCase
         $a->memberships()->create(['user_id' => $user->id, 'role' => 'owner', 'status' => 'active']);
 
         $this->actingAs($user)->get($this->url($a, '/admin/operations/'.$operation->uuid))->assertNotFound();
+        $this->get($this->url($a, '/admin/operations/'.$operation->uuid.'/tracking'))->assertNotFound();
         $this->post($this->url($a, '/admin/operations/'.$operation->uuid.'/local-shipment'), [])->assertNotFound();
         $this->get($this->url($a, '/admin/operations/'.$operation->uuid.'/guide.pdf'))->assertNotFound();
         $this->get($this->url($a, '/tracking/'.$shipment->tracking_number))->assertNotFound();
@@ -402,16 +403,22 @@ final class NetworkTenantB2cTest extends TestCase
         $operations = $this->get($this->url($b, '/admin/operations'))->assertOk()
             ->assertSee('/admin/operations/'.$operation->uuid.'/guide.pdf', false)
             ->assertSee('Descargar guía')
-            ->assertSee('/tracking/'.$shipment->tracking_number, false)
+            ->assertSee('/admin/operations/'.$operation->uuid.'/tracking', false)
+            ->assertDontSee('>Confirmar<', false)
             ->assertDontSee('/admin/operations/'.$operationWithoutShipment->uuid.'/guide.pdf', false);
         $this->assertSame(1, substr_count($operations->getContent(), 'Descargar guía'));
+        $this->get($this->url($b, '/admin/operations/'.$operationWithoutShipment->uuid))->assertOk()
+            ->assertSee('Operación manual pendiente de confirmación')->assertSee('Confirmar operación');
+        $this->get($this->url($b, '/admin/operations/'.$operation->uuid.'/tracking'))
+            ->assertOk()->assertSee('RASTREO OPERATIVO')->assertSee('TENANT ADMIN')
+            ->assertSee('Volver al detalle operativo')->assertDontSee('Consultar otra guía');
         $guideSnapshot = $shipment->guide_snapshot;
         $guide = $this->get($this->url($b, '/admin/operations/'.$operation->uuid.'/guide.pdf'))
             ->assertOk()->assertHeader('Content-Type', 'application/pdf');
         $this->assertStringStartsWith('%PDF-', $guide->getContent());
         $this->assertSame($guideSnapshot, $shipment->fresh()->guide_snapshot);
 
-        $response = $this->get($this->url($b, '/tracking/'.$shipment->tracking_number))->assertOk()->assertSee($shipment->tracking_number)->assertSee('Envío creado');
+        $response = $this->get($this->url($b, '/rastreo/'.$shipment->tracking_number))->assertOk()->assertSee($shipment->tracking_number)->assertSee('Envío creado')->assertSee('Consultar otra guía')->assertDontSee('TENANT ADMIN')->assertDontSee('Mis direcciones');
         foreach (['Secret Sender', 'Private Street', '8112345678', '8187654321', '$80.00', 'internal-margin-secret', 'never-public', 'private event note'] as $private) {
             $response->assertDontSee($private);
         }

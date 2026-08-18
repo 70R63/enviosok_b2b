@@ -282,6 +282,17 @@ final class DriverLastMileFoundationTest extends TestCase
         $this->actingAs($driverUser)->get($this->url($tenant, '/driver'))->assertOk()->assertSee($shipment->tracking_number);
     }
 
+    public function test_picked_up_admin_detail_uses_in_progress_last_mile_copy(): void
+    {
+        [$tenant, $owner] = $this->tenantOwner('picked-up-copy');
+        $shipment = $this->shipment($tenant, 'ZL260818PICKEDUP1');
+        DB::table('local_shipments')->where('id', $shipment->id)->update(['status' => 'PICKED_UP']);
+
+        $this->actingAs($owner)->get($this->url($tenant, "/admin/operations/{$shipment->operation->uuid}"))
+            ->assertOk()->assertSee('Paquete recolectado. Envío en curso.')
+            ->assertDontSee('La asignación estará disponible cuando se solicite la recolección.');
+    }
+
     public function test_network_map_keeps_driver_marketplace_and_payouts_future(): void
     {
         $nodes = collect(config('zigo_network_map.nodes'))->keyBy('code');

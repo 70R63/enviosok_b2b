@@ -1,0 +1,3 @@
+@include('tenant.tracking._styles')
+@php($sortedTrackingEvents=collect($trackingEvents)->sortByDesc('occurred_at'))
+<section class="z-panel tracking-history"><h2>Historial</h2>@if($sortedTrackingEvents->isEmpty())<div class="z-empty"><p>Aún no hay movimientos disponibles.</p></div>@else<ol class="z-timeline">@foreach($sortedTrackingEvents as $event)<li><strong>{{ $trackingLabels[data_get($event,'status')] ?? 'Actualización de envío' }}</strong>@if(data_get($event,'status')==='DELIVERY_FAILED')<div>Intento de entrega no completado</div>@endif<div class="z-muted">{{ optional(data_get($event,'occurred_at'))->format('d/m/Y H:i') }}</div></li>@endforeach</ol>@endif</section>

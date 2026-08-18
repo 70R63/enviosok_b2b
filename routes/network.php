@@ -207,6 +207,7 @@ Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:
         Route::post('/cotizar/seleccionar', [TenantB2cController::class, 'select'])->name('quote.select');
         Route::get('/envios', [CustomerPortalController::class, 'index'])->name('shipments');
         Route::get('/envios/{shipment}', [CustomerPortalController::class, 'show'])->name('shipments.show');
+        Route::get('/envios/{shipment}/tracking', [CustomerPortalController::class, 'tracking'])->middleware('tenant.entitlement:TRACKING')->name('shipments.tracking');
         Route::get('/envios/{shipment}/guia.pdf', [CustomerPortalController::class, 'guide'])->name('shipments.guide');
         Route::get('/direcciones', [CustomerAddressController::class, 'index'])->name('addresses.index');
         Route::get('/direcciones/nueva', [CustomerAddressController::class, 'create'])->name('addresses.create');
@@ -311,6 +312,7 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
             Route::delete('/operacion/cobertura/{coverage}', [TenantLogisticsController::class,'removeCoverage'])->name('logistics.coverage.remove');
             Route::post('/operacion/paquetes', [TenantLogisticsController::class,'package'])->name('logistics.packages.store');
             Route::post('/operations/{operation}/confirm', [TenantOperationController::class, 'confirm'])->middleware('tenant.entitlement:SHIPPING')->name('operations.confirm');
+            Route::get('/operations/{operation}/tracking', [TenantOperationController::class, 'tracking'])->middleware('tenant.entitlement:TRACKING')->name('operations.tracking');
             Route::get('/operations/{operation}', [TenantOperationController::class, 'show'])->middleware('tenant.entitlement:SHIPPING')->name('operations.show');
             Route::get('/delivery-proofs/{proof}/{kind}', [DeliveryEvidenceController::class, 'tenant'])->name('delivery-proofs.evidence');
             Route::get('/delivery-failures/{attempt}/photo', [DeliveryEvidenceController::class, 'tenantFailed'])->name('delivery-failures.photo');

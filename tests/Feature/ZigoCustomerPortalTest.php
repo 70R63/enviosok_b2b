@@ -88,7 +88,7 @@ class ZigoCustomerPortalTest extends TestCase
             ->assertSee('name="origin_city"', false)->assertSee('name="destination_state"', false)
             ->assertDontSee('name="pickup_requested"', false)->assertSee("municipalityField.value=''", false);
         $this->get($this->url($tenant, '/app/envios'))->assertOk()->assertSee($own->tracking_number)->assertDontSee($foreign->tracking_number)->assertSee('customer-shipment-card', false);
-        $this->get($this->url($tenant, '/app/envios/'.$own->uuid))->assertOk()->assertSee('Secret address')->assertSeeInOrder(['Descargar guía','Rastrear','Ayuda']);
+        $this->get($this->url($tenant, '/app/envios/'.$own->uuid))->assertOk()->assertSee('Secret address')->assertSeeInOrder(['Rastrear','Descargar guía','Ayuda']);
         $senderSnapshot = $own->sender_snapshot;
         $guide = $this->get($this->url($tenant, '/app/envios/'.$own->uuid.'/guia.pdf'))->assertOk()->assertHeader('Content-Type', 'application/pdf');
         $this->assertStringStartsWith('%PDF-', $guide->getContent());
@@ -110,6 +110,26 @@ class ZigoCustomerPortalTest extends TestCase
             $response = $this->get($this->url($tenant, $prefix.$shipment->tracking_number))->assertOk()->assertSee('En reparto');
             foreach (['Secret address', '8112345678', 'Private internal note', 'provider_cost'] as $private) $response->assertDontSee($private);
         }
+    }
+
+    public function test_customer_private_tracking_is_owned_and_uses_customer_navigation(): void
+    {
+        $tenant = $this->tenant('private-customer-tracking');
+        $owner = $this->customer($tenant, 'private-track-owner@example.test');
+        $other = $this->customer($tenant, 'private-track-other@example.test');
+        $shipment = $this->shipment($tenant, $owner, 'ZLPRIVATECUSTOMER1', 'IN_TRANSIT');
+
+        $this->actingAs($owner->user)->get($this->url($tenant, '/app/envios/'.$shipment->uuid.'/tracking'))
+            ->assertOk()->assertSee('Volver a mis envíos')->assertDontSee('Consultar otra guía');
+        $this->actingAs($other->user)->get($this->url($tenant, '/app/envios/'.$shipment->uuid.'/tracking'))->assertNotFound();
+
+        $foreignTenant = $this->tenant('private-customer-foreign');
+        $foreignCustomer = $this->customer($foreignTenant, 'private-track-foreign@example.test');
+        $this->actingAs($foreignCustomer->user)->get($this->url($foreignTenant, '/app/envios/'.$shipment->uuid.'/tracking'))->assertNotFound();
+
+        $this->actingAs($owner->user)->get($this->url($tenant, '/app/envios/'.$shipment->uuid))
+            ->assertOk()->assertSee('/app/envios/'.$shipment->uuid.'/tracking', false)
+            ->assertSee('shipment-grid', false)->assertSee('@media(max-width:767px)', false);
     }
 
     public function test_service_selection_is_session_bound_and_inactive_proof_is_hidden(): void
