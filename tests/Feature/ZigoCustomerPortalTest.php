@@ -129,7 +129,63 @@ class ZigoCustomerPortalTest extends TestCase
 
         $this->actingAs($owner->user)->get($this->url($tenant, '/app/envios/'.$shipment->uuid))
             ->assertOk()->assertSee('/app/envios/'.$shipment->uuid.'/tracking', false)
-            ->assertSee('shipment-grid', false)->assertSee('@media(max-width:767px)', false);
+            ->assertSee('shipment-grid', false)->assertSee('@media(max-width:767px)', false)
+            ->assertSee('z-card tracking-history', false)->assertSee('z-card shipment-summary', false);
+    }
+
+    public function test_customer_tracking_hub_requires_customer_and_lists_only_owned_shipments(): void
+    {
+        $tenant = $this->tenant('tracking-hub');
+        $owner = $this->customer($tenant, 'hub-owner@example.test');
+        $other = $this->customer($tenant, 'hub-other@example.test');
+        $own = $this->shipment($tenant, $owner, 'ZLHUBOWNER000001', 'PICKED_UP');
+        $foreign = $this->shipment($tenant, $other, 'ZLHUBOTHER000001', 'READY_FOR_PICKUP');
+
+        $this->get($this->url($tenant, '/app/rastrear'))->assertRedirect('/ingresar');
+        $response = $this->actingAs($owner->user)->get($this->url($tenant, '/app/rastrear'))
+            ->assertOk()->assertSee('Tus envíos')->assertSee($own->tracking_number)
+            ->assertDontSee($foreign->tracking_number)->assertSee('Recolectado')
+            ->assertSee('/app/envios/'.$own->uuid.'/tracking', false);
+        $this->assertSame(1, substr_count($response->getContent(), 'Ver rastreo'));
+
+        $this->get($this->url($tenant, '/app'))->assertOk()
+            ->assertSee('href="/app/rastrear"', false);
+        $this->get($this->url($tenant, '/app/envios/'.$own->uuid.'/tracking'))
+            ->assertOk()->assertSee('customer-header', false)->assertDontSee('Consultar otra guía');
+    }
+
+    public function test_known_tracking_statuses_use_canonical_labels_on_customer_admin_and_public_surfaces(): void
+    {
+        $tenant = $this->tenant('canonical-statuses');
+        $profile = $this->customer($tenant, 'canonical-status@example.test');
+        $shipment = $this->shipment($tenant, $profile, 'ZL260813TCYIATPU7U', 'PICKED_UP');
+        $shipment->events()->delete();
+        foreach ([
+            ['CREATED', '2026-08-13 18:40:00'],
+            ['READY_FOR_PICKUP', '2026-08-14 15:12:00'],
+            ['PICKED_UP', '2026-08-14 22:36:00'],
+        ] as [$status, $occurredAt]) {
+            $shipment->events()->create(['status' => $status, 'event_code' => $status, 'occurred_at' => $occurredAt]);
+        }
+        $tenant->memberships()->create(['user_id' => $profile->user_id, 'role' => 'owner', 'status' => 'active']);
+
+        foreach (['/app/envios/'.$shipment->uuid, '/app/envios/'.$shipment->uuid.'/tracking'] as $path) {
+            $this->actingAs($profile->user)->get($this->url($tenant, $path))->assertOk()
+                ->assertSee('Recolectado')->assertSee('Recolección solicitada')->assertSee('Envío creado')
+                ->assertDontSee('Actualización de envío');
+        }
+        $this->actingAs($profile->user)->get($this->url($tenant, '/admin/operations/'.$shipment->operation->uuid.'/tracking'))
+            ->assertOk()->assertSee('TENANT ADMIN')->assertSee('Recolectado')
+            ->assertSee('Recolección solicitada')->assertSee('Envío creado')->assertDontSee('Actualización de envío');
+        $this->get($this->url($tenant, '/rastreo/'.$shipment->tracking_number))->assertOk()
+            ->assertSee('Recolectado')->assertSee('Recolección solicitada')->assertSee('Envío creado')
+            ->assertSee('Consultar otra guía')->assertDontSee('Actualización de envío')
+            ->assertDontSee('customer-header', false)->assertDontSee('Mis direcciones');
+
+        $this->assertSame(
+            'https://canonical-statuses.zigo.local/rastreo/ZL260813TCYIATPU7U',
+            app(\App\Domain\Shipping\Local\LocalGuideService::class)->trackingUrl($shipment, 'canonical-statuses.zigo.local')
+        );
     }
 
     public function test_service_selection_is_session_bound_and_inactive_proof_is_hidden(): void

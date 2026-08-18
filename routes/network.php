@@ -206,6 +206,7 @@ Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:
         Route::post('/cotizar', [TenantB2cController::class, 'store'])->middleware(['tenant.entitlement:SHIPPING', 'throttle:20,1'])->name('quote.store');
         Route::post('/cotizar/seleccionar', [TenantB2cController::class, 'select'])->name('quote.select');
         Route::get('/envios', [CustomerPortalController::class, 'index'])->name('shipments');
+        Route::get('/rastrear', [CustomerPortalController::class, 'trackingIndex'])->middleware('tenant.entitlement:TRACKING')->name('tracking.index');
         Route::get('/envios/{shipment}', [CustomerPortalController::class, 'show'])->name('shipments.show');
         Route::get('/envios/{shipment}/tracking', [CustomerPortalController::class, 'tracking'])->middleware('tenant.entitlement:TRACKING')->name('shipments.tracking');
         Route::get('/envios/{shipment}/guia.pdf', [CustomerPortalController::class, 'guide'])->name('shipments.guide');

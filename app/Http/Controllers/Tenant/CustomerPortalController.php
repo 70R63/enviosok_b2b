@@ -70,6 +70,19 @@ final class CustomerPortalController extends Controller
         ]);
     }
 
+    public function trackingIndex(Request $request, TenantContext $context)
+    {
+        $profile = $request->attributes->get('customer_profile');
+
+        return view('tenant.customer.tracking-index', [
+            'tenant' => $context->tenant()->load('branding'),
+            'shipments' => $this->shipments($context, $profile->id)
+                ->with('events')
+                ->latest('local_shipments.created_at')
+                ->paginate(15),
+        ]);
+    }
+
     public function guide(Request $request, string $shipment, TenantContext $context, LocalGuideService $guides)
     {
         $profile = $request->attributes->get('customer_profile');
