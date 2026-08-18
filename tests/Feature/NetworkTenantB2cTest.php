@@ -411,7 +411,7 @@ final class NetworkTenantB2cTest extends TestCase
         $this->assertStringStartsWith('%PDF-', $guide->getContent());
         $this->assertSame($guideSnapshot, $shipment->fresh()->guide_snapshot);
 
-        $response = $this->get($this->url($b, '/tracking/'.$shipment->tracking_number))->assertOk()->assertSee($shipment->tracking_number)->assertSee('CREATED');
+        $response = $this->get($this->url($b, '/tracking/'.$shipment->tracking_number))->assertOk()->assertSee($shipment->tracking_number)->assertSee('Envío creado');
         foreach (['Secret Sender', 'Private Street', '8112345678', '8187654321', '$80.00', 'internal-margin-secret', 'never-public', 'private event note'] as $private) {
             $response->assertDontSee($private);
         }

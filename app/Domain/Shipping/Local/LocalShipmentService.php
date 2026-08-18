@@ -8,6 +8,7 @@ use App\Domain\Shipping\LastMile\DeliveryRequirementService;
 use App\Domain\Shipping\Local\Models\LocalShipment;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 final class LocalShipmentService
@@ -37,7 +38,7 @@ final class LocalShipmentService
                 'service_code' => $operation->service_code, 'provider' => config('zigo_local.provider_name', 'ZIGO Local'),
                 'sender' => $data['sender'], 'recipient' => $data['recipient'], 'package' => $data['package'],
                 'reference' => $data['reference'] ?? null,
-                'branding' => ['brand_name' => $branding?->brand_name ?? $tenant->name, 'logo_path' => $branding?->logo_path, 'primary_color' => $branding?->primary_color],
+                'branding' => ['brand_name' => $branding?->brand_name ?? $tenant->name, 'logo_path' => $this->snapshotLogo($tenant, $branding?->logo_path), 'primary_color' => $branding?->primary_color],
             ];
             $shipment = LocalShipment::create([
                 'tenant_id' => $tenant->id, 'tenant_operation_id' => $operation->id, 'tracking_number' => $tracking,
@@ -60,5 +61,16 @@ final class LocalShipmentService
         } while (LocalShipment::where('tracking_number', $tracking)->exists());
 
         return $tracking;
+    }
+
+    private function snapshotLogo(Tenant $tenant, mixed $path): ?string
+    {
+        if (! is_string($path) || ! str_starts_with($path, 'tenant-branding/'.$tenant->uuid.'/')) return null;
+        $disk = Storage::disk('public');
+        if (! $disk->exists($path)) return $path;
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION)) ?: 'img';
+        $snapshot = 'tenant-branding/'.$tenant->uuid.'/guide-assets/'.hash_file('sha256', $disk->path($path)).'.'.$extension;
+        if (! $disk->exists($snapshot)) $disk->copy($path, $snapshot);
+        return $snapshot;
     }
 }

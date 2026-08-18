@@ -9,6 +9,13 @@ final class AddressPresenterTest extends TestCase{
   $this->assertSame('Calle Uno, 10, 2, Centro, 64000, Monterrey, Nuevo León, México',AddressPresenter::full($address));
   $this->assertSame('Monterrey, Nuevo León',AddressPresenter::compact($address));
   $this->assertSame('México',AddressPresenter::full(['country'=>'México','pais'=>'México']));
-  $this->assertSame('—',AddressPresenter::full(null));
+ $this->assertSame('—',AddressPresenter::full(null));
+ }
+
+ public function test_it_reads_nested_and_legacy_postal_codes():void{
+  $nested=['name'=>'Origen','address'=>['street'=>'Cumbres del Norte 4344','settlement'=>'Monterrey Centro','postal_code'=>'64000','municipality'=>'Monterrey','state'=>'Nuevo León']];
+  $this->assertSame('64000',AddressPresenter::postalCode($nested));
+  $this->assertSame('57300',AddressPresenter::postalCode(['postal_code'=>'57300','address'=>'Santa Rosa 70B']));
+  $this->assertSame(['Origen','Cumbres del Norte 4344','Monterrey Centro','Monterrey, Nuevo León · CP 64000'],AddressPresenter::lines($nested));
  }
 }

@@ -6,6 +6,7 @@ use App\Domain\Shipping\Local\Models\LocalShipment;
 use Illuminate\Support\Facades\Storage;
 use TCPDF;
 use Throwable;
+use App\Support\Presentation\AddressPresenter;
 
 final class LocalGuidePdfRenderer
 {
@@ -69,21 +70,9 @@ final class LocalGuidePdfRenderer
     private function address(TCPDF $pdf, float $y, string $title, mixed $party): void
     {
         $party = is_array($party) ? $party : [];
-        $address = is_array($party['address'] ?? null) ? $party['address'] : [];
-        $legacy = is_string($party['address'] ?? null) ? trim($party['address']) : null;
-        $line = fn (string $nested, string $legacyKey) => $this->text($address[$nested] ?? $party[$legacyKey] ?? null, null);
-        $postalCode = $line('postal_code', 'postal_code');
-        $municipality = $line('municipality', 'municipality');
-        $state = $line('state', 'state');
         $phone = $this->text($party['phone'] ?? null, null);
-        $lines = array_filter([
-            $this->text($party['name'] ?? null, 'Sin nombre'),
-            $this->text($address['address'] ?? null, $legacy),
-            $line('settlement', 'settlement'),
-            $postalCode ? 'CP '.$postalCode : null,
-            $municipality || $state ? implode(', ', array_filter([$municipality, $state])) : null,
-            $phone ? 'Tel. '.$phone : null,
-        ], fn ($value) => is_string($value) && $value !== '');
+        $lines = AddressPresenter::lines($party);
+        if ($phone) $lines[] = 'Tel. '.$phone;
         $pdf->Rect(6, $y, 89, 27);
         $pdf->SetFillColor(238, 238, 238);
         $pdf->SetXY(6, $y);
@@ -111,7 +100,7 @@ final class LocalGuidePdfRenderer
         $pdf->Cell(89, 5, 'PAQUETE', 0, 1, 'L', true);
         $pdf->SetXY(8, $y + 6);
         $pdf->SetFont('helvetica', '', 8);
-        $pdf->MultiCell(85, 4, implode("\n", $lines));
+        foreach ($lines as $line) $pdf->Cell(85, 4, $line, 0, 1, 'L');
     }
 
     private function logo(TCPDF $pdf, LocalShipment $shipment, mixed $path): bool
