@@ -57,4 +57,4 @@ There are no bindings for these contracts in IA-01A. `ProviderRegistry` first ch
 - Agent/version/contract persistence and authorization.
 - Usage dimensions, traces, redaction, evaluations, and guardrails.
 - Public-channel authentication and origin validation for Webchat.
-- A trusted `AiJobDispatcher` that obtains `tenantId` from `AiTenantBoundary`. Controllers must never accept a browser-provided tenant ID to construct AI jobs; until that dispatcher exists, only trusted internal services may construct `TenantAwareAiJob` instances.
+- IA-01B supplies the trusted `AiJobDispatcher`; future entry points must use it rather than dispatching `TenantAwareAiJob` directly.
