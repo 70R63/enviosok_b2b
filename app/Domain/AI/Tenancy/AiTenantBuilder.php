@@ -10,6 +10,9 @@ final class AiTenantBuilder extends Builder
     public function update(array $values)
     {
         $protected = $this->protectedColumns(array_keys($values));
+        if ($this->getModel()->isAiAppendOnly() && $protected === []) {
+            throw new AiImmutableAttributeException('Append-only AI records cannot be updated.');
+        }
         if ($protected !== [] && ! $this->getModel()->allowsAiProtectedUpdate($protected)) $this->rejectProtectedColumns($protected);
 
         return parent::update($values);
@@ -43,12 +46,14 @@ final class AiTenantBuilder extends Builder
 
     public function increment($column, $amount = 1, array $extra = [])
     {
+        if ($this->getModel()->isAiAppendOnly()) throw new AiImmutableAttributeException('Append-only AI records cannot be incremented.');
         $this->rejectProtectedColumns(array_merge([(string)$column], array_keys($extra)));
         return parent::increment($column, $amount, $extra);
     }
 
     public function decrement($column, $amount = 1, array $extra = [])
     {
+        if ($this->getModel()->isAiAppendOnly()) throw new AiImmutableAttributeException('Append-only AI records cannot be decremented.');
         $this->rejectProtectedColumns(array_merge([(string)$column], array_keys($extra)));
         return parent::decrement($column, $amount, $extra);
     }

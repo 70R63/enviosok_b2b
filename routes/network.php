@@ -16,6 +16,8 @@ use App\Http\Controllers\Network\TenantDomainController;
 use App\Http\Controllers\Network\TenantMembershipController as NetworkTenantMembershipController;
 use App\Http\Controllers\Tenant\DriverConsoleController;
 use App\Http\Controllers\Tenant\TenantAdminController;
+use App\Http\Controllers\Tenant\AiAgentController;
+use App\Http\Controllers\Tenant\AiAgentLaunchpadController;
 use App\Http\Controllers\Tenant\TenantAuthController;
 use App\Http\Controllers\Tenant\OwnerActivationController;
 use App\Http\Controllers\Tenant\TenantSetupController;
@@ -268,6 +270,14 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
             Route::get('/setup', [TenantSetupController::class, 'show'])->name('setup');
             Route::post('/setup', [TenantSetupController::class, 'store'])->name('setup.store');
             Route::get('/plan', [TenantAdminController::class, 'plan'])->name('plan');
+            Route::middleware('tenant.entitlement:AI_CORE')->group(function (): void {
+                Route::get('/ai-agents', [AiAgentController::class, 'index'])->name('ai-agents.index');
+                Route::get('/ai-agents/launchpad', [AiAgentLaunchpadController::class, 'create'])->name('ai-agents.launchpad.create');
+                Route::post('/ai-agents/launchpad', [AiAgentLaunchpadController::class, 'store'])->middleware('throttle:10,1')->name('ai-agents.launchpad.store');
+                Route::get('/ai-agents/launchpad/{launchpadSession}', [AiAgentLaunchpadController::class, 'show'])->name('ai-agents.launchpad.show');
+                Route::post('/ai-agents/launchpad/{launchpadSession}/convert', [AiAgentLaunchpadController::class, 'convert'])->middleware('throttle:6,1')->name('ai-agents.launchpad.convert');
+                Route::get('/ai-agents/{agent}', [AiAgentController::class, 'show'])->name('ai-agents.show');
+            });
             Route::get('/marketplace', [TenantSaasController::class, 'marketplace'])->name('marketplace');
             Route::post('/marketplace/contratar', [TenantSaasController::class, 'purchase'])->middleware('throttle:8,1')->name('marketplace.purchase');
             Route::get('/compras', [TenantSaasController::class, 'purchases'])->name('purchases');
