@@ -27,3 +27,9 @@ La conversión bloquea la sesión en transacción, valida nuevamente el esquema 
 No hay providers, llamadas HTTP salientes, SDKs, prompts monolíticos, publicación, aceptación de contrato, canales funcionales, carga de conocimiento, pagos, simulador, conversaciones ni runtime. Un adapter LLM futuro podrá implementar `AgentLaunchpadAdvisor` y registrarse en el pequeño registry sin cambiar controllers, sesiones ni contratos.
 
 SQLite `:memory:` valida idempotencia secuencial, rollback, constraints y repetición HTTP, pero no demuestra concurrencia real de dos conexiones. La prueba de `lockForUpdate` bajo concurrencia MySQL queda como validación futura; la migración sólo se revisa estáticamente para MySQL en esta fase.
+
+## Product shells and customer access
+
+Los clientes ZIGO usan el Tenant Admin actual y reciben acceso a AI mediante su suscripción y entitlements. Los clientes que contraten únicamente AI usarán INNOTECH AI Agents Workspace. Ambos shells compartirán Tenant, autenticación, roles, billing, subscriptions y AI Core, sin duplicar esos dominios; la navegación dependerá de los productos y módulos contratados.
+
+El branding básico del agente y widget estará incluido. La consola, el dominio y los correos white-label serán un add-on Enterprise. ZIGO AI será un vertical consumidor del AI Core. El workspace AI-only se implementará en IA-03B y queda fuera de este hotfix.
