@@ -123,6 +123,19 @@ return new class extends Migration
                 $table->dropForeign('ai_contract_versions_accepted_by_fk');
                 $table->dropForeign('ai_contract_versions_terminal_by_fk');
             });
+        } elseif (version_compare(app()->version(), '12.0.0', '>=')) {
+            // Laravel 12 uses SQLite's native DROP COLUMN. Remove these constraints
+            // first so SQLite never rebuilds a table with references to removed columns.
+            Schema::table('ai_agent_versions', function (Blueprint $table): void {
+                $table->dropForeign(['approved_by_user_id']);
+                $table->dropForeign(['published_by_user_id']);
+                $table->dropForeign(['retired_by_user_id']);
+            });
+            Schema::table('ai_agent_contract_versions', function (Blueprint $table): void {
+                $table->dropForeign(['offered_by_user_id']);
+                $table->dropForeign(['accepted_by_user_id']);
+                $table->dropForeign(['terminal_by_user_id']);
+            });
         }
 
         Schema::table('ai_agents', function (Blueprint $table): void {
