@@ -30,6 +30,6 @@ SQLite `:memory:` valida idempotencia secuencial, rollback, constraints y repeti
 
 ## Product shells and customer access
 
-Los clientes ZIGO usan el Tenant Admin actual y reciben acceso a AI mediante su suscripción y entitlements. Los clientes que contraten únicamente AI usarán INNOTECH AI Agents Workspace. Ambos shells compartirán Tenant, autenticación, roles, billing, subscriptions y AI Core, sin duplicar esos dominios; la navegación dependerá de los productos y módulos contratados.
+Los clientes ZIGO usan el Tenant Admin actual y reciben acceso a AI mediante su suscripción y entitlements. Los clientes que contraten únicamente AI usarán ZIGO AI Workspace. Ambos shells compartirán Tenant, autenticación, roles, billing, subscriptions y AI Core, sin duplicar esos dominios; la navegación dependerá de los productos y módulos contratados.
 
 El branding básico del agente y widget estará incluido. La consola, el dominio y los correos white-label serán un add-on Enterprise. ZIGO AI será un vertical consumidor del AI Core. El workspace AI-only se implementará en IA-03B y queda fuera de este hotfix.
