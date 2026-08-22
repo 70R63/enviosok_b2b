@@ -288,7 +288,8 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
                 Route::post('/ai-knowledge/{knowledgeSource}/revisions', [AiKnowledgeController::class, 'storeRevision'])->middleware('throttle:10,1')->name('ai-knowledge.revisions.store');
                 Route::post('/ai-knowledge/{knowledgeSource}/versions/{knowledgeVersion}/approve', [AiKnowledgeController::class, 'approve'])->middleware('throttle:10,1')->name('ai-knowledge.versions.approve');
                 Route::post('/ai-knowledge/{knowledgeSource}/versions/{knowledgeVersion}/index', [AiKnowledgeIndexController::class, 'store'])->middleware('throttle:6,1')->name('ai-knowledge.versions.index');
-                Route::post('/ai-agents/{agent}/knowledge/search', [AiAgentController::class, 'search'])->middleware('throttle:20,1')->name('ai-agents.knowledge.search');
+                  Route::post('/ai-agents/{agent}/knowledge/search', [AiAgentController::class, 'search'])->middleware('throttle:20,1')->name('ai-agents.knowledge.search');
+                  Route::post('/ai-agents/{agent}/runtime/simulate', [AiAgentController::class, 'simulate'])->middleware('throttle:10,1')->name('ai-agents.runtime.simulate');
                 Route::post('/ai-agents/{agent}/knowledge/{knowledgeVersion}', [AiAgentKnowledgeController::class, 'attach'])->middleware('throttle:10,1')->name('ai-agents.knowledge.attach');
                 Route::delete('/ai-agents/{agent}/knowledge/{knowledgeVersion}', [AiAgentKnowledgeController::class, 'detach'])->middleware('throttle:10,1')->name('ai-agents.knowledge.detach');
             });

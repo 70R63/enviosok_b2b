@@ -1,0 +1,2 @@
+<?php
+namespace App\Domain\AI\Runtime\Data;final readonly class RuntimeQuestionData{private function __construct(public string$value){}public static function from(mixed$value):self{if(!is_string($value))throw new \InvalidArgumentException('Invalid simulation question.');$value=trim($value);if(mb_strlen($value)<1||mb_strlen($value)>2000||preg_match('/[\x00-\x1F\x7F]/u',$value)||preg_match('/<[^>]*>/u',html_entity_decode($value,ENT_QUOTES|ENT_HTML5,'UTF-8')))throw new \InvalidArgumentException('Invalid simulation question.');return new self($value);}}

@@ -3,6 +3,19 @@
 return [
     'enabled' => env('AI_ENABLED', false),
     'default_provider' => env('AI_DEFAULT_PROVIDER'),
+    'providers' => [
+        'openai' => [
+            'endpoint' => 'https://api.openai.com/v1/responses',
+            'api_key' => env('AI_OPENAI_API_KEY'),
+            'project' => env('AI_OPENAI_PROJECT'),
+            'model' => env('AI_OPENAI_MODEL', 'gpt-5.6-luna'),
+            'approved_models' => ['gpt-5.6-luna'],
+            'reasoning_effort' => 'none',
+            'max_output_tokens' => 600,
+            'timeout' => 30,
+            'pricing' => ['gpt-5.6-luna' => ['input' => 200000, 'cached_input' => 20000, 'output' => 1200000]],
+        ],
+    ],
     'queue' => [
         'connection' => env('AI_QUEUE_CONNECTION', 'database'),
         'name' => env('AI_QUEUE_NAME', 'ai'),

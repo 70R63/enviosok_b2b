@@ -205,7 +205,7 @@ final class AiCoreFoundationTest extends TestCase
     {
         $this->assertFalse($this->app->bound(ModelGateway::class));
         $this->assertFalse($this->app->bound(EmbeddingGateway::class));
-        $this->expectException(\LogicException::class);
+        $this->expectException(\App\Domain\AI\Runtime\Exceptions\ModelProviderNotConfiguredException::class);
         app(ProviderRegistry::class)->model();
     }
 

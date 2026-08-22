@@ -1,3 +1,4 @@
 <?php
 namespace App\Domain\AI\Runtime\Contracts;
-interface ModelGateway { public function generate(array $request): array; }
+use App\Domain\AI\Runtime\Data\{ModelRequestData,ModelResponseData};
+interface ModelGateway { public function generate(ModelRequestData $request): ModelResponseData; }
