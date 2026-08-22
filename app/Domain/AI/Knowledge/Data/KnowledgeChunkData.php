@@ -1,0 +1,3 @@
+<?php
+namespace App\Domain\AI\Knowledge\Data;use App\Domain\AI\Support\CanonicalJsonHasher;use App\Domain\AI\Support\StructuredDataGuard;
+final readonly class KnowledgeChunkData{public function __construct(public int$sequence,public string$content,public array$locator,public string$checksum,public int$characterCount){}public static function make(int$sequence,string$content,array$locator):self{$content=trim($content);if($sequence<1||$content===''||mb_strlen($content)>1200)throw new \InvalidArgumentException('Knowledge chunk is invalid.');StructuredDataGuard::validate($locator);$checksum=app(CanonicalJsonHasher::class)->hash(['content'=>$content,'locator'=>$locator]);return new self($sequence,$content,$locator,$checksum,mb_strlen($content));}}

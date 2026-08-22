@@ -1,0 +1,3 @@
+<?php
+namespace App\Domain\AI\Knowledge\Data;
+final readonly class KnowledgeSearchQuery{private function __construct(public string$value,public int$topK){}public static function from(mixed$value,mixed$topK=5):self{if(!is_string($value))throw new \InvalidArgumentException('Knowledge search question is invalid.');$value=trim($value);$topK=filter_var($topK,FILTER_VALIDATE_INT);if(mb_strlen($value)<1||mb_strlen($value)>2000||preg_match('/[\x00-\x1F\x7F]/u',$value)||preg_match('/<[^>]*>/u',html_entity_decode($value,ENT_QUOTES|ENT_HTML5,'UTF-8'))||$topK===false||$topK<1||$topK>10)throw new \InvalidArgumentException('Knowledge search question is invalid.');return new self($value,$topK);}}

@@ -20,6 +20,7 @@ use App\Http\Controllers\Tenant\AiAgentController;
 use App\Http\Controllers\Tenant\AiAgentLaunchpadController;
 use App\Http\Controllers\Tenant\AiKnowledgeController;
 use App\Http\Controllers\Tenant\AiAgentKnowledgeController;
+use App\Http\Controllers\Tenant\AiKnowledgeIndexController;
 use App\Http\Controllers\Tenant\TenantAuthController;
 use App\Http\Controllers\Tenant\OwnerActivationController;
 use App\Http\Controllers\Tenant\TenantSetupController;
@@ -286,6 +287,8 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
                 Route::get('/ai-knowledge/{knowledgeSource}/revisions/create', [AiKnowledgeController::class, 'revision'])->name('ai-knowledge.revisions.create');
                 Route::post('/ai-knowledge/{knowledgeSource}/revisions', [AiKnowledgeController::class, 'storeRevision'])->middleware('throttle:10,1')->name('ai-knowledge.revisions.store');
                 Route::post('/ai-knowledge/{knowledgeSource}/versions/{knowledgeVersion}/approve', [AiKnowledgeController::class, 'approve'])->middleware('throttle:10,1')->name('ai-knowledge.versions.approve');
+                Route::post('/ai-knowledge/{knowledgeSource}/versions/{knowledgeVersion}/index', [AiKnowledgeIndexController::class, 'store'])->middleware('throttle:6,1')->name('ai-knowledge.versions.index');
+                Route::post('/ai-agents/{agent}/knowledge/search', [AiAgentController::class, 'search'])->middleware('throttle:20,1')->name('ai-agents.knowledge.search');
                 Route::post('/ai-agents/{agent}/knowledge/{knowledgeVersion}', [AiAgentKnowledgeController::class, 'attach'])->middleware('throttle:10,1')->name('ai-agents.knowledge.attach');
                 Route::delete('/ai-agents/{agent}/knowledge/{knowledgeVersion}', [AiAgentKnowledgeController::class, 'detach'])->middleware('throttle:10,1')->name('ai-agents.knowledge.detach');
             });

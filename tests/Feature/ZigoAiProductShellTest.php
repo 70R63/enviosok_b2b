@@ -25,6 +25,7 @@ final class ZigoAiProductShellTest extends TestCase
         config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:', 'ai.enabled' => true]);
         $this->schema();
         (require base_path('database/migrations/2026_08_25_100000_create_ai_knowledge_foundation.php'))->up();
+        (require base_path('database/migrations/2026_08_26_100000_create_ai_knowledge_indexing.php'))->up();
     }
 
     public function test_resolver_selects_platform_for_shipping_with_or_without_ai(): void

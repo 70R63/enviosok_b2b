@@ -1,0 +1,7 @@
+<?php
+namespace App\Domain\AI\Knowledge\Chunking;use App\Domain\AI\Knowledge\Contracts\KnowledgeChunker;use App\Domain\AI\Knowledge\Data\{KnowledgeChunkData,KnowledgeContentData};use App\Domain\AI\Knowledge\Enums\KnowledgeSourceType;
+final class DeterministicKnowledgeChunker implements KnowledgeChunker
+{
+ public function chunks(KnowledgeContentData$data):array{$raw=[];if($data->type===KnowledgeSourceType::ManualText){$parts=preg_split('/(?:\R\s*){2,}/u',$data->content['body'])?:[];foreach($parts as$i=>$part)foreach($this->split(trim($part),1200,150)as$j=>$text)$raw[]=[$text,['kind'=>'manual_text','section'=>$i+1,'part'=>$j+1]];}else{foreach($data->content['entries']as$i=>$entry){$prefix='Pregunta: '.$entry['question']."\nRespuesta: ";$room=max(100,1200-mb_strlen($prefix));foreach($this->split($entry['answer'],$room,min(150,$room-1))as$j=>$answer)$raw[]=[$prefix.$answer,['kind'=>'faq','faq_number'=>$i+1,'part'=>$j+1]];}}$out=[];foreach($raw as$i=>[$text,$locator])$out[]=KnowledgeChunkData::make($i+1,$text,$locator);return$out;}
+ private function split(string$text,int$max,int$overlap):array{if(mb_strlen($text)<=$max)return[$text];$out=[];$start=0;$length=mb_strlen($text);while($start<$length){$take=min($max,$length-$start);$piece=mb_substr($text,$start,$take);if($start+$take<$length){$cut=mb_strrpos($piece,' ');if($cut!==false&&$cut>(int)($max*.6))$take=$cut;$piece=mb_substr($text,$start,$take);}$out[]=trim($piece);if($start+$take>=$length)break;$start+=max(1,$take-$overlap);}return$out;}
+}
