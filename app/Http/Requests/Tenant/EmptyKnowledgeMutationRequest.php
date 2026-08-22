@@ -1,0 +1,3 @@
+<?php
+namespace App\Http\Requests\Tenant;use App\Domain\Network\Tenancy\TenantAccessService;use Illuminate\Foundation\Http\FormRequest;use Illuminate\Validation\Validator;
+final class EmptyKnowledgeMutationRequest extends FormRequest{public function authorize():bool{return app(TenantAccessService::class)->canManageTenant($this->user());}public function rules():array{return[];}public function withValidator(Validator$v):void{$v->after(function(Validator$v){$allowed=$this->isMethod('DELETE')?['_token','_method']:['_token'];foreach(array_keys($this->all())as$key)if(!in_array($key,$allowed,true))$v->errors()->add($key,'Este campo no está permitido.');});}}
