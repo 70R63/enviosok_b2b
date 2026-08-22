@@ -1,0 +1,13 @@
+<?php
+namespace App\Domain\AI\Runtime\Data;
+final readonly class ProviderFailureData
+{
+ private const CATEGORIES=['bad_request','authentication','permission','model_or_resource_not_found','retryable','unprocessable','provider_unavailable','permanent'];
+ public function __construct(public string$provider,public string$model,public ?int$httpStatus,public ?string$errorType,public ?string$errorCode,public ?string$errorParam,public ?string$providerRequestId,public string$clientRequestId,public string$classification){if($provider!=='openai'||$model!=='gpt-5.6-luna'||($httpStatus!==null&&($httpStatus<100||$httpStatus>599))||!in_array($classification,self::CATEGORIES,true))throw new \InvalidArgumentException('Invalid safe provider failure.');foreach([$errorType,$errorCode,$errorParam]as$value)if($value!==null&&!self::isSafe($value,64))throw new \InvalidArgumentException('Invalid safe provider failure field.');if(($providerRequestId!==null&&!self::isSafe($providerRequestId,128))||!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/',$clientRequestId))throw new \InvalidArgumentException('Invalid safe provider request identifier.');}
+ public static function fromHttp(string$model,int$status,mixed$body,mixed$requestId,string$clientRequestId):self{$error=is_array($body)&&is_array($body['error']??null)?$body['error']:[];$code=self::sanitize($error['code']??null,64);return new self('openai',$model,$status,self::sanitize($error['type']??null,64),$code,self::sanitize($error['param']??null,64),self::sanitize($requestId,128),$clientRequestId,self::classify($status,$code));}
+ public static function transport(string$model,string$clientRequestId,bool$timeout):self{return new self('openai',$model,null,null,null,null,null,$clientRequestId,$timeout?'retryable':'provider_unavailable');}
+ public function isRetryable():bool{return in_array($this->classification,['retryable','provider_unavailable'],true);}
+ private static function classify(int$status,?string$code):string{return match(true){$status===400=>'bad_request',$status===401=>'authentication',$status===403=>'permission',$status===404=>'model_or_resource_not_found',$status===422=>'unprocessable',$status>=500=>'provider_unavailable',in_array($status,[408,409,429],true)&&!in_array($code,['credit_balance_exhausted','billing_hard_limit_reached','insufficient_quota'],true)=>'retryable',default=>'permanent'};}
+ private static function sanitize(mixed$value,int$max):?string{if(!is_string($value)||$value===''||strlen($value)>$max||!self::isSafe($value,$max))return null;return$value;}
+ private static function isSafe(string$value,int$max):bool{return strlen($value)<=$max&&preg_match('/^[A-Za-z0-9._:\/-]+$/D',$value)===1;}
+}

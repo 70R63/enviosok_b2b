@@ -27,7 +27,7 @@ final class AiCoreFoundationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['ai.enabled' => true, 'ai.knowledge.disk' => 'local']);
+        config(['ai.enabled' => true, 'ai.knowledge.disk' => 'local', 'ai.default_provider' => null]);
         Schema::dropIfExists('network_tenants');
         Schema::create('network_tenants', function (Blueprint $table): void {
             $table->id();
