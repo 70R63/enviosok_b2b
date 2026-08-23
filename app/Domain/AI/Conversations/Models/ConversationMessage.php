@@ -40,8 +40,8 @@ final class ConversationMessage extends AiTenantModel
         self::creating(function (self $m) {
             $m->uuid ??= (string) Str::uuid();
             Conversation::query()->findOrFail($m->conversation_id);
-            if ($m->role === ConversationMessageRole::User && ($m->status !== ConversationMessageStatus::Completed || ! is_string($m->content) || trim($m->content) === '')) {
-                throw new \DomainException('User messages must be completed.');
+            if (in_array($m->role, [ConversationMessageRole::User, ConversationMessageRole::Human], true) && ($m->status !== ConversationMessageStatus::Completed || ! is_string($m->content) || trim($m->content) === '')) {
+                throw new \DomainException('User and human messages must be completed.');
             }if ($m->role === ConversationMessageRole::Assistant && ($m->status !== ConversationMessageStatus::Pending || $m->content !== null)) {
                 throw new \DomainException('Assistant messages must begin pending.');
             }

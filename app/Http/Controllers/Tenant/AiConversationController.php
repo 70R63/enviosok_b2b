@@ -40,7 +40,7 @@ final class AiConversationController extends Controller
     {
         $gate->ensure(auth()->user());
         $gate->assertCurrentTenant($conversation);
-        $conversation->load(['agent', 'agentVersion', 'messages.citations.chunk.source']);
+        $conversation->load(['agent', 'agentVersion', 'messages.citations.chunk.source', 'activeHandoff.assignee']);
 
         return view('tenant.admin.ai-conversations.show', ['tenant' => $tenants->requireTenant(), 'conversation' => $conversation]);
     }

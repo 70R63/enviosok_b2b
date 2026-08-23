@@ -6,5 +6,6 @@ enum ConversationStatus: string
 {
     case Open = 'open';
     case HandoffRequested = 'handoff_requested';
+    case HumanActive = 'human_active';
     case Closed = 'closed';
 }

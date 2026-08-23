@@ -8,6 +8,7 @@ use App\Domain\AI\Agents\Models\Agent;
 use App\Domain\AI\Agents\Models\AgentVersion;
 use App\Domain\AI\Conversations\Enums\ConversationChannel;
 use App\Domain\AI\Conversations\Enums\ConversationStatus;
+use App\Domain\AI\Handoff\Models\HumanHandoff;
 use App\Domain\AI\Leads\Models\Lead;
 use App\Domain\AI\Leads\Models\OutcomeEvent;
 use App\Domain\AI\Tenancy\AiTenantModel;
@@ -32,7 +33,7 @@ final class Conversation extends AiTenantModel
 
     protected function immutableIdentityAttributes(): array
     {
-        return ['uuid', 'agent_id', 'agent_version_id', 'channel', 'created_by_user_id', 'status', 'turn_in_progress', 'next_sequence', 'closed_at', 'closed_by_user_id'];
+        return ['uuid', 'agent_id', 'agent_version_id', 'channel', 'created_by_user_id', 'status', 'turn_in_progress', 'active_handoff_id', 'next_sequence', 'closed_at', 'closed_by_user_id'];
     }
 
     protected static function booted(): void
@@ -79,11 +80,21 @@ final class Conversation extends AiTenantModel
         return $this->hasMany(OutcomeEvent::class);
     }
 
+    public function handoffs(): HasMany
+    {
+        return $this->hasMany(HumanHandoff::class);
+    }
+
+    public function activeHandoff(): BelongsTo
+    {
+        return $this->belongsTo(HumanHandoff::class, 'active_handoff_id');
+    }
+
     public function reserveTurn(AuthorizedAiLifecycleActor $a): array
     {
         $this->assertLifecycleActor($a);
-        if ($this->originalAiStatus() === ConversationStatus::Closed->value) {
-            throw new \DomainException('Closed conversations do not accept messages.');
+        if ($this->originalAiStatus() !== ConversationStatus::Open->value) {
+            throw new \DomainException('Only an open AI conversation accepts AI turns.');
         }if ($this->turn_in_progress) {
             throw new \DomainException('A conversation turn is already in progress.');
         }$user = $this->next_sequence;
@@ -94,6 +105,44 @@ final class Conversation extends AiTenantModel
         });
 
         return [$user, $assistant];
+    }
+
+    public function requestHuman(AuthorizedAiLifecycleActor $a, int $handoffId): void
+    {
+        $this->assertLifecycleActor($a);
+        if ($this->status !== ConversationStatus::HandoffRequested || $this->active_handoff_id !== null) {
+            throw new \DomainException('Conversation cannot request another active handoff.');
+        } $this->persistNamedLifecycle(['active_handoff_id'], fn () => $this->active_handoff_id = $handoffId);
+    }
+
+    public function activateHuman(AuthorizedAiLifecycleActor $a): void
+    {
+        $this->assertLifecycleActor($a);
+        if ($this->status !== ConversationStatus::HandoffRequested || ! $this->active_handoff_id) {
+            throw new \DomainException('Conversation has no requested handoff.');
+        } $this->persistNamedLifecycle(['status'], fn () => $this->status = ConversationStatus::HumanActive);
+    }
+
+    public function releaseHuman(AuthorizedAiLifecycleActor $a): void
+    {
+        $this->assertLifecycleActor($a);
+        if ($this->status !== ConversationStatus::HumanActive || ! $this->active_handoff_id) {
+            throw new \DomainException('Conversation is not under human control.');
+        } $this->persistNamedLifecycle(['status', 'active_handoff_id'], function () {
+            $this->status = ConversationStatus::Open;
+            $this->active_handoff_id = null;
+        });
+    }
+
+    public function reserveHumanMessage(AuthorizedAiLifecycleActor $a): int
+    {
+        $this->assertLifecycleActor($a);
+        if ($this->status !== ConversationStatus::HumanActive || $this->turn_in_progress) {
+            throw new \DomainException('Conversation is not available for a human message.');
+        } $sequence = $this->next_sequence;
+        $this->persistNamedLifecycle(['next_sequence'], fn () => $this->next_sequence = $sequence + 1);
+
+        return $sequence;
     }
 
     public function finishTurn(AuthorizedAiLifecycleActor $a, bool $handoff): void
@@ -116,8 +165,9 @@ final class Conversation extends AiTenantModel
             throw new \DomainException('A conversation turn is in progress.');
         }if ($this->originalAiStatus() === ConversationStatus::Closed->value) {
             throw new \DomainException('Conversation is already closed.');
-        }$this->persistNamedLifecycle(['status', 'closed_at', 'closed_by_user_id'], function () use ($a) {
+        }$this->persistNamedLifecycle(['status', 'active_handoff_id', 'closed_at', 'closed_by_user_id'], function () use ($a) {
             $this->status = ConversationStatus::Closed;
+            $this->active_handoff_id = null;
             $this->closed_at = now();
             $this->closed_by_user_id = $a->actorUserId;
         });

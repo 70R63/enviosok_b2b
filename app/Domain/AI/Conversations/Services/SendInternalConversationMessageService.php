@@ -14,6 +14,7 @@ use App\Domain\AI\Conversations\Enums\ConversationMessageStatus;
 use App\Domain\AI\Conversations\Models\Conversation;
 use App\Domain\AI\Conversations\Models\ConversationMessage;
 use App\Domain\AI\Conversations\Models\ConversationMessageCitation;
+use App\Domain\AI\Handoff\Services\RequestHumanHandoffService;
 use App\Domain\AI\Leads\Services\RecordLeadOutcomeCandidatesService;
 use App\Domain\AI\Runtime\Models\RuntimeRun;
 use App\Domain\AI\Runtime\Services\GenerateAgentDraftResponseService;
@@ -23,7 +24,7 @@ use Illuminate\Support\Facades\DB;
 
 final class SendInternalConversationMessageService
 {
-    public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private GenerateAgentDraftResponseService $runtime, private RecordLeadOutcomeCandidatesService $outcomes) {}
+    public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private GenerateAgentDraftResponseService $runtime, private RecordLeadOutcomeCandidatesService $outcomes, private RequestHumanHandoffService $handoffs) {}
 
     public function send(User $actor, Conversation $conversation, SendConversationMessageData $data): ConversationTurnResult
     {
@@ -75,7 +76,11 @@ final class SendInternalConversationMessageService
                     $citation->rank = $i + 1;
                     $citation->save();
                 }$c->finishTurn($fresh, $result->needsHandoff);
-                $this->outcomes->record($c, $m, RuntimeRun::query()->findOrFail((int) $result->runtimeRunId), $leadCandidate, $resolvedCandidate);
+                $run = RuntimeRun::query()->findOrFail((int) $result->runtimeRunId);
+                $this->outcomes->record($c, $m, $run, $leadCandidate, $resolvedCandidate);
+                if ($result->needsHandoff) {
+                    $this->handoffs->request($fresh, $c, $m, $run);
+                }
 
                 return new ConversationTurnResult($c->fresh(), $user->fresh(), $m->fresh('citations.chunk.source'));
             });

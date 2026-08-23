@@ -19,6 +19,7 @@ use App\Http\Controllers\Tenant\TenantAdminController;
 use App\Http\Controllers\Tenant\AiAgentController;
 use App\Http\Controllers\Tenant\AiConversationController;
 use App\Http\Controllers\Tenant\AiLeadController;
+use App\Http\Controllers\Tenant\AiHumanHandoffController;
 use App\Http\Controllers\Tenant\AiAgentLaunchpadController;
 use App\Http\Controllers\Tenant\AiKnowledgeController;
 use App\Http\Controllers\Tenant\AiAgentKnowledgeController;
@@ -280,6 +281,10 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
                 Route::get('/ai-conversations', [AiConversationController::class, 'index'])->name('ai-conversations.index');
                 Route::get('/ai-leads', [AiLeadController::class, 'index'])->name('ai-leads.index');
                 Route::get('/ai-leads/{lead}', [AiLeadController::class, 'show'])->name('ai-leads.show');
+                Route::get('/ai-handoffs', [AiHumanHandoffController::class, 'index'])->name('ai-handoffs.index');
+                Route::post('/ai-handoffs/{handoff}/take', [AiHumanHandoffController::class, 'take'])->middleware('throttle:10,1')->name('ai-handoffs.take');
+                Route::post('/ai-handoffs/{handoff}/release', [AiHumanHandoffController::class, 'release'])->middleware('throttle:10,1')->name('ai-handoffs.release');
+                Route::post('/ai-conversations/{conversation}/human-messages', [AiHumanHandoffController::class, 'send'])->middleware('throttle:10,1')->name('ai-conversations.human-messages.store');
                 Route::post('/ai-agents/{agent}/conversations', [AiConversationController::class, 'store'])->middleware('throttle:10,1')->name('ai-agents.conversations.store');
                 Route::get('/ai-conversations/{conversation}', [AiConversationController::class, 'show'])->name('ai-conversations.show');
                 Route::post('/ai-conversations/{conversation}/messages', [AiConversationController::class, 'send'])->middleware('throttle:10,1')->name('ai-conversations.messages.store');

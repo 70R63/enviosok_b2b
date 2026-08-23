@@ -21,6 +21,12 @@ use App\Domain\AI\Conversations\Models\ConversationMessageCitation;
 use App\Domain\AI\Conversations\Services\CloseConversationService;
 use App\Domain\AI\Conversations\Services\SendInternalConversationMessageService;
 use App\Domain\AI\Conversations\Services\StartInternalTestConversationService;
+use App\Domain\AI\Handoff\Data\HumanConversationMessageData;
+use App\Domain\AI\Handoff\Models\HumanHandoff;
+use App\Domain\AI\Handoff\Services\ReleaseHumanHandoffService;
+use App\Domain\AI\Handoff\Services\RequestHumanHandoffService;
+use App\Domain\AI\Handoff\Services\SendHumanConversationMessageService;
+use App\Domain\AI\Handoff\Services\TakeHumanHandoffService;
 use App\Domain\AI\Knowledge\Data\KnowledgeContentData;
 use App\Domain\AI\Knowledge\Models\KnowledgeChunk;
 use App\Domain\AI\Knowledge\Services\ApproveKnowledgeVersionService;
@@ -42,6 +48,7 @@ use App\Domain\Network\Tenancy\Models\TenantDomain;
 use App\Domain\Network\Tenancy\Models\TenantMembership;
 use App\Domain\Network\Tenancy\TenantContext;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -58,6 +65,7 @@ final class AiConversationCoreTest extends TestCase
         $this->schema();
         (require base_path('database/migrations/2026_08_27_110000_add_provider_observability_to_ai_runtime_runs.php'))->up();
         $this->migration()->up();
+        $this->handoffMigration()->up();
         app(TenantContext::class)->clear();
         Http::preventStrayRequests();
     }
@@ -68,9 +76,11 @@ final class AiConversationCoreTest extends TestCase
         $this->assertSame(1, (int) DB::selectOne('PRAGMA foreign_keys')->foreign_keys);
         $this->assertNotEmpty(DB::select("PRAGMA foreign_key_list('ai_conversation_message_citations')"));
         $this->assertContains('ai_msg_conversation_sequence_uq', collect(DB::select("PRAGMA index_list('ai_conversation_messages')"))->pluck('name'));
+        $this->handoffMigration()->down();
         $m->down();
         $this->assertSame(1, (int) DB::selectOne('PRAGMA foreign_keys')->foreign_keys);
         $m->up();
+        $this->handoffMigration()->up();
         $this->assertTrue(Schema::hasTable('ai_conversations'));
     }
 
@@ -142,9 +152,11 @@ final class AiConversationCoreTest extends TestCase
         $this->assertSame(1, ConversationMessageCitation::count());
         $this->assertSame(KnowledgeChunk::first()->id, ConversationMessageCitation::first()->knowledge_chunk_id);
         $this->assertSame('completed', RuntimeRun::first()->status->value);
+        $this->assertDatabaseCount('ai_human_handoffs', 0);
         app(SendInternalConversationMessageService::class)->send($owner, $conversation->fresh(), SendConversationMessageData::from('Otra pregunta de horario'));
         $this->assertSame(2, $calls);
         $this->assertSame(ConversationStatus::HandoffRequested, $conversation->fresh()->status);
+        $this->assertDatabaseCount('ai_human_handoffs', 1);
         $this->assertSame([1, 2, 3, 4], ConversationMessage::orderBy('sequence')->pluck('sequence')->all());
     }
 
@@ -238,7 +250,7 @@ final class AiConversationCoreTest extends TestCase
         $this->membership($tenant, $admin, 'admin');
         $this->assertInstanceOf(Conversation::class, app(StartInternalTestConversationService::class)->start($admin, $agent));
         $tenant->memberships()->where('user_id', $admin->id)->update(['status' => 'suspended']);
-        $this->expectException(\Illuminate\Auth\Access\AuthorizationException::class);
+        $this->expectException(AuthorizationException::class);
         app(StartInternalTestConversationService::class)->start($admin, $agent);
     }
 
@@ -279,6 +291,175 @@ final class AiConversationCoreTest extends TestCase
         app(TenantContext::class)->clear();
         $this->expectException(AiTenantContextException::class);
         Conversation::query()->count();
+    }
+
+    public function test_handoff_take_human_message_release_second_cycle_and_close_are_atomic(): void
+    {
+        [$tenant, $owner] = $this->authorized('handoff-flow');
+        TenantDomain::create(['tenant_id' => $tenant->id, 'domain' => 'handoff-flow.test', 'type' => 'subdomain', 'environment' => 'sandbox', 'is_primary' => true, 'status' => 'verified', 'verified_at' => now()]);
+        [$agent] = $this->agent($owner);
+        $this->ready($owner, $agent, 'Información para atención interna.');
+        $conversation = app(StartInternalTestConversationService::class)->start($owner, $agent);
+        Http::fake(['api.openai.com/*' => Http::response($this->response(['answer' => 'Solicito apoyo humano.', 'citation_ids' => ['K1'], 'confidence' => 'medium', 'needs_handoff' => true, 'handoff_reason' => 'human_requested']), 200)]);
+        $turn = app(SendInternalConversationMessageService::class)->send($owner, $conversation, SendConversationMessageData::from('Necesito atención'));
+        $handoff = HumanHandoff::firstOrFail();
+        $this->assertSame('handoff_requested', $turn->conversation->status->value);
+        $this->assertSame('requested', $handoff->status->value);
+        $this->assertSame($turn->assistantMessage->id, $handoff->requested_by_message_id);
+        $runtimeCount = RuntimeRun::count();
+
+        $authorized = app(AiLifecycleAuthorization::class)->authorize($owner);
+        $requestHandoff = app(RequestHumanHandoffService::class);
+        $run = $turn->assistantMessage->runtimeRun;
+        $this->assertSame($handoff->id, $requestHandoff->request($authorized, $conversation->fresh(), $turn->assistantMessage, $run)->id);
+        foreach ([
+            function () use ($turn) { $message = clone $turn->assistantMessage; $message->role = 'user'; return [$message, $message->runtimeRun]; },
+            function () use ($turn) { $message = clone $turn->assistantMessage; $message->role = 'human'; return [$message, $message->runtimeRun]; },
+            function () use ($turn) { $message = clone $turn->assistantMessage; $message->status = 'pending'; return [$message, $message->runtimeRun]; },
+            function () use ($turn) { $message = clone $turn->assistantMessage; $message->conversation_id++; return [$message, $message->runtimeRun]; },
+            function () use ($turn, $run) { $message = clone $turn->assistantMessage; $other = clone $run; $other->id++; return [$message, $other]; },
+            function () use ($turn, $run) { $message = clone $turn->assistantMessage; $other = clone $run; $other->status = 'started'; return [$message, $other]; },
+            function () use ($turn, $run) { $message = clone $turn->assistantMessage; $other = clone $run; $other->needs_handoff = false; return [$message, $other]; },
+            function () use ($turn, $run) { $message = clone $turn->assistantMessage; $other = clone $run; $other->agent_id++; return [$message, $other]; },
+            function () use ($turn, $run) { $message = clone $turn->assistantMessage; $other = clone $run; $other->agent_version_id++; return [$message, $other]; },
+        ] as $invalidEvidence) {
+            [$message, $runtime] = $invalidEvidence();
+            try {
+                $requestHandoff->request($authorized, $conversation->fresh(), $message, $runtime);
+                $this->fail('Incoherent automatic handoff evidence must fail.');
+            } catch (\DomainException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+        $this->assertDatabaseCount('ai_human_handoffs', 1);
+
+        app(TakeHumanHandoffService::class)->take($owner, $handoff);
+        $this->assertSame('human_active', $conversation->fresh()->status->value);
+        $this->assertSame($owner->id, $handoff->fresh()->assigned_user_id);
+        try {
+            app(TakeHumanHandoffService::class)->take($owner, $handoff->fresh());
+            $this->fail('A second takeover must fail.');
+        } catch (\DomainException) {
+            $this->addToAssertionCount(1);
+        }
+
+        $other = $this->user('other-human@test');
+        $this->membership($tenant, $other, 'admin');
+        try {
+            app(SendHumanConversationMessageService::class)->send($other, $conversation->fresh(), HumanConversationMessageData::from('No autorizado'));
+            $this->fail('A non-assigned human must fail.');
+        } catch (\DomainException) {
+            $this->addToAssertionCount(1);
+        }
+        $secret = "<script>alert('IA08-XSS')</script>";
+        $human = app(SendHumanConversationMessageService::class)->send($owner, $conversation->fresh(), HumanConversationMessageData::from($secret));
+        $this->assertSame('human', $human->role->value);
+        $this->assertSame($secret, $human->content);
+        $this->assertStringNotContainsString('IA08-XSS', (string) DB::table('ai_conversation_messages')->where('id', $human->id)->value('content'));
+        $this->assertSame($runtimeCount, RuntimeRun::count());
+        $this->actingAs($owner)->get('http://handoff-flow.test/admin/ai-conversations/'.$conversation->uuid)->assertOk()->assertSee('Atención humana activa')->assertSee('Humano')->assertSee('&lt;script&gt;', false)->assertDontSee($secret, false)->assertSee('Devolver a IA');
+        $this->get('http://handoff-flow.test/admin/ai-handoffs')->assertOk()->assertSee('Atención humana activa')->assertSee($owner->name)->assertSee('Abrir conversación');
+
+        $httpCount = count(Http::recorded());
+        try {
+            app(SendInternalConversationMessageService::class)->send($owner, $conversation->fresh(), SendConversationMessageData::from('IA bloqueada'));
+            $this->fail('AI must be blocked while a human is active.');
+        } catch (\DomainException) {
+            $this->addToAssertionCount(1);
+        }
+        $this->assertCount($httpCount, Http::recorded());
+        app(ReleaseHumanHandoffService::class)->release($owner, $handoff->fresh());
+        $this->assertSame('open', $conversation->fresh()->status->value);
+        $this->assertSame('released', $handoff->fresh()->status->value);
+
+        Http::fake(['api.openai.com/*' => Http::response($this->response(['answer' => 'Solicito apoyo nuevamente.', 'citation_ids' => ['K1'], 'confidence' => 'medium', 'needs_handoff' => true, 'handoff_reason' => 'human_requested']), 200)]);
+        app(SendInternalConversationMessageService::class)->send($owner, $conversation->fresh(), SendConversationMessageData::from('Nueva atención'));
+        $this->assertDatabaseCount('ai_human_handoffs', 2);
+        $second = HumanHandoff::latest('id')->firstOrFail();
+        app(TakeHumanHandoffService::class)->take($owner, $second);
+        app(CloseConversationService::class)->close($owner, $conversation->fresh());
+        $this->assertSame('closed', $conversation->fresh()->status->value);
+        $this->assertSame('closed', $second->fresh()->status->value);
+
+        $viewer = $this->user('handoff-viewer@test');
+        $this->membership($tenant, $viewer, 'viewer');
+        $this->actingAs($viewer)->get('http://handoff-flow.test/admin/ai-handoffs')->assertForbidden();
+        $tenant->subscriptions()->first()->entitlements()->where('code', 'AI_CORE')->update(['is_enabled' => false]);
+        $this->actingAs($owner)->get('http://handoff-flow.test/admin/ai-handoffs')->assertForbidden();
+        $tenant->subscriptions()->first()->entitlements()->where('code', 'AI_CORE')->update(['is_enabled' => true]);
+        [$otherTenant, $otherOwner] = $this->httpTenant('handoff-other', 'owner');
+        $otherBase = 'http://handoff-other.test/admin';
+        $this->actingAs($otherOwner)->get($otherBase.'/ai-handoffs')->assertOk()->assertDontSee('Atención humana activa');
+        $this->post($otherBase.'/ai-handoffs/'.$second->uuid.'/take')->assertNotFound();
+        $this->post($otherBase.'/ai-handoffs/'.$second->uuid.'/release')->assertNotFound();
+        $this->post($otherBase.'/ai-conversations/'.$conversation->uuid.'/human-messages', ['message' => 'No autorizado'])->assertNotFound();
+        $this->post($otherBase.'/ai-conversations/'.$conversation->uuid.'/close')->assertNotFound();
+    }
+
+    public function test_handoff_terminal_operations_revalidate_after_canonical_conversation_lock(): void
+    {
+        [$tenant, $owner] = $this->authorized('handoff-locks');
+        [$agent] = $this->agent($owner);
+        Http::fake();
+        $requested = function () use ($owner, $agent): array {
+            $conversation = app(StartInternalTestConversationService::class)->start($owner, $agent);
+            DB::table('ai_conversations')->where('id', $conversation->id)->update(['status' => 'handoff_requested']);
+            $handoff = new HumanHandoff;
+            $handoff->conversation_id = $conversation->id;
+            $handoff->status = 'requested';
+            $handoff->requested_at = now();
+            $handoff->reason_code = 'model_requested';
+            $handoff->save();
+            DB::table('ai_conversations')->where('id', $conversation->id)->update(['active_handoff_id' => $handoff->id]);
+
+            return [$conversation->fresh(), $handoff->fresh()];
+        };
+
+        [$releasedConversation, $releasedHandoff] = $requested();
+        app(TakeHumanHandoffService::class)->take($owner, $releasedHandoff);
+        $runtimeCount = RuntimeRun::count();
+        $httpCount = count(Http::recorded());
+        app(ReleaseHumanHandoffService::class)->release($owner, $releasedHandoff->fresh());
+        try {
+            app(ReleaseHumanHandoffService::class)->release($owner, $releasedHandoff->fresh());
+            $this->fail('Double release must fail as a domain conflict.');
+        } catch (\DomainException) {
+            $this->addToAssertionCount(1);
+        }
+        app(CloseConversationService::class)->close($owner, $releasedConversation->fresh());
+        $this->assertSame('closed', $releasedConversation->fresh()->status->value);
+        $this->assertSame('released', $releasedHandoff->fresh()->status->value);
+
+        [$closedConversation, $closedHandoff] = $requested();
+        app(TakeHumanHandoffService::class)->take($owner, $closedHandoff);
+        app(CloseConversationService::class)->close($owner, $closedConversation->fresh());
+        foreach ([
+            fn () => app(ReleaseHumanHandoffService::class)->release($owner, $closedHandoff->fresh()),
+            fn () => app(SendHumanConversationMessageService::class)->send($owner, $closedConversation->fresh(), HumanConversationMessageData::from('Mensaje tardío')),
+            fn () => app(CloseConversationService::class)->close($owner, $closedConversation->fresh()),
+        ] as $terminalAction) {
+            try {
+                $terminalAction();
+                $this->fail('Terminal handoff operation must fail as a domain conflict.');
+            } catch (\DomainException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+        $this->assertSame('closed', $closedConversation->fresh()->status->value);
+        $this->assertSame('closed', $closedHandoff->fresh()->status->value);
+        $this->assertNull($closedConversation->fresh()->active_handoff_id);
+
+        [$requestedConversation, $requestedHandoff] = $requested();
+        app(CloseConversationService::class)->close($owner, $requestedConversation->fresh());
+        try {
+            app(TakeHumanHandoffService::class)->take($owner, $requestedHandoff->fresh());
+            $this->fail('Take after close must fail as a domain conflict.');
+        } catch (\DomainException) {
+            $this->addToAssertionCount(1);
+        }
+        $this->assertNull($requestedHandoff->fresh()->assigned_user_id);
+        $this->assertSame($runtimeCount, RuntimeRun::count());
+        $this->assertCount($httpCount, Http::recorded());
     }
 
     private function response(array $output): array
@@ -492,5 +673,10 @@ final class AiConversationCoreTest extends TestCase
     private function migration(): object
     {
         return require base_path('database/migrations/2026_08_28_100000_create_ai_conversations.php');
+    }
+
+    private function handoffMigration(): object
+    {
+        return require base_path('database/migrations/2026_08_30_100000_create_ai_human_handoffs.php');
     }
 }
