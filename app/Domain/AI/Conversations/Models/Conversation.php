@@ -8,10 +8,13 @@ use App\Domain\AI\Agents\Models\Agent;
 use App\Domain\AI\Agents\Models\AgentVersion;
 use App\Domain\AI\Conversations\Enums\ConversationChannel;
 use App\Domain\AI\Conversations\Enums\ConversationStatus;
+use App\Domain\AI\Leads\Models\Lead;
+use App\Domain\AI\Leads\Models\OutcomeEvent;
 use App\Domain\AI\Tenancy\AiTenantModel;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 final class Conversation extends AiTenantModel
@@ -64,6 +67,16 @@ final class Conversation extends AiTenantModel
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    public function lead(): HasOne
+    {
+        return $this->hasOne(Lead::class);
+    }
+
+    public function outcomes(): HasMany
+    {
+        return $this->hasMany(OutcomeEvent::class);
     }
 
     public function reserveTurn(AuthorizedAiLifecycleActor $a): array

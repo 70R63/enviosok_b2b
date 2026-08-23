@@ -33,7 +33,7 @@ final class AiConversationController extends Controller
             return back()->withErrors(['conversation' => 'No fue posible iniciar la conversación de prueba.']);
         }
 
-return redirect()->route('tenant.admin.ai-conversations.show', $conversation);
+        return redirect()->route('tenant.admin.ai-conversations.show', $conversation);
     }
 
     public function show(Conversation $conversation, AiLaunchpadHttpGate $gate, AiTenantBoundary $tenants)
@@ -68,6 +68,6 @@ return redirect()->route('tenant.admin.ai-conversations.show', $conversation);
             return back()->withErrors(['conversation' => 'No fue posible cerrar la conversación.']);
         }
 
-return redirect()->route('tenant.admin.ai-conversations.show',$conversation)->with('success','Conversación cerrada.');
+        return redirect()->route('tenant.admin.ai-conversations.show', $conversation)->with('success', 'Conversación cerrada.');
     }
 }

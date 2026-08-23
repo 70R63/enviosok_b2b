@@ -2,8 +2,8 @@
 
 namespace App\Domain\AI\Conversations\Services;
 
-use App\Domain\AI\Agents\Enums\AgentVersionStatus;
 use App\Domain\AI\Agents\Data\AuthorizedAiLifecycleActor;
+use App\Domain\AI\Agents\Enums\AgentVersionStatus;
 use App\Domain\AI\Agents\Models\Agent;
 use App\Domain\AI\Agents\Models\AgentVersion;
 use App\Domain\AI\Agents\Services\AiLifecycleAuthorization;
@@ -14,6 +14,8 @@ use App\Domain\AI\Conversations\Enums\ConversationMessageStatus;
 use App\Domain\AI\Conversations\Models\Conversation;
 use App\Domain\AI\Conversations\Models\ConversationMessage;
 use App\Domain\AI\Conversations\Models\ConversationMessageCitation;
+use App\Domain\AI\Leads\Services\RecordLeadOutcomeCandidatesService;
+use App\Domain\AI\Runtime\Models\RuntimeRun;
 use App\Domain\AI\Runtime\Services\GenerateAgentDraftResponseService;
 use App\Domain\AI\Tenancy\AiTenantBoundary;
 use App\Models\User;
@@ -21,7 +23,7 @@ use Illuminate\Support\Facades\DB;
 
 final class SendInternalConversationMessageService
 {
-    public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private GenerateAgentDraftResponseService $runtime) {}
+    public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private GenerateAgentDraftResponseService $runtime, private RecordLeadOutcomeCandidatesService $outcomes) {}
 
     public function send(User $actor, Conversation $conversation, SendConversationMessageData $data): ConversationTurnResult
     {
@@ -58,8 +60,9 @@ final class SendInternalConversationMessageService
         });
         try {
             $result = $this->runtime->generate($actor, $agent, $data->message, $version, $history);
+            [$leadCandidate, $resolvedCandidate] = [$result->leadCandidate, $result->resolvedCandidate];
 
-            return DB::transaction(function () use ($authorized, $conversation, $user, $assistant, $result) {
+            return DB::transaction(function () use ($authorized, $conversation, $user, $assistant, $result, $leadCandidate, $resolvedCandidate) {
                 $c = Conversation::query()->lockForUpdate()->findOrFail($conversation->id);
                 $m = ConversationMessage::query()->whereKey($assistant->id)->lockForUpdate()->firstOrFail();
                 $fresh = $this->auth->revalidate($authorized);
@@ -72,6 +75,7 @@ final class SendInternalConversationMessageService
                     $citation->rank = $i + 1;
                     $citation->save();
                 }$c->finishTurn($fresh, $result->needsHandoff);
+                $this->outcomes->record($c, $m, RuntimeRun::query()->findOrFail((int) $result->runtimeRunId), $leadCandidate, $resolvedCandidate);
 
                 return new ConversationTurnResult($c->fresh(), $user->fresh(), $m->fresh('citations.chunk.source'));
             });
@@ -80,8 +84,8 @@ final class SendInternalConversationMessageService
                 $c = Conversation::query()->lockForUpdate()->findOrFail($conversation->id);
                 $m = ConversationMessage::query()->whereKey($assistant->id)->lockForUpdate()->firstOrFail();
                 $fresh = $this->auth->revalidate($authorized);
-                $m->fail($fresh,'response_unavailable');
-                $c->finishTurn($fresh,false);
+                $m->fail($fresh, 'response_unavailable');
+                $c->finishTurn($fresh, false);
             });
             throw $e;
         }
