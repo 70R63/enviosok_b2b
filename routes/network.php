@@ -17,6 +17,7 @@ use App\Http\Controllers\Network\TenantMembershipController as NetworkTenantMemb
 use App\Http\Controllers\Tenant\DriverConsoleController;
 use App\Http\Controllers\Tenant\TenantAdminController;
 use App\Http\Controllers\Tenant\AiAgentController;
+use App\Http\Controllers\Tenant\AiConversationController;
 use App\Http\Controllers\Tenant\AiAgentLaunchpadController;
 use App\Http\Controllers\Tenant\AiKnowledgeController;
 use App\Http\Controllers\Tenant\AiAgentKnowledgeController;
@@ -275,6 +276,11 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
             Route::get('/plan', [TenantAdminController::class, 'plan'])->name('plan');
             Route::middleware('tenant.entitlement:AI_CORE')->group(function (): void {
                 Route::get('/ai-agents', [AiAgentController::class, 'index'])->name('ai-agents.index');
+                Route::get('/ai-conversations', [AiConversationController::class, 'index'])->name('ai-conversations.index');
+                Route::post('/ai-agents/{agent}/conversations', [AiConversationController::class, 'store'])->middleware('throttle:10,1')->name('ai-agents.conversations.store');
+                Route::get('/ai-conversations/{conversation}', [AiConversationController::class, 'show'])->name('ai-conversations.show');
+                Route::post('/ai-conversations/{conversation}/messages', [AiConversationController::class, 'send'])->middleware('throttle:10,1')->name('ai-conversations.messages.store');
+                Route::post('/ai-conversations/{conversation}/close', [AiConversationController::class, 'close'])->middleware('throttle:10,1')->name('ai-conversations.close');
                 Route::get('/ai-agents/launchpad', [AiAgentLaunchpadController::class, 'create'])->name('ai-agents.launchpad.create');
                 Route::post('/ai-agents/launchpad', [AiAgentLaunchpadController::class, 'store'])->middleware('throttle:10,1')->name('ai-agents.launchpad.store');
                 Route::get('/ai-agents/launchpad/{launchpadSession}', [AiAgentLaunchpadController::class, 'show'])->name('ai-agents.launchpad.show');

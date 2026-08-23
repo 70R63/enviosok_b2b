@@ -27,4 +27,7 @@ return [
     'job_timeout' => env('AI_JOB_TIMEOUT', 120),
     'job_backoff_seconds' => env('AI_JOB_BACKOFF_SECONDS', '10,30,60'),
     'data_retention_days' => (int) env('AI_DATA_RETENTION_DAYS', 90),
+    'conversation_history_max_messages' => 6,
+    'conversation_history_max_characters' => 6000,
+    'conversation_stale_turn_seconds' => (int) env('AI_CONVERSATION_STALE_TURN_SECONDS', 120),
 ];
