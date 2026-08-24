@@ -13,6 +13,7 @@ use App\Http\Requests\Tenant\CloseConversationRequest;
 use App\Http\Requests\Tenant\SendInternalConversationMessageRequest;
 use App\Http\Requests\Tenant\StartInternalConversationRequest;
 use App\Http\Support\AiLaunchpadHttpGate;
+use Illuminate\Support\Facades\Schema;
 
 final class AiConversationController extends Controller
 {
@@ -41,6 +42,7 @@ final class AiConversationController extends Controller
         $gate->ensure(auth()->user());
         $gate->assertCurrentTenant($conversation);
         $conversation->load(['agent', 'agentVersion', 'messages.citations.chunk.source', 'activeHandoff.assignee']);
+        if (Schema::hasTable('ai_action_runs')) $conversation->load('actionRuns'); else $conversation->setRelation('actionRuns', collect());
 
         return view('tenant.admin.ai-conversations.show', ['tenant' => $tenants->requireTenant(), 'conversation' => $conversation]);
     }

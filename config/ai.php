@@ -30,4 +30,8 @@ return [
     'conversation_history_max_messages' => 6,
     'conversation_history_max_characters' => 6000,
     'conversation_stale_turn_seconds' => (int) env('AI_CONVERSATION_STALE_TURN_SECONDS', 120),
+    'actions' => [
+        'max_input_bytes' => (int) env('AI_ACTION_MAX_INPUT_BYTES', 16384),
+        'max_output_bytes' => (int) env('AI_ACTION_MAX_OUTPUT_BYTES', 32768),
+    ],
 ];

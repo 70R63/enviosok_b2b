@@ -3,12 +3,13 @@ namespace App\Domain\AI\Runtime\Support;
 use App\Domain\AI\Runtime\Exceptions\InvalidModelResponseException;
 final class ProviderOutputSchemaGuard
 {
- private const KEYWORDS=['type','properties','required','additionalProperties','items','enum','description'];
+ private const KEYWORDS=['type','properties','required','additionalProperties','items','enum','description','anyOf'];
  public static function validate(array$schema):void{self::node($schema,1,true);}
  private static function node(array$schema,int$depth,bool$root=false):void
  {
   if($depth>10)self::fail();
   foreach(array_keys($schema)as$key)if(!is_string($key)||!in_array($key,self::KEYWORDS,true))self::fail();
+  if(array_key_exists('anyOf',$schema)){if($root||!is_array($schema['anyOf'])||!array_is_list($schema['anyOf'])||count($schema['anyOf'])<2||array_diff(array_keys($schema),['anyOf','description'])!==[])self::fail();foreach($schema['anyOf']as$child)if(!is_array($child)||array_is_list($child))self::fail();else self::node($child,$depth+1);return;}
   $type=$schema['type']??null;$types=is_string($type)?[$type]:(is_array($type)&&array_is_list($type)?$type:[]);
   if($types===[]||array_diff($types,['object','array','string','number','integer','boolean','null'])!==[]||count($types)!==count(array_unique($types)))self::fail();
   if($root&&!in_array('object',$types,true))self::fail();

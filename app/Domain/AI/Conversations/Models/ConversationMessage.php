@@ -79,6 +79,17 @@ final class ConversationMessage extends AiTenantModel
         });
     }
 
+    public function linkSourceRuntimeRun(AuthorizedAiLifecycleActor $a, int $runId): void
+    {
+        $this->assertLifecycleActor($a);
+        if ($this->originalAiStatus() !== ConversationMessageStatus::Completed->value || $this->role !== ConversationMessageRole::User || $this->runtime_run_id !== null) {
+            throw new \DomainException('Only an unlinked completed user message can be linked to its Runtime Run.');
+        }
+        $this->persistNamedLifecycle(['runtime_run_id'], function () use ($runId) {
+            $this->runtime_run_id = $runId;
+        });
+    }
+
     public function fail(AuthorizedAiLifecycleActor $a, string $code): void
     {
         $this->assertLifecycleActor($a);

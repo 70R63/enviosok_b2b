@@ -27,10 +27,12 @@ use App\Domain\AI\Runtime\Support\RuntimeOutputSchema;
 use App\Domain\AI\Tenancy\AiTenantBoundary;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use App\Domain\AI\Actions\ActionRegistry;
+use App\Domain\AI\Runtime\Support\ActionRuntimeOutputSchema;
 
 final class GenerateAgentDraftResponseService
 {
-    public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private KnowledgeRetriever $retriever, private ProviderRegistry $providers, private AgentRuntimePolicyCompiler $policy) {}
+    public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private KnowledgeRetriever $retriever, private ProviderRegistry $providers, private AgentRuntimePolicyCompiler $policy, private ActionRegistry $actions) {}
 
     public function generate(User $actor, Agent $agent, RuntimeQuestionData $q, ?AgentVersion $pinnedVersion = null, array $history = []): AgentRuntimeResponseData
     {
@@ -64,14 +66,16 @@ return [$a, $v];
         }$input = ['question' => $q->value, 'knowledge' => array_map(fn ($k) => array_diff_key($k, ['knowledge_chunk_id' => true]), $knowledge)];
         if ($history !== []) {
             $input['history'] = $this->history($history);
-        }$request = new ModelRequestData($this->policy->compile($agent, $version), $input, RuntimeOutputSchema::schema($ids), 600, 'none', $this->safety($authorized->tenantId, $authorized->actorUserId), 'agent_draft_simulation');
+        }$allowedActions=array_values(array_intersect($version->contractVersion->allowed_actions??[],array_keys($this->actions->all())));$definitions=array_map(fn($key)=>$this->actions->find($key),$allowedActions);
+        $schema=$definitions===[]?RuntimeOutputSchema::schema($ids):ActionRuntimeOutputSchema::schema($ids,$definitions);
+        $request = new ModelRequestData($this->policy->compile($agent, $version), $input, $schema, 600, 'none', $this->safety($authorized->tenantId, $authorized->actorUserId), 'agent_draft_simulation');
         try {
             $model = $this->providers->model()->generate($request);
             $valid = AgentRuntimeResponseData::validate($model->structuredOutput, $ids);
             $sources = [];
             foreach ($valid->citationIds as $id) {
                 $sources[] = $knowledge[((int) substr($id, 1)) - 1];
-            }$result = new AgentRuntimeResponseData($valid->answer, $valid->citationIds, $valid->confidence, $valid->needsHandoff, $valid->handoffReason, $sources, $run->id, $valid->leadCandidate, $valid->resolvedCandidate);
+            }$result = new AgentRuntimeResponseData($valid->answer, $valid->citationIds, $valid->confidence, $valid->needsHandoff, $valid->handoffReason, $sources, $run->id, $valid->leadCandidate, $valid->resolvedCandidate, $valid->actionRequest);
             $pricing = (config('ai.providers.openai.pricing') ?? [])[$model->model] ?? null;
             if (! is_array($pricing)) {
                 throw new InvalidModelResponseException('Pricing snapshot is not configured.');

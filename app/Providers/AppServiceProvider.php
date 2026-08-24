@@ -10,6 +10,7 @@ use App\Domain\Payments\MercadoPagoPaymentProvider;
 use App\Domain\Network\Commerce\Contracts\PlatformPaymentProvider;
 use App\Domain\Network\Commerce\MercadoPagoPlatformPaymentProvider;
 use App\Domain\Shipping\Local\Routing\{GoogleRoutesDistanceProvider,RouteDistanceProvider};
+use App\Domain\AI\Actions\ActionRegistry;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -24,6 +25,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(PaymentProvider::class, MercadoPagoPaymentProvider::class);
         $this->app->bind(PlatformPaymentProvider::class, MercadoPagoPlatformPaymentProvider::class);
         $this->app->bind(RouteDistanceProvider::class, GoogleRoutesDistanceProvider::class);
+        $this->app->singleton(ActionRegistry::class, fn () => new ActionRegistry());
     }
 
     /**

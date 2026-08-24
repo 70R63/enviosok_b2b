@@ -20,6 +20,7 @@ use App\Http\Controllers\Tenant\AiAgentController;
 use App\Http\Controllers\Tenant\AiConversationController;
 use App\Http\Controllers\Tenant\AiLeadController;
 use App\Http\Controllers\Tenant\AiHumanHandoffController;
+use App\Http\Controllers\Tenant\AiActionController;
 use App\Http\Controllers\Tenant\AiAgentLaunchpadController;
 use App\Http\Controllers\Tenant\AiKnowledgeController;
 use App\Http\Controllers\Tenant\AiAgentKnowledgeController;
@@ -289,6 +290,8 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
                 Route::get('/ai-conversations/{conversation}', [AiConversationController::class, 'show'])->name('ai-conversations.show');
                 Route::post('/ai-conversations/{conversation}/messages', [AiConversationController::class, 'send'])->middleware('throttle:10,1')->name('ai-conversations.messages.store');
                 Route::post('/ai-conversations/{conversation}/close', [AiConversationController::class, 'close'])->middleware('throttle:10,1')->name('ai-conversations.close');
+                Route::get('/ai-actions/{actionRun}', [AiActionController::class, 'show'])->name('ai-actions.show');
+                Route::post('/ai-actions/{actionRun}/confirm', [AiActionController::class, 'confirm'])->middleware('throttle:6,1')->name('ai-actions.confirm');
                 Route::get('/ai-agents/launchpad', [AiAgentLaunchpadController::class, 'create'])->name('ai-agents.launchpad.create');
                 Route::post('/ai-agents/launchpad', [AiAgentLaunchpadController::class, 'store'])->middleware('throttle:10,1')->name('ai-agents.launchpad.store');
                 Route::get('/ai-agents/launchpad/{launchpadSession}', [AiAgentLaunchpadController::class, 'show'])->name('ai-agents.launchpad.show');

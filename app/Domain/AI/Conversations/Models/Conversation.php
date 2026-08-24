@@ -11,6 +11,7 @@ use App\Domain\AI\Conversations\Enums\ConversationStatus;
 use App\Domain\AI\Handoff\Models\HumanHandoff;
 use App\Domain\AI\Leads\Models\Lead;
 use App\Domain\AI\Leads\Models\OutcomeEvent;
+use App\Domain\AI\Actions\Models\ActionRun;
 use App\Domain\AI\Tenancy\AiTenantModel;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -85,6 +86,11 @@ final class Conversation extends AiTenantModel
         return $this->hasMany(HumanHandoff::class);
     }
 
+    public function actionRuns(): HasMany
+    {
+        return $this->hasMany(ActionRun::class);
+    }
+
     public function activeHandoff(): BelongsTo
     {
         return $this->belongsTo(HumanHandoff::class, 'active_handoff_id');
@@ -142,6 +148,15 @@ final class Conversation extends AiTenantModel
         } $sequence = $this->next_sequence;
         $this->persistNamedLifecycle(['next_sequence'], fn () => $this->next_sequence = $sequence + 1);
 
+        return $sequence;
+    }
+
+    public function reserveActionCompletion(AuthorizedAiLifecycleActor $a): int
+    {
+        $this->assertLifecycleActor($a);
+        if ($this->status !== ConversationStatus::Open || $this->turn_in_progress) throw new \DomainException('Conversation is not available for Action completion.');
+        $sequence=$this->next_sequence;
+        $this->persistNamedLifecycle(['turn_in_progress','next_sequence'],function()use($sequence){$this->turn_in_progress=true;$this->next_sequence=$sequence+1;});
         return $sequence;
     }
 

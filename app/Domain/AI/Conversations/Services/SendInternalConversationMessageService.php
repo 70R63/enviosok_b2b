@@ -21,10 +21,12 @@ use App\Domain\AI\Runtime\Services\GenerateAgentDraftResponseService;
 use App\Domain\AI\Tenancy\AiTenantBoundary;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use App\Domain\AI\Actions\Enums\ActionRunStatus;
+use App\Domain\AI\Actions\Services\{ActionExecutor,GeneratePostActionResponseService};
 
 final class SendInternalConversationMessageService
 {
-    public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private GenerateAgentDraftResponseService $runtime, private RecordLeadOutcomeCandidatesService $outcomes, private RequestHumanHandoffService $handoffs) {}
+    public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private GenerateAgentDraftResponseService $runtime, private RecordLeadOutcomeCandidatesService $outcomes, private RequestHumanHandoffService $handoffs, private ActionExecutor $actions, private GeneratePostActionResponseService $postAction) {}
 
     public function send(User $actor, Conversation $conversation, SendConversationMessageData $data): ConversationTurnResult
     {
@@ -61,6 +63,21 @@ final class SendInternalConversationMessageService
         });
         try {
             $result = $this->runtime->generate($actor, $agent, $data->message, $version, $history);
+            if ($result->actionRequest) {
+                $run = RuntimeRun::query()->findOrFail((int) $result->runtimeRunId);
+                $user = DB::transaction(function () use ($authorized, $conversation, $user, $run) {
+                    Conversation::query()->lockForUpdate()->findOrFail($conversation->id);
+                    $message = ConversationMessage::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
+                    $message->linkSourceRuntimeRun($this->auth->revalidate($authorized), $run->id);
+
+                    return $message->fresh();
+                });
+                $action = $this->actions->reserve($conversation, $user, $run, $result->actionRequest);
+                if ($action->status === ActionRunStatus::Requested) {
+                    $action = $this->actions->execute($action);
+                    $result = $this->postAction->generate($actor, $agent, $version, $action);
+                }
+            }
             [$leadCandidate, $resolvedCandidate] = [$result->leadCandidate, $result->resolvedCandidate];
 
             return DB::transaction(function () use ($authorized, $conversation, $user, $assistant, $result, $leadCandidate, $resolvedCandidate) {
@@ -76,6 +93,7 @@ final class SendInternalConversationMessageService
                     $citation->rank = $i + 1;
                     $citation->save();
                 }$c->finishTurn($fresh, $result->needsHandoff);
+                $m = $m->fresh();
                 $run = RuntimeRun::query()->findOrFail((int) $result->runtimeRunId);
                 $this->outcomes->record($c, $m, $run, $leadCandidate, $resolvedCandidate);
                 if ($result->needsHandoff) {
