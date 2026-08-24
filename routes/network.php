@@ -297,6 +297,13 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
                 Route::get('/ai-agents/launchpad/{launchpadSession}', [AiAgentLaunchpadController::class, 'show'])->name('ai-agents.launchpad.show');
                 Route::post('/ai-agents/launchpad/{launchpadSession}/convert', [AiAgentLaunchpadController::class, 'convert'])->middleware('throttle:6,1')->name('ai-agents.launchpad.convert');
                 Route::get('/ai-agents/{agent}', [AiAgentController::class, 'show'])->name('ai-agents.show');
+                Route::get('/ai-agents/{agent}/simulator', [\App\Http\Controllers\Tenant\AiSimulatorController::class, 'show'])->name('ai-agents.simulator.show');
+                Route::post('/ai-agents/{agent}/simulator/scenarios', [\App\Http\Controllers\Tenant\AiSimulatorController::class, 'store'])->middleware('throttle:10,1')->name('ai-agents.simulator.scenarios.store');
+                Route::put('/ai-agents/{agent}/simulator/scenarios/{scenario}', [\App\Http\Controllers\Tenant\AiSimulatorController::class, 'update'])->middleware('throttle:10,1')->name('ai-agents.simulator.scenarios.update');
+                Route::post('/ai-agents/{agent}/simulator/run', [\App\Http\Controllers\Tenant\AiSimulatorController::class, 'run'])->middleware('throttle:6,1')->name('ai-agents.simulator.run');
+                Route::post('/ai-agents/{agent}/simulator/scenarios/{scenario}/run', [\App\Http\Controllers\Tenant\AiSimulatorController::class, 'runOne'])->middleware('throttle:6,1')->name('ai-agents.simulator.scenarios.run');
+                Route::post('/ai-agents/{agent}/simulator/review', [\App\Http\Controllers\Tenant\AiSimulatorController::class, 'review'])->middleware('throttle:6,1')->name('ai-agents.simulator.review');
+                Route::post('/ai-agents/{agent}/simulator/publish', [\App\Http\Controllers\Tenant\AiSimulatorController::class, 'publish'])->middleware('throttle:6,1')->name('ai-agents.simulator.publish');
                 Route::post('/ai-agents/{agent}/contract/actions', [AiAgentController::class, 'updateActions'])->middleware('throttle:10,1')->name('ai-agents.contract.actions.update');
                 Route::get('/ai-knowledge', [AiKnowledgeController::class, 'index'])->name('ai-knowledge.index');
                 Route::get('/ai-knowledge/create', [AiKnowledgeController::class, 'create'])->name('ai-knowledge.create');

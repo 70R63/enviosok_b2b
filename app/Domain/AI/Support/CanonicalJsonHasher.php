@@ -8,6 +8,16 @@ final class CanonicalJsonHasher
 {
     public function hash(array $value): string
     {
+        return hash('sha256', $this->json($value));
+    }
+
+    public function bytes(array $value): int
+    {
+        return strlen($this->json($value));
+    }
+
+    private function json(array $value): string
+    {
         StructuredDataGuard::validate($value);
 
         try {
@@ -16,7 +26,7 @@ final class CanonicalJsonHasher
             throw new \InvalidArgumentException('Canonical AI data must be JSON serializable.', 0, $exception);
         }
 
-        return hash('sha256', $json);
+        return $json;
     }
 
     private function canonicalize(array $value): array

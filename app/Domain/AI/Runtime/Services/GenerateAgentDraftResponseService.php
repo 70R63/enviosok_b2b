@@ -14,6 +14,7 @@ use App\Domain\AI\Runtime\Data\AgentRuntimeResponseData;
 use App\Domain\AI\Runtime\Data\ModelRequestData;
 use App\Domain\AI\Runtime\Data\RuntimeQuestionData;
 use App\Domain\AI\Runtime\Enums\RuntimeRunStatus;
+use App\Domain\AI\Runtime\Enums\AiExecutionMode;
 use App\Domain\AI\Runtime\Exceptions\InvalidModelResponseException;
 use App\Domain\AI\Runtime\Exceptions\ModelProviderAuthenticationException;
 use App\Domain\AI\Runtime\Exceptions\ModelProviderException;
@@ -27,6 +28,7 @@ use App\Domain\AI\Runtime\Support\RuntimeOutputSchema;
 use App\Domain\AI\Tenancy\AiTenantBoundary;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Domain\AI\Actions\ActionRegistry;
 use App\Domain\AI\Runtime\Support\ActionRuntimeOutputSchema;
 use App\Domain\Network\Tenancy\Models\Tenant;
@@ -35,13 +37,15 @@ final class GenerateAgentDraftResponseService
 {
     public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private KnowledgeRetriever $retriever, private ProviderRegistry $providers, private AgentRuntimePolicyCompiler $policy, private ActionRegistry $actions) {}
 
-    public function generate(User $actor, Agent $agent, RuntimeQuestionData $q, ?AgentVersion $pinnedVersion = null, array $history = []): AgentRuntimeResponseData
+    public function generate(User $actor, Agent $agent, RuntimeQuestionData $q, ?AgentVersion $pinnedVersion = null, array $history = [], AiExecutionMode $mode = AiExecutionMode::Live): AgentRuntimeResponseData
     {
         $authorized = $this->auth->authorize($actor);
         $this->tenants->assertResourceBelongsToCurrentTenant($agent);
-        [$agent,$version] = DB::transaction(function () use ($agent, $pinnedVersion) {
+        [$agent,$version] = DB::transaction(function () use ($agent, $pinnedVersion, $mode) {
             $a = Agent::query()->lockForUpdate()->with('contract')->findOrFail($agent->id);
-            $query = AgentVersion::query()->where('agent_id', $a->id)->whereIn('status', [AgentVersionStatus::Draft->value, AgentVersionStatus::Testing->value]);
+            $statuses = [AgentVersionStatus::Draft->value, AgentVersionStatus::Testing->value];
+            if ($mode === AiExecutionMode::Simulation) $statuses[] = AgentVersionStatus::Approved->value;
+            $query = AgentVersion::query()->where('agent_id', $a->id)->whereIn('status', $statuses);
             $v = $pinnedVersion ? $query->whereKey($pinnedVersion->id)->lockForUpdate()->firstOrFail() : $query->orderByDesc('version_number')->lockForUpdate()->firstOrFail();
             if (! $a->contract || ! $v->agent_contract_version_id) {
                 throw new \DomainException('A complete draft aggregate is required.');
@@ -53,7 +57,7 @@ final class GenerateAgentDraftResponseService
 return [$a, $v];
         });
         $matches = $this->limit($this->retriever->retrieve($version, KnowledgeSearchQuery::from($q->value, 6)));
-        $run = $this->start($authorized, $agent, $version);
+        $run = $this->start($authorized, $agent, $version, $mode);
         if ($matches === []) {
             DB::transaction(fn () => $run->fresh()->skip($this->auth->authorize($actor)));
 
@@ -115,13 +119,16 @@ return [$a, $v];
 return $out;
     }
 
-    private function start($actor, Agent $a, AgentVersion $v): RuntimeRun
+    private function start($actor, Agent $a, AgentVersion $v, AiExecutionMode $mode): RuntimeRun
     {
-        return DB::transaction(function () use ($actor, $a, $v) {
+        return DB::transaction(function () use ($actor, $a, $v, $mode) {
             $r = new RuntimeRun;
             $r->agent_id = $a->id;
             $r->agent_version_id = $v->id;
             $r->purpose = 'agent_draft_simulation';
+            if (Schema::hasColumn('ai_runtime_runs', 'execution_mode')) {
+                $r->execution_mode = $mode->value;
+            }
             $r->status = RuntimeRunStatus::Started;
             $r->provider_code = (string) config('ai.default_provider');
             $r->model_code = (string) config('ai.providers.openai.model');

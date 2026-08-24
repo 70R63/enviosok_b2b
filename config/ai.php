@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'simulator' => [
+        'max_scenarios_per_agent' => 50,
+        'max_scenarios_per_run' => 50,
+        'max_turns_per_scenario' => 10,
+        'max_user_message_bytes' => 8000,
+        'max_fixture_bytes' => 32768,
+        'max_transcript_bytes' => 65536,
+    ],
     'enabled' => env('AI_ENABLED', false),
     'default_provider' => env('AI_DEFAULT_PROVIDER'),
     'providers' => [

@@ -1,6 +1,6 @@
 <?php
 namespace App\Domain\Network\Billing;
-use App\Domain\Network\Billing\Models\{Entitlement,Subscription};use App\Domain\Network\Catalog\Models\Plan;use App\Domain\Network\Tenancy\Models\Tenant;use Illuminate\Support\Collection;
+use App\Domain\Network\Billing\Models\{Entitlement,Subscription};use App\Domain\Network\Catalog\Models\Plan;use App\Domain\Network\Tenancy\Models\Tenant;use Illuminate\Support\Collection;use Illuminate\Support\Facades\{DB,Schema};
 final class EntitlementService
 {
  public function snapshotFromPlan(Subscription$s,Plan$p):void{$modules=$p->modules()->wherePivot('is_included',true)->get();foreach($modules as$m)Entitlement::create(['subscription_id'=>$s->id,'tenant_id'=>$s->tenant_id,'module_id'=>$m->id,'code'=>$m->code,'is_enabled'=>true,'limit_value'=>$m->pivot->limit_value,'source'=>'plan']);}
@@ -10,4 +10,12 @@ final class EntitlementService
  public function limit(Tenant$t,string$code):?int{$s=app(SubscriptionService::class)->currentForTenant($t);if($s)return$s->entitlements()->where('code',strtoupper($code))->where('is_enabled',true)->value('limit_value');$module=$t->currentPlan?->modules()->where('code',strtoupper($code))->wherePivot('is_included',true)->first();return$module?->pivot?->limit_value;}
  public function enabledModules(Tenant$t):Collection{$s=app(SubscriptionService::class)->currentForTenant($t);if($s)return$s->entitlements()->with('module')->where('is_enabled',true)->get()->pluck('module')->filter()->values();return$t->currentPlan?->modules()->wherePivot('is_included',true)->orderBy('sort_order')->get()??collect();}
  public function usesFallback(Tenant$t):bool{return app(SubscriptionService::class)->currentForTenant($t)===null&&$t->current_plan_id!==null;}
+ public function lockCurrentAuthority(Tenant$t):void
+ {
+  if(DB::transactionLevel()<1)throw new \LogicException('Entitlement authority locking requires a transaction.');
+  Tenant::query()->whereKey($t->id)->lockForUpdate()->firstOrFail();
+  $subscriptions=Subscription::query()->where('tenant_id',$t->id)->orderBy('id')->lockForUpdate()->get();
+  if($subscriptions->isNotEmpty())Entitlement::query()->whereIn('subscription_id',$subscriptions->pluck('id'))->orderBy('id')->lockForUpdate()->get();
+  if($subscriptions->isEmpty()&&$t->current_plan_id&&Schema::hasTable('network_plan_modules')){Plan::query()->whereKey($t->current_plan_id)->lockForUpdate()->first();DB::table('network_plan_modules')->where('plan_id',$t->current_plan_id)->orderBy('id')->lockForUpdate()->get();}
+ }
 }
