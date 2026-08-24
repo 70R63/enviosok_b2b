@@ -3,7 +3,7 @@ namespace Tests\Feature;
 use App\Domain\AI\Agents\Data\{AgentConfigurationData,AgentContractDraftData,CreateAgentDraftData};
 use App\Domain\AI\Agents\Enums\{AgentContractStatus,AgentContractVersionStatus,AgentStatus,AgentType,AgentVersionStatus};
 use App\Domain\AI\Agents\Models\{Agent,AgentContract,AgentContractVersion,AgentVersion};
-use App\Domain\AI\Agents\Services\CreateAgentDraftService;
+use App\Domain\AI\Agents\Services\{CreateAgentDraftService,UpdateAgentContractActionsService};
 use App\Domain\AI\Support\Exceptions\{AiDisabledException,AiEntitlementException,AiTenantContextException,AiTenantMismatchException};
 use App\Domain\AI\Support\Exceptions\AiImmutableAttributeException;
 use App\Domain\Network\Billing\Models\{Entitlement,Subscription};
@@ -33,6 +33,18 @@ final class AiAgentDomainTest extends TestCase
         $this->assertSame(AgentVersionStatus::Draft,$created->agentVersion->status);$this->assertSame(1,$created->agentVersion->version_number);$this->assertSame($created->contractVersion->id,$created->agentVersion->agent_contract_version_id);
         $this->assertTrue($created->agent->contract->is($created->contract));$this->assertTrue($created->agent->versions->first()->is($created->agentVersion));$this->assertTrue($created->agentVersion->contractVersion->is($created->contractVersion));$this->assertTrue($created->contractVersion->agent->is($created->agent));
         $this->assertIsArray($created->agentVersion->configuration);$this->assertIsArray($created->contractVersion->objectives);$this->assertSame([$actor->id,$actor->id,$actor->id,$actor->id],[$created->agent->created_by_user_id,$created->contract->created_by_user_id,$created->contractVersion->created_by_user_id,$created->agentVersion->created_by_user_id]);
+    }
+
+    public function test_draft_allowed_actions_are_trusted_entitled_and_tamper_proof():void
+    {
+        [$tenant,$actor]=$this->authorizedTenant('actions-ui');$subscription=Subscription::where('tenant_id',$tenant->id)->firstOrFail();
+        foreach(['SHIPPING','TRACKING']as$code){$module=Module::create(['code'=>$code,'name'=>$code,'type'=>'core','is_active'=>true,'sort_order'=>2]);Entitlement::create(['subscription_id'=>$subscription->id,'tenant_id'=>$tenant->id,'module_id'=>$module->id,'code'=>$code,'is_enabled'=>true,'source'=>'plan']);}
+        $created=$this->service()->create($actor,$this->draft('actions-ui-agent'));$service=app(UpdateAgentContractActionsService::class);
+        $updated=$service->update($actor,$created->agent,['zigo.track_shipment','zigo.quote_shipment','zigo.create_shipment_guide']);
+        $this->assertSame(['zigo.create_shipment_guide','zigo.quote_shipment','zigo.track_shipment'],$updated->allowed_actions);
+        Entitlement::where('tenant_id',$tenant->id)->where('code','TRACKING')->update(['is_enabled'=>false]);
+        try{$service->update($actor,$created->agent,['zigo.track_shipment']);$this->fail('Unavailable Action tampering must fail.');}catch(\DomainException){$this->assertSame(['zigo.create_shipment_guide','zigo.quote_shipment','zigo.track_shipment'],$updated->fresh()->allowed_actions);}
+        try{$service->update($actor,$created->agent,['unknown.action']);$this->fail('Unknown Action tampering must fail.');}catch(\DomainException){$this->addToAssertionCount(1);}
     }
 
     public function test_external_tenant_id_is_rejected_and_active_context_is_used():void

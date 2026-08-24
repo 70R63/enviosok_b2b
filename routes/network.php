@@ -297,6 +297,7 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
                 Route::get('/ai-agents/launchpad/{launchpadSession}', [AiAgentLaunchpadController::class, 'show'])->name('ai-agents.launchpad.show');
                 Route::post('/ai-agents/launchpad/{launchpadSession}/convert', [AiAgentLaunchpadController::class, 'convert'])->middleware('throttle:6,1')->name('ai-agents.launchpad.convert');
                 Route::get('/ai-agents/{agent}', [AiAgentController::class, 'show'])->name('ai-agents.show');
+                Route::post('/ai-agents/{agent}/contract/actions', [AiAgentController::class, 'updateActions'])->middleware('throttle:10,1')->name('ai-agents.contract.actions.update');
                 Route::get('/ai-knowledge', [AiKnowledgeController::class, 'index'])->name('ai-knowledge.index');
                 Route::get('/ai-knowledge/create', [AiKnowledgeController::class, 'create'])->name('ai-knowledge.create');
                 Route::post('/ai-knowledge', [AiKnowledgeController::class, 'store'])->middleware('throttle:10,1')->name('ai-knowledge.store');

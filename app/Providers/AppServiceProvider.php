@@ -25,7 +25,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(PaymentProvider::class, MercadoPagoPaymentProvider::class);
         $this->app->bind(PlatformPaymentProvider::class, MercadoPagoPlatformPaymentProvider::class);
         $this->app->bind(RouteDistanceProvider::class, GoogleRoutesDistanceProvider::class);
-        $this->app->singleton(ActionRegistry::class, fn () => new ActionRegistry());
+        $this->app->singleton(ActionRegistry::class, fn ($app) => new ActionRegistry($app->make(\App\Domain\Network\Billing\EntitlementService::class)));
     }
 
     /**
@@ -38,6 +38,7 @@ class AppServiceProvider extends ServiceProvider
         app(\App\Services\Security\StageSafetyGuard::class)->enforce();
         \App\Domain\Shipping\Local\Models\LocalTrackingEvent::created(function ($event): void { try { app(\App\Domain\ApiHub\ApiWebhookPublisher::class)->tracking($event); } catch (\Throwable $exception) { \Illuminate\Support\Facades\Log::warning('api_hub.webhook_queue_failed',['tracking_event_id'=>$event->id]); } });
         Schema::defaultStringLength(191);
+        app(\App\Domain\Shipping\AI\Actions\ZigoLogisticsActionRegistrar::class)->register();
     }
 }
 //use Illuminate\Support\Facades\Schema;

@@ -18,6 +18,7 @@ final readonly class ActionDefinition
         public ActionEffect $effect,
         public ActionConfirmationPolicy $confirmation,
         public ActionHandler $handler,
+        public array $requiredEntitlements = [],
     ) {
         if (! preg_match('/^[a-z0-9][a-z0-9_.-]{0,63}$/D', $key) || trim($displayName) === '' || mb_strlen($displayName) > 100 || trim($description) === '' || mb_strlen($description) > 500) {
             throw new \InvalidArgumentException('Invalid Action definition.');
@@ -27,5 +28,10 @@ final readonly class ActionDefinition
         }
         ProviderOutputSchemaGuard::validate($inputSchema);
         ProviderOutputSchemaGuard::validate($outputSchema);
+        foreach ($requiredEntitlements as $entitlement) {
+            if (! is_string($entitlement) || ! preg_match('/^[A-Z][A-Z0-9_]{1,63}$/D', $entitlement)) {
+                throw new \InvalidArgumentException('Invalid Action entitlement.');
+            }
+        }
     }
 }

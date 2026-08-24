@@ -4,6 +4,7 @@ namespace App\Domain\Shipping\Local;
 
 use App\Domain\Shipping\Local\Models\LocalShipment;
 use App\Domain\Shipping\Local\Models\LocalTrackingEvent;
+use App\Domain\Network\Tenancy\Models\Tenant;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
@@ -15,6 +16,20 @@ final class LocalTrackingService
         'OUT_FOR_DELIVERY' => ['DELIVERED', 'DELIVERY_FAILED'], 'DELIVERY_FAILED' => ['OUT_FOR_DELIVERY', 'CANCELED'],
         'DELIVERED' => [], 'CANCELED' => [],
     ];
+
+    public function read(Tenant $tenant, string $shipmentReference): array
+    {
+        $shipment = LocalShipment::query()->with('events')->where('tenant_id', $tenant->id)->where('uuid', $shipmentReference)->firstOrFail();
+        $labels = ['CREATED'=>'Creado','READY_FOR_PICKUP'=>'Listo para recolectar','PICKED_UP'=>'Recolectado','IN_TRANSIT'=>'En tránsito','OUT_FOR_DELIVERY'=>'En reparto','DELIVERY_FAILED'=>'No entregado','DELIVERED'=>'Entregado','CANCELED'=>'Cancelado'];
+        return [
+            'shipment_reference' => $shipment->uuid,
+            'tracking_reference' => $shipment->tracking_number,
+            'status_code' => $shipment->status,
+            'status_label' => $labels[$shipment->status] ?? 'Actualización',
+            'delivered' => $shipment->status === 'DELIVERED',
+            'events' => $shipment->events->map(fn (LocalTrackingEvent $event) => ['status_code'=>$event->status,'status_label'=>$labels[$event->status]??'Actualización','occurred_at'=>$event->occurred_at?->toIso8601String()])->values()->all(),
+        ];
+    }
 
     public function transition(LocalShipment $shipment, string $status, ?int $userId = null, ?string $description = null): LocalTrackingEvent
     {

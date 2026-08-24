@@ -107,6 +107,20 @@ final class NetworkLocalShippingTest extends TestCase
         $this->assertGreaterThan(2000, strlen($pdf));
     }
 
+    public function test_tracking_read_is_normalized_and_tenant_owned(): void
+    {
+        [$tenant,$operation] = $this->operation();
+        $shipment = app(LocalShipmentService::class)->create($tenant, $operation, ['sender'=>['name'=>'A'],'recipient'=>['name'=>'B'],'package'=>['type'=>'sobre','weight'=>1],'pricing'=>['final_price'=>99]]);
+        app(LocalTrackingService::class)->transition($shipment, 'READY_FOR_PICKUP');
+        $result = app(LocalTrackingService::class)->read($tenant, $shipment->uuid);
+        $this->assertSame($shipment->uuid, $result['shipment_reference']);
+        $this->assertSame('READY_FOR_PICKUP', $result['status_code']);
+        $this->assertSame('Listo para recolectar', $result['status_label']);
+        $this->assertCount(2, $result['events']);
+        $other = Tenant::create(['name'=>'Otro','slug'=>'otro-read','status'=>'active']);
+        try { app(LocalTrackingService::class)->read($other, $shipment->uuid); $this->fail('Cross-tenant tracking must be hidden.'); } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) { $this->addToAssertionCount(1); }
+    }
+
     public function test_professional_guide_supports_nested_addresses_packages_and_safe_logos(): void
     {
         Storage::fake('public');

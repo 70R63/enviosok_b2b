@@ -53,6 +53,9 @@ use App\Domain\Network\Tenancy\Models\Tenant;
 use App\Domain\Network\Tenancy\Models\TenantDomain;
 use App\Domain\Network\Tenancy\Models\TenantMembership;
 use App\Domain\Network\Tenancy\TenantContext;
+use App\Domain\Network\Channels\B2C\Models\TenantOperation;
+use App\Domain\Shipping\Local\Models\{LocalShipment,LocalShippingPackageRule,LocalShippingPricingRule,LocalShippingQuoteSnapshot,LocalShippingService,LocalShippingZone,LocalShippingZonePostalCode};
+use App\Services\ZigoPostalCodeService;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Schema\Blueprint;
@@ -69,6 +72,8 @@ final class AiConversationCoreTest extends TestCase
         parent::setUp();
         config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:', 'ai.enabled' => true, 'ai.default_provider' => 'openai', 'ai.providers.openai.api_key' => 'test-secret', 'ai.providers.openai.model' => 'gpt-5.6-luna', 'app.key' => 'base64:'.base64_encode(str_repeat('c', 32))]);
         $this->schema();
+        (require base_path('database/migrations/2026_08_09_100000_create_local_shipping_foundation_tables.php'))->up();
+        (require base_path('database/migrations/2026_08_20_100000_extend_local_shipping_for_tenant_logistics.php'))->up();
         (require base_path('database/migrations/2026_08_27_110000_add_provider_observability_to_ai_runtime_runs.php'))->up();
         $this->migration()->up();
         $this->handoffMigration()->up();
@@ -490,6 +495,60 @@ final class AiConversationCoreTest extends TestCase
         $conversation=app(StartInternalTestConversationService::class)->start($owner,$agent);app(SendInternalConversationMessageService::class)->send($owner,$conversation,SendConversationMessageData::from('Actualización'));$action=ActionRun::firstOrFail();$this->assertSame('awaiting_confirmation',$action->status->value);$this->assertSame(0,$handler->calls);$base='http://action-write.test/admin';$this->actingAs($owner)->get($base.'/ai-actions/'.$action->uuid)->assertOk()->assertSee('Confirmar acción');[$other,$otherOwner]=$this->httpTenant('action-other','owner');$this->actingAs($otherOwner)->get('http://action-other.test/admin/ai-actions/'.$action->uuid)->assertNotFound();app(TenantContext::class)->set($tenant);$this->actingAs($owner)->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertRedirect();$this->assertSame(1,$handler->calls);$this->assertSame(0,$handler->transactionLevel);$this->assertSame('succeeded',$action->fresh()->status->value);$this->assertSame(2,ConversationMessage::where('role','assistant')->where('status','completed')->count());$this->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertSessionHasErrors('action');$this->assertSame(1,$handler->calls);$this->assertSame(2,count(Http::recorded()));
     }
 
+    public function test_zigo_quote_action_uses_real_service_and_pass_two(): void
+    {
+        [$tenant,$owner]=$this->authorized('zigo-quote-e2e');$this->logisticsEntitlement($tenant,'SHIPPING');[$agent,$version]=$this->agent($owner);$version->contractVersion->allowed_actions=['zigo.quote_shipment'];$version->contractVersion->save();$this->ready($owner,$agent,'Quiero enviar una caja de Monterrey a Guadalajara de 3 kg.');$this->logisticsCatalog($tenant);
+        $this->mock(ZigoPostalCodeService::class,function($mock){$mock->shouldReceive('lookup')->with('64000')->andReturn(['success'=>true,'colonias'=>[['nombre'=>'Centro']],'municipio'=>'Monterrey','estado'=>'Nuevo León']);$mock->shouldReceive('lookup')->with('44100')->andReturn(['success'=>true,'colonias'=>[['nombre'=>'Centro']],'municipio'=>'Guadalajara','estado'=>'Jalisco']);});
+        $quoteArguments=['origin_postal_code'=>'64000','destination_postal_code'=>'44100','origin_settlement'=>'Centro','destination_settlement'=>'Centro','package'=>['type'=>'caja','weight'=>3.0,'length'=>20.0,'width'=>20.0,'height'=>20.0]];
+        Http::fake(['api.openai.com/*'=>Http::sequence()->push($this->response(['answer'=>'El precio inventado es 1 peso.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false,'action_request'=>['action_key'=>'zigo.quote_shipment','arguments'=>$quoteArguments]]),200)->push($this->response(['answer'=>'Encontré la opción terrestre por 179 MXN.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false]),200)]);
+        $conversation=app(StartInternalTestConversationService::class)->start($owner,$agent);$turn=app(SendInternalConversationMessageService::class)->send($owner,$conversation,SendConversationMessageData::from('Quiero enviar una caja de Monterrey a Guadalajara de 3 kg.'));
+        $action=ActionRun::firstOrFail();$this->assertSame('succeeded',$action->status->value,(string)$action->safe_error_code);$this->assertEquals(179.0,$action->output['options'][0]['amount']);$this->assertArrayNotHasKey('provider',$action->output['options'][0]);$this->assertArrayNotHasKey('provider_cost',$action->output['options'][0]);$this->assertSame('Encontré la opción terrestre por 179 MXN.',$turn->assistantMessage->content);$this->assertSame(2,RuntimeRun::count());$this->assertCount(2,Http::recorded());
+    }
+
+    public function test_zigo_guide_waits_confirms_once_and_rehydrates_snapshot(): void
+    {
+        [$tenant,$owner]=$this->httpTenant('zigo-guide-e2e','owner');$this->logisticsEntitlement($tenant,'SHIPPING');[$agent,$version]=$this->agent($owner);$version->contractVersion->allowed_actions=['zigo.create_shipment_guide'];$version->contractVersion->save();$this->ready($owner,$agent,'Quiero la opción terrestre y crear una guía ZIGO.');[$operation,$snapshot]=$this->authoritativeQuote($tenant);
+        $arguments=['quote_reference'=>$operation->uuid,'option_reference'=>$snapshot->uuid,'sender'=>$this->guidePerson('Origen','8111111111','64000','Calle', '1'),'recipient'=>$this->guidePerson('<script>alert(\'IA08C-XSS\')</script>','3311111111','44100','Calle', '2'),'customer_reference'=>'AI-E2E'];
+        Http::fake(['api.openai.com/*'=>Http::sequence()->push($this->response(['answer'=>'Requiere confirmación.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false,'action_request'=>['action_key'=>'zigo.create_shipment_guide','arguments'=>$arguments]]),200)->push($this->response(['answer'=>'Tu guía fue creada correctamente.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false]),200)]);
+        $conversation=app(StartInternalTestConversationService::class)->start($owner,$agent);app(SendInternalConversationMessageService::class)->send($owner,$conversation,SendConversationMessageData::from('Quiero la opción terrestre.'));$action=ActionRun::firstOrFail();$this->assertSame('awaiting_confirmation',$action->status->value);$this->assertSame(0,LocalShipment::count());
+        $base='http://zigo-guide-e2e.test/admin';$this->actingAs($owner)->get($base.'/ai-actions/'.$action->uuid)->assertOk()->assertSee('179.00 MXN')->assertSee('&lt;***',false)->assertDontSee('IA08C-XSS');$this->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertRedirect();$this->assertSame('succeeded',$action->fresh()->status->value);$this->assertSame(1,LocalShipment::count());$shipment=LocalShipment::firstOrFail();$finalUuid=$operation->fresh()->metadata['selected_quote_snapshot_uuid'];$this->assertNotSame($snapshot->uuid,$finalUuid);$this->assertSame($finalUuid,$shipment->pricing_snapshot['quote_snapshot_uuid']);$this->assertSame(179.0,(float)$shipment->pricing_snapshot['final_price']);$this->assertSame('TERRESTRE',$shipment->service_code);$this->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertSessionHasErrors('action');$this->assertSame(1,LocalShipment::count());$this->assertSame(2,count(Http::recorded()));
+    }
+
+    public function test_zigo_guide_rejects_option_mismatch_before_side_effect(): void
+    {
+        [$tenant,$owner]=$this->authorized('zigo-guide-mismatch');$this->logisticsEntitlement($tenant,'SHIPPING');[$agent,$version]=$this->agent($owner);$version->contractVersion->allowed_actions=['zigo.create_shipment_guide'];$version->contractVersion->save();[$operation,$snapshot]=$this->authoritativeQuote($tenant);[, $other]=$this->authoritativeQuote($tenant);
+        $valid=['quote_reference'=>$operation->uuid,'option_reference'=>$other->uuid,'sender'=>$this->guidePerson('A','8111111111','64000'),'recipient'=>$this->guidePerson('B','3311111111','44100'),'customer_reference'=>'tamper'];$context=$this->actionContext($tenant,$owner,$agent,$version);$handler=app(\App\Domain\Shipping\AI\Actions\CreateShipmentGuideActionHandler::class);try{$handler->execute($context,$valid);$this->fail('Mismatched option must fail.');}catch(\DomainException){$this->assertSame(0,LocalShipment::count());}$otherTenant=Tenant::create(['name'=>'Other','slug'=>'guide-other','status'=>'active']);$valid['option_reference']=$snapshot->uuid;try{$handler->execute($this->actionContext($otherTenant,$owner,$agent,$version),$valid);$this->fail('Cross-tenant quote must be hidden.');}catch(\Illuminate\Database\Eloquent\ModelNotFoundException){$this->assertSame(0,LocalShipment::count());}
+    }
+
+    public function test_zigo_guide_rejects_changed_route_even_inside_same_tenant(): void
+    {
+        [$tenant,$owner]=$this->authorized('zigo-guide-route-binding');$this->logisticsEntitlement($tenant,'SHIPPING');[$agent,$version]=$this->agent($owner);[$operation,$snapshot]=$this->authoritativeQuote($tenant);$handler=app(\App\Domain\Shipping\AI\Actions\CreateShipmentGuideActionHandler::class);$base=['quote_reference'=>$operation->uuid,'option_reference'=>$snapshot->uuid,'sender'=>$this->guidePerson('A','8111111111','64000'),'recipient'=>$this->guidePerson('B','3311111111','44100'),'customer_reference'=>'route-binding'];
+        foreach([['64001','44100'],['64000','44101'],['64001','44101']] as [$origin,$destination]) {
+            $arguments=$base;$arguments['sender']['postal_code']=$origin;$arguments['recipient']['postal_code']=$destination;
+            try{$handler->execute($this->actionContext($tenant,$owner,$agent,$version),$arguments);$this->fail('A changed route must be rejected.');}catch(\DomainException){$this->assertSame(0,LocalShipment::count());$this->assertSame('quoted',$operation->fresh()->status);}
+        }
+    }
+
+    public function test_zigo_guide_finalizes_same_route_and_rejects_changed_commercial_total(): void
+    {
+        [$tenant,$owner]=$this->authorized('zigo-guide-final-price');$this->logisticsEntitlement($tenant,'SHIPPING');[$agent,$version]=$this->agent($owner);[$operation,$snapshot]=$this->authoritativeQuote($tenant);LocalShippingPricingRule::where('service_id',$snapshot->service_id)->update(['amount'=>199]);$arguments=['quote_reference'=>$operation->uuid,'option_reference'=>$snapshot->uuid,'sender'=>$this->guidePerson('A','8111111111','64000'),'recipient'=>$this->guidePerson('B','3311111111','44100'),'customer_reference'=>'changed-price'];
+        try{app(\App\Domain\Shipping\AI\Actions\CreateShipmentGuideActionHandler::class)->execute($this->actionContext($tenant,$owner,$agent,$version),$arguments);$this->fail('A changed final price must require a new confirmation.');}catch(\DomainException){$this->assertSame(0,LocalShipment::count());$this->assertSame('quoted',$operation->fresh()->status);$this->assertSame(2,LocalShippingQuoteSnapshot::count());$final=LocalShippingQuoteSnapshot::whereKeyNot($snapshot->id)->firstOrFail();$this->assertSame(199.0,(float)$final->amount);$this->assertSame($snapshot->service_id,$final->service_id);$this->assertFalse((bool)data_get($final->matched_tariff,'_quote_context.preliminary',true));}
+    }
+
+    public function test_zigo_guide_ambiguous_failure_is_not_retried_and_requests_handoff(): void
+    {
+        [$tenant,$owner]=$this->httpTenant('zigo-guide-ambiguous','owner');$this->logisticsEntitlement($tenant,'SHIPPING');[$agent,$version]=$this->agent($owner);$version->contractVersion->allowed_actions=['zigo.create_shipment_guide'];$version->contractVersion->save();$this->ready($owner,$agent,'Crear guía con revisión humana si el resultado es ambiguo.');[$operation,$snapshot]=$this->authoritativeQuote($tenant);$arguments=['quote_reference'=>$operation->uuid,'option_reference'=>$snapshot->uuid,'sender'=>$this->guidePerson('A','8111111111','64000'),'recipient'=>$this->guidePerson('B','3311111111','44100'),'customer_reference'=>'ambiguous'];$calls=0;LocalShipment::creating(function()use(&$calls){$calls++;throw new \RuntimeException('Connection lost after create request.');});
+        Http::fake(['api.openai.com/*'=>Http::sequence()->push($this->response(['answer'=>'Requiere confirmación.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false,'action_request'=>['action_key'=>'zigo.create_shipment_guide','arguments'=>$arguments]]),200)->push($this->response(['answer'=>'No pude confirmar el resultado; una persona debe revisarlo.','citation_ids'=>['K1'],'confidence'=>'low','needs_handoff'=>true,'handoff_reason'=>'policy_restriction','lead_candidate'=>null,'resolved_candidate'=>false]),200)]);
+        $conversation=app(StartInternalTestConversationService::class)->start($owner,$agent);app(SendInternalConversationMessageService::class)->send($owner,$conversation,SendConversationMessageData::from('Crear guía con revisión humana si el resultado es ambiguo.'));$action=ActionRun::firstOrFail();$base='http://zigo-guide-ambiguous.test/admin';$this->actingAs($owner)->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertRedirect();$this->assertSame('failed',$action->fresh()->status->value);$this->assertSame('action_failed',$action->fresh()->safe_error_code);$this->assertSame(1,$calls);$this->assertSame(0,LocalShipment::count());$this->assertSame(ConversationStatus::HandoffRequested,$conversation->fresh()->status);$this->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertSessionHasErrors('action');$this->assertSame(1,$calls);
+    }
+
+    public function test_zigo_tracking_action_passes_through_runtime_and_can_handoff(): void
+    {
+        [$tenant,$owner]=$this->authorized('zigo-track-e2e');$this->logisticsEntitlement($tenant,'TRACKING');[$agent,$version]=$this->agent($owner);$version->contractVersion->allowed_actions=['zigo.track_shipment'];$version->contractVersion->save();$this->ready($owner,$agent,'Dónde está mi paquete y cuál es su tracking.');[$operation,$snapshot]=$this->authoritativeQuote($tenant);$operation->update(['status'=>'confirmed','provider'=>'ZIGO_LOCAL','service_code'=>'TERRESTRE']);$shipment=app(\App\Domain\Shipping\Local\LocalShipmentService::class)->create($tenant,$operation,['sender'=>['name'=>'A'],'recipient'=>['name'=>'B'],'package'=>['type'=>'caja','weight'=>3],'pricing'=>['final_price'=>179]]);
+        Http::fake(['api.openai.com/*'=>Http::sequence()->push($this->response(['answer'=>'Consultaré el tracking.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false,'action_request'=>['action_key'=>'zigo.track_shipment','arguments'=>['shipment_reference'=>$shipment->uuid]]]),200)->push($this->response(['answer'=>'El paquete fue creado y espera recolección.','citation_ids'=>['K1'],'confidence'=>'low','needs_handoff'=>true,'handoff_reason'=>'human_requested','lead_candidate'=>null,'resolved_candidate'=>false]),200)]);
+        $conversation=app(StartInternalTestConversationService::class)->start($owner,$agent);$turn=app(SendInternalConversationMessageService::class)->send($owner,$conversation,SendConversationMessageData::from('¿Dónde está mi paquete?'));$action=ActionRun::firstOrFail();$this->assertSame('succeeded',$action->status->value);$this->assertSame('CREATED',$action->output['status_code']);$this->assertSame('El paquete fue creado y espera recolección.',$turn->assistantMessage->content);$this->assertSame(ConversationStatus::HandoffRequested,$conversation->fresh()->status);$this->assertSame('requested',HumanHandoff::firstOrFail()->status->value);$this->assertCount(2,Http::recorded());
+    }
+
     private function response(array $output): array
     {
         return ['id' => 'resp_conv', 'model' => 'gpt-5.6-luna', 'status' => 'completed', 'output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => json_encode($output, JSON_THROW_ON_ERROR)]]]], 'usage' => ['input_tokens' => 10, 'input_tokens_details' => ['cached_tokens' => 0], 'output_tokens' => 5, 'total_tokens' => 15]];
@@ -605,6 +664,31 @@ final class AiConversationCoreTest extends TestCase
         return [$a, $v];
     }
 
+    private function logisticsEntitlement(Tenant $tenant,string $code):void
+    {
+        $module=Module::firstOrCreate(['code'=>$code],['name'=>$code,'type'=>'core','is_active'=>true,'sort_order'=>2]);$subscription=Subscription::where('tenant_id',$tenant->id)->firstOrFail();Entitlement::firstOrCreate(['subscription_id'=>$subscription->id,'code'=>$code],['tenant_id'=>$tenant->id,'module_id'=>$module->id,'is_enabled'=>true,'source'=>'plan']);
+    }
+
+    private function logisticsCatalog(Tenant $tenant):LocalShippingService
+    {
+        $existing=LocalShippingService::where('tenant_id',$tenant->id)->where('code','TERRESTRE')->first();if($existing)return$existing;$zone=LocalShippingZone::create(['tenant_id'=>$tenant->id,'code'=>'Z'.$tenant->id,'name'=>'Cobertura','coverage_mode'=>'POSTAL_POOL','status'=>'active']);foreach(['64000','44100']as$cp)LocalShippingZonePostalCode::create(['tenant_id'=>$tenant->id,'zone_id'=>$zone->id,'postal_code'=>$cp,'active'=>true]);$service=LocalShippingService::create(['tenant_id'=>$tenant->id,'code'=>'TERRESTRE','name'=>'Terrestre','origin_zone_id'=>$zone->id,'destination_zone_id'=>$zone->id,'service_level'=>'ground','base_cost'=>80,'base_price'=>179,'currency'=>'MXN','status'=>'active','published'=>true,'pricing_strategy'=>'FLAT','sort_order'=>1,'sla_text'=>'2 a 4 días']);LocalShippingPackageRule::create(['tenant_id'=>$tenant->id,'service_id'=>$service->id,'package_type'=>'caja','max_weight_kg'=>50,'max_dimension_1_cm'=>100,'max_dimension_2_cm'=>100,'max_dimension_3_cm'=>100,'active'=>true]);LocalShippingPricingRule::create(['tenant_id'=>$tenant->id,'service_id'=>$service->id,'package_type'=>'caja','amount'=>179,'active'=>true]);return$service;
+    }
+
+    private function authoritativeQuote(Tenant$tenant):array
+    {
+        $service=$this->logisticsCatalog($tenant);$snapshot=LocalShippingQuoteSnapshot::create(['tenant_id'=>$tenant->id,'service_id'=>$service->id,'origin'=>['address'=>'Centro, 64000, Monterrey, Nuevo León, México','street'=>null,'postal_code'=>'64000','settlement'=>'Centro','municipality'=>'Monterrey','state'=>'Nuevo León','country'=>'México'],'destination'=>['address'=>'Centro, 44100, Guadalajara, Jalisco, México','street'=>null,'postal_code'=>'44100','settlement'=>'Centro','municipality'=>'Guadalajara','state'=>'Jalisco','country'=>'México'],'package_type'=>'caja','weight_kg'=>3,'dimensions'=>['length'=>20,'width'=>20,'height'=>20],'pricing_strategy'=>'FLAT','matched_tariff'=>['rule'=>'server-side','provider_cost'=>80,'_quote_context'=>['preliminary'=>true,'requires_distance'=>false]],'amount'=>179,'currency'=>'MXN','expires_at'=>now()->addMinutes(30)]);$operation=TenantOperation::create(['tenant_id'=>$tenant->id,'subscription_id'=>Subscription::where('tenant_id',$tenant->id)->value('id'),'channel'=>'internal_test','status'=>'quoted','metadata'=>['quote_snapshot_uuids'=>[$snapshot->uuid]]]);return[$operation,$snapshot];
+    }
+
+    private function guidePerson(string$name,string$phone,string$postalCode,string$street='Calle',string$exterior='1'):array
+    {
+        return ['name'=>$name,'phone'=>$phone,'street'=>$street,'exterior'=>$exterior,'interior'=>'','postal_code'=>$postalCode];
+    }
+
+    private function actionContext(Tenant$tenant,User$owner,Agent$agent,AgentVersion$version):ActionExecutionContext
+    {
+        $action=new ActionRun;$action->setRawAttributes(['tenant_id'=>$tenant->id]);$source=new ConversationMessage;$source->setRawAttributes(['created_by_user_id'=>$owner->id]);return new ActionExecutionContext($action,new Conversation,$source,new RuntimeRun,$agent,$version,$version->contractVersion);
+    }
+
     private function schema(): void
     {
         DB::statement('PRAGMA foreign_keys=ON');
@@ -679,6 +763,7 @@ final class AiConversationCoreTest extends TestCase
             $t->unsignedBigInteger('tenant_id');
             $t->unsignedBigInteger('plan_id');
             $t->string('status');
+            $t->unsignedInteger('operations_limit')->nullable();
             foreach (['started_at', 'current_period_start', 'current_period_end', 'trial_ends_at', 'grace_ends_at', 'canceled_at', 'ended_at'] as $c) {
                 $t->timestamp($c)->nullable();
             }$t->timestamps();
@@ -693,6 +778,8 @@ final class AiConversationCoreTest extends TestCase
             $t->string('source');
             $t->timestamps();
         });
+        Schema::create('network_usage_events',function(Blueprint$t){$t->id();$t->uuid('uuid')->unique();$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('subscription_id')->nullable();$t->string('metric');$t->unsignedInteger('quantity');$t->string('reference_type')->nullable();$t->string('reference_id')->nullable();$t->string('idempotency_key')->nullable();$t->timestamp('occurred_at');$t->json('metadata')->nullable();$t->timestamp('created_at')->nullable();$t->unique(['tenant_id','metric','idempotency_key']);});
+        Schema::create('network_tenant_operations',function(Blueprint$t){$t->id();$t->uuid('uuid')->nullable();$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('subscription_id')->nullable();$t->string('channel');$t->string('status');$t->string('source_type')->nullable();$t->unsignedBigInteger('source_id')->nullable();$t->string('provider')->nullable();$t->string('service_code')->nullable();$t->string('external_reference')->nullable();$t->unsignedBigInteger('created_by_user_id')->nullable();$t->unsignedBigInteger('customer_profile_id')->nullable();$t->json('metadata')->nullable();$t->timestamps();});
         foreach (['2026_08_22_100000_create_ai_agent_domain_tables.php', '2026_08_23_100000_add_ai_agent_lifecycle.php', '2026_08_25_100000_create_ai_knowledge_foundation.php', '2026_08_26_100000_create_ai_knowledge_indexing.php', '2026_08_27_100000_create_ai_runtime_runs.php'] as $m) {
             (require base_path('database/migrations/'.$m))->up();
         }

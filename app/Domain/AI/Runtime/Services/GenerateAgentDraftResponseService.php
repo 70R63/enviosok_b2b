@@ -29,6 +29,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use App\Domain\AI\Actions\ActionRegistry;
 use App\Domain\AI\Runtime\Support\ActionRuntimeOutputSchema;
+use App\Domain\Network\Tenancy\Models\Tenant;
 
 final class GenerateAgentDraftResponseService
 {
@@ -66,7 +67,7 @@ return [$a, $v];
         }$input = ['question' => $q->value, 'knowledge' => array_map(fn ($k) => array_diff_key($k, ['knowledge_chunk_id' => true]), $knowledge)];
         if ($history !== []) {
             $input['history'] = $this->history($history);
-        }$allowedActions=array_values(array_intersect($version->contractVersion->allowed_actions??[],array_keys($this->actions->all())));$definitions=array_map(fn($key)=>$this->actions->find($key),$allowedActions);
+        }$tenant=Tenant::query()->findOrFail($authorized->tenantId);$allowedActions=array_values(array_intersect($version->contractVersion->allowed_actions??[],array_keys($this->actions->availableFor($tenant))));$definitions=array_map(fn($key)=>$this->actions->find($key),$allowedActions);
         $schema=$definitions===[]?RuntimeOutputSchema::schema($ids):ActionRuntimeOutputSchema::schema($ids,$definitions);
         $request = new ModelRequestData($this->policy->compile($agent, $version), $input, $schema, 600, 'none', $this->safety($authorized->tenantId, $authorized->actorUserId), 'agent_draft_simulation');
         try {
