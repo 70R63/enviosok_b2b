@@ -1,0 +1,16 @@
+<?php
+namespace Tests\Feature;
+use App\Domain\AI\Conversations\Enums\ConversationChannel;
+use App\Domain\AI\Runtime\Enums\AiExecutionMode;
+use Illuminate\Support\Facades\Http;
+use Tests\TestCase;
+final class AiWebchatRuntimeTest extends TestCase
+{
+ protected function setUp():void{parent::setUp();Http::preventStrayRequests();}
+ public function test_webchat_is_live_channel_and_execution_mode_vocabulary_remains_closed():void{$this->assertSame('webchat',ConversationChannel::Webchat->value);$this->assertSame(['live','simulation'],array_map(fn($c)=>$c->value,AiExecutionMode::cases()));}
+ public function test_start_pins_only_current_published_version_and_exact_contract():void{$source=file_get_contents(app_path('Domain/AI/Channels/Webchat/Services/StartWebchatSessionService.php'));$this->assertStringContainsString('current_published_version_id',$source);$this->assertStringContainsString('AgentVersionStatus::Published',$source);$this->assertStringContainsString('agent_contract_version_id',$source);$this->assertStringNotContainsString('orderByDesc',$source);}
+ public function test_message_adapter_reuses_conversation_core_and_has_idempotency_and_turn_guard():void{$source=file_get_contents(app_path('Domain/AI/Channels/Webchat/Services/SendWebchatMessageService.php'));$this->assertStringContainsString('SendInternalConversationMessageService',$source);$this->assertStringContainsString('last_client_message_id',$source);$this->assertStringContainsString('turn_in_progress',$source);$this->assertStringContainsString('strlen($message)',$source);}
+ public function test_write_confirmation_is_scoped_to_session_conversation_and_idempotent():void{$source=file_get_contents(app_path('Domain/AI/Channels/Webchat/Services/ConfirmWebchatActionService.php'));$this->assertStringContainsString("where('conversation_id',\$session->conversation_id)",$source);$this->assertStringContainsString('AwaitingConfirmation',$source);$this->assertStringContainsString('Succeeded',$source);$this->assertStringContainsString('ConfirmActionRunService',$source);}
+ public function test_runtime_core_keeps_actions_knowledge_handoff_leads_and_provider_outside_transactions():void{$source=file_get_contents(app_path('Domain/AI/Conversations/Services/SendInternalConversationMessageService.php'));foreach(['GenerateAgentDraftResponseService','ActionExecutor','RequestHumanHandoffService','RecordLeadOutcomeCandidatesService']as$service)$this->assertStringContainsString($service,$source);$runtime=file_get_contents(app_path('Domain/AI/Runtime/Services/GenerateAgentDraftResponseService.php'));$this->assertStringContainsString('$this->retriever->retrieve',$runtime);$this->assertStringContainsString('$this->providers->model()->generate',$runtime);}
+ public function test_no_zigo_or_parallel_runtime_is_hardcoded_in_webchat_product_code():void{$files=new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(app_path('Domain/AI/Channels/Webchat'),\FilesystemIterator::SKIP_DOTS));foreach($files as$file){if($file->getExtension()!=='php')continue;$source=file_get_contents($file->getPathname());foreach(['zigo.','Xperta','Estafeta','WebchatRuntime','WebchatActionExecutor']as$term)$this->assertStringNotContainsString($term,$source);}}
+}

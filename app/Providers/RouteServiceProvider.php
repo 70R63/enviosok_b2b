@@ -53,6 +53,10 @@ class RouteServiceProvider extends ServiceProvider
         RateLimiter::for('api', function (Request $request) {
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
+        foreach (['start'=>'session_creations_per_minute','message'=>'messages_per_minute','confirm'=>'confirmations_per_minute','poll'=>'polls_per_minute'] as $operation=>$setting) {
+            RateLimiter::for('ai-webchat-'.$operation, fn (Request $request) => Limit::perMinute((int) config('ai.webchat.'.$setting))
+                ->by(hash('sha256',(string)$request->route('publicKey').'|'.$request->ip().'|'.($operation==='start'?'':(string)$request->bearerToken()))));
+        }
 
         RateLimiter::for('onboarding-checkout', function (Request $request) {
             return Limit::perMinute(10)

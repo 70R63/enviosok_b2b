@@ -3,6 +3,7 @@
 namespace App\Domain\AI\Actions\Data;
 
 use App\Domain\AI\Actions\Contracts\ActionHandler;
+use App\Domain\AI\Actions\Contracts\ActionConfirmationPresenter;
 use App\Domain\AI\Actions\Enums\ActionConfirmationPolicy;
 use App\Domain\AI\Actions\Enums\ActionEffect;
 use App\Domain\AI\Runtime\Support\ProviderOutputSchemaGuard;
@@ -19,6 +20,7 @@ final readonly class ActionDefinition
         public ActionConfirmationPolicy $confirmation,
         public ActionHandler $handler,
         public array $requiredEntitlements = [],
+        public ?ActionConfirmationPresenter $confirmationPresenter = null,
     ) {
         if (! preg_match('/^[a-z0-9][a-z0-9_.-]{0,63}$/D', $key) || trim($displayName) === '' || mb_strlen($displayName) > 100 || trim($description) === '' || mb_strlen($description) > 500) {
             throw new \InvalidArgumentException('Invalid Action definition.');

@@ -1,0 +1,12 @@
+<?php
+namespace App\Domain\AI\Channels\Webchat\Services;
+use App\Domain\AI\Agents\Enums\AgentVersionStatus;
+use App\Domain\AI\Agents\Models\{Agent,AgentVersion};
+use App\Domain\AI\Channels\Webchat\Models\{WebchatChannel,WebchatSession};
+use App\Domain\AI\Conversations\Enums\{ConversationChannel,ConversationStatus};
+use App\Domain\AI\Conversations\Models\Conversation;
+use Illuminate\Support\Facades\DB;
+final class StartWebchatSessionService
+{
+ public function start(WebchatChannel$input):array{return DB::transaction(function()use($input){$channel=WebchatChannel::query()->whereKey($input->id)->lockForUpdate()->firstOrFail();if(!$channel->enabled)throw new \DomainException('channel_unavailable');$agent=Agent::query()->whereKey($channel->agent_id)->lockForUpdate()->firstOrFail();$version=AgentVersion::query()->where('agent_id',$agent->id)->whereKey($agent->current_published_version_id)->lockForUpdate()->firstOrFail();if($version->status!==AgentVersionStatus::Published||!$version->agent_contract_version_id)throw new \DomainException('channel_unavailable');$conversation=new Conversation;$conversation->agent_id=$agent->id;$conversation->agent_version_id=$version->id;$conversation->channel=ConversationChannel::Webchat;$conversation->status=ConversationStatus::Open;$conversation->turn_in_progress=false;$conversation->next_sequence=1;$conversation->created_by_user_id=$channel->created_by_user_id;$conversation->save();$plain=rtrim(strtr(base64_encode(random_bytes(32)),'+/','-_'),'=');$session=new WebchatSession;$session->tenant_id=$channel->tenant_id;$session->webchat_channel_id=$channel->id;$session->conversation_id=$conversation->id;$session->token_hash=hash('sha256',$plain);$session->expires_at=now()->addSeconds((int)config('ai.webchat.session_ttl_seconds',86400));$session->last_seen_at=now();$session->save();return[$session,$plain,$conversation];});}
+}

@@ -37,6 +37,17 @@ use App\Http\Middleware\ValidateZigoApiKey;
 use App\Http\Controllers\API\Hub\V1\{PostalController as V1PostalController,QuoteController as V1QuoteController,ShipmentController as V1ShipmentController,TrackingController as V1TrackingController};
 
 use App\Http\Controllers\API\DEV\GuiaController as DevGuiaController ;
+use App\Http\Controllers\Webchat\PublicWebchatController;
+
+Route::prefix('ai/webchat/{publicKey}')->where(['publicKey'=>'wc_[A-Za-z0-9_-]{43}'])->group(function ():void {
+    Route::options('/sessions', [PublicWebchatController::class,'options']);
+    Route::options('/messages', [PublicWebchatController::class,'options']);
+    Route::options('/actions/{actionRun}/confirm', [PublicWebchatController::class,'actionOptions']);
+    Route::post('/sessions', [PublicWebchatController::class,'start'])->middleware('throttle:ai-webchat-start')->name('ai.webchat.sessions.start');
+    Route::post('/messages', [PublicWebchatController::class,'message'])->middleware('throttle:ai-webchat-message')->name('ai.webchat.messages.store');
+    Route::get('/messages', [PublicWebchatController::class,'history'])->middleware('throttle:ai-webchat-poll')->name('ai.webchat.messages.index');
+    Route::post('/actions/{actionRun}/confirm', [PublicWebchatController::class,'confirm'])->middleware('throttle:ai-webchat-confirm')->name('ai.webchat.actions.confirm');
+});
 
 
 /*

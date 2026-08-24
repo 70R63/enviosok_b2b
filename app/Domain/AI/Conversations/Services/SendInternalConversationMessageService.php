@@ -11,6 +11,7 @@ use App\Domain\AI\Conversations\Data\ConversationTurnResult;
 use App\Domain\AI\Conversations\Data\SendConversationMessageData;
 use App\Domain\AI\Conversations\Enums\ConversationMessageRole;
 use App\Domain\AI\Conversations\Enums\ConversationMessageStatus;
+use App\Domain\AI\Conversations\Enums\ConversationChannel;
 use App\Domain\AI\Conversations\Models\Conversation;
 use App\Domain\AI\Conversations\Models\ConversationMessage;
 use App\Domain\AI\Conversations\Models\ConversationMessageCitation;
@@ -38,8 +39,11 @@ final class SendInternalConversationMessageService
             $this->recoverAbandonedTurn($c, $authorized);
             $agent = Agent::query()->whereKey($c->agent_id)->lockForUpdate()->firstOrFail();
             $version = AgentVersion::query()->where('agent_id', $agent->id)->whereKey($c->agent_version_id)->lockForUpdate()->firstOrFail();
-            if (! in_array($version->status, [AgentVersionStatus::Draft, AgentVersionStatus::Testing], true)) {
-                throw new \DomainException('The pinned Agent Version is no longer testable.');
+            $allowed = $c->channel === ConversationChannel::Webchat
+                ? [AgentVersionStatus::Published, AgentVersionStatus::Retired]
+                : [AgentVersionStatus::Draft, AgentVersionStatus::Testing];
+            if (! in_array($version->status, $allowed, true)) {
+                throw new \DomainException('The pinned Agent Version is no longer executable.');
             }$history = $c->messages()->where('status', ConversationMessageStatus::Completed->value)->orderByDesc('sequence')->limit(6)->get()->reverse()->map(fn ($m) => ['role' => $m->role->value, 'content' => $m->content])->values()->all();
             [$userSequence,$assistantSequence] = $c->reserveTurn($authorized);
             $user = new ConversationMessage;

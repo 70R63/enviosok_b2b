@@ -8,13 +8,13 @@ use App\Domain\AI\Actions\Enums\{ActionConfirmationPolicy, ActionEffect};
 
 final class ZigoLogisticsActionRegistrar
 {
-    public function __construct(private ActionRegistry $registry, private QuoteShipmentActionHandler $quote, private TrackShipmentActionHandler $track, private CreateShipmentGuideActionHandler $guide) {}
+    public function __construct(private ActionRegistry $registry, private QuoteShipmentActionHandler $quote, private TrackShipmentActionHandler $track, private CreateShipmentGuideActionHandler $guide, private CreateShipmentGuideConfirmationPresenter $guideConfirmation) {}
 
     public function register(): void
     {
         $this->registry->register(new ActionDefinition('zigo.quote_shipment','ZIGO — Cotizar envío','Obtiene opciones comerciales vigentes de ZIGO.',$this->quoteInput(),$this->quoteOutput(),ActionEffect::Read,ActionConfirmationPolicy::None,$this->quote,['SHIPPING']));
         $this->registry->register(new ActionDefinition('zigo.track_shipment','ZIGO — Rastrear envío','Consulta el estado del envío del tenant.',$this->trackInput(),$this->trackOutput(),ActionEffect::Read,ActionConfirmationPolicy::None,$this->track,['TRACKING']));
-        $this->registry->register(new ActionDefinition('zigo.create_shipment_guide','ZIGO — Crear guía','Crea una guía desde una cotización server-side confirmada.',$this->guideInput(),$this->guideOutput(),ActionEffect::Write,ActionConfirmationPolicy::Required,$this->guide,['SHIPPING']));
+        $this->registry->register(new ActionDefinition('zigo.create_shipment_guide','ZIGO — Crear guía','Crea una guía desde una cotización server-side confirmada.',$this->guideInput(),$this->guideOutput(),ActionEffect::Write,ActionConfirmationPolicy::Required,$this->guide,['SHIPPING'],$this->guideConfirmation));
     }
 
     private function quoteInput(): array { return ['type'=>'object','additionalProperties'=>false,'required'=>['origin_postal_code','destination_postal_code','origin_settlement','destination_settlement','package'],'properties'=>['origin_postal_code'=>['type'=>'string'],'destination_postal_code'=>['type'=>'string'],'origin_settlement'=>['type'=>'string'],'destination_settlement'=>['type'=>'string'],'package'=>$this->packageSchema()]]; }

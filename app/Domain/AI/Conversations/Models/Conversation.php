@@ -42,11 +42,14 @@ final class Conversation extends AiTenantModel
         parent::booted();
         self::creating(function (self $m) {
             $m->uuid ??= (string) Str::uuid();
-            if ($m->channel !== ConversationChannel::InternalTest || $m->status !== ConversationStatus::Open || $m->turn_in_progress || $m->next_sequence !== 1) {
+            if (! in_array($m->channel, [ConversationChannel::InternalTest, ConversationChannel::Webchat], true) || $m->status !== ConversationStatus::Open || $m->turn_in_progress || $m->next_sequence !== 1) {
                 throw new \DomainException('Invalid initial conversation state.');
             }$version = AgentVersion::query()->where('agent_id', $m->agent_id)->findOrFail($m->agent_version_id);
-            if (! in_array($version->status, [AgentVersionStatus::Draft, AgentVersionStatus::Testing], true)) {
-                throw new \DomainException('Internal conversations require a Draft or Testing version.');
+            $allowed = $m->channel === ConversationChannel::Webchat
+                ? [AgentVersionStatus::Published, AgentVersionStatus::Retired]
+                : [AgentVersionStatus::Draft, AgentVersionStatus::Testing];
+            if (! in_array($version->status, $allowed, true)) {
+                throw new \DomainException('Conversation version is not executable for its channel.');
             }
         });
     }

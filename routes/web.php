@@ -35,6 +35,10 @@ use App\Http\Controllers\DevOps\DevOpsAuthController;
 use App\Http\Controllers\DevOps\XpertaIntegrationController;
 use App\Models\B2cCotizacion;
 use App\Http\Controllers\Onboarding\ZigoPlatformController;
+use App\Http\Controllers\Webchat\HostedWebchatController;
+
+Route::get('/ai/webchat/widget.js', [HostedWebchatController::class,'widget'])->name('ai.webchat.widget');
+Route::get('/chat/{publicKey}', [HostedWebchatController::class,'show'])->where('publicKey','wc_[A-Za-z0-9_-]{43}')->name('ai.webchat.hosted');
 
 /*
 |--------------------------------------------------------------------------

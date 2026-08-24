@@ -2,6 +2,7 @@
 @section('title')
 {{ $agent->name }}
 <article class="card"><h2>Simulator</h2><p>Valida escenarios y preparación antes de publicar, sin afectar operaciones reales.</p><a class="z-btn z-btn--primary" href="{{ route('tenant.admin.ai-agents.simulator.show',$agent) }}">Abrir Simulator</a></article>
+<article class="card"><h2>Channels · Webchat</h2><p>Publica este Agent en un widget seguro para sitios autorizados.</p><a class="z-btn z-btn--primary" href="{{ route('tenant.admin.ai-agents.webchat.show',$agent) }}">Configurar Webchat</a></article>
 @endsection
 @section('content')
 <div class="eyebrow">BORRADOR DE AGENTE</div><h1>{{ $agent->name }}</h1><div class="chips"><span class="chip">Borrador</span><span class="chip">{{ \App\Support\Presentation\AiAgentPresentation::agentType($agent->type) }}</span><span class="chip">Versión {{ $agent->versions->first()?->version_number??1 }}</span></div><p>{{ $agent->description }}</p>

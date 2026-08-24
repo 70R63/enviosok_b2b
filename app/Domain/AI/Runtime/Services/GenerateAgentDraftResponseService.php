@@ -43,7 +43,7 @@ final class GenerateAgentDraftResponseService
         $this->tenants->assertResourceBelongsToCurrentTenant($agent);
         [$agent,$version] = DB::transaction(function () use ($agent, $pinnedVersion, $mode) {
             $a = Agent::query()->lockForUpdate()->with('contract')->findOrFail($agent->id);
-            $statuses = [AgentVersionStatus::Draft->value, AgentVersionStatus::Testing->value];
+            $statuses = [AgentVersionStatus::Draft->value, AgentVersionStatus::Testing->value, AgentVersionStatus::Published->value, AgentVersionStatus::Retired->value];
             if ($mode === AiExecutionMode::Simulation) $statuses[] = AgentVersionStatus::Approved->value;
             $query = AgentVersion::query()->where('agent_id', $a->id)->whereIn('status', $statuses);
             $v = $pinnedVersion ? $query->whereKey($pinnedVersion->id)->lockForUpdate()->firstOrFail() : $query->orderByDesc('version_number')->lockForUpdate()->firstOrFail();
@@ -73,7 +73,8 @@ return [$a, $v];
             $input['history'] = $this->history($history);
         }$tenant=Tenant::query()->findOrFail($authorized->tenantId);$allowedActions=array_values(array_intersect($version->contractVersion->allowed_actions??[],array_keys($this->actions->availableFor($tenant))));$definitions=array_map(fn($key)=>$this->actions->find($key),$allowedActions);
         $schema=$definitions===[]?RuntimeOutputSchema::schema($ids):ActionRuntimeOutputSchema::schema($ids,$definitions);
-        $request = new ModelRequestData($this->policy->compile($agent, $version), $input, $schema, 600, 'none', $this->safety($authorized->tenantId, $authorized->actorUserId), 'agent_draft_simulation');
+        $purpose=$mode===AiExecutionMode::Live&&in_array($version->status,[AgentVersionStatus::Published,AgentVersionStatus::Retired],true)?'public_webchat':'agent_draft_simulation';
+        $request = new ModelRequestData($this->policy->compile($agent, $version), $input, $schema, 600, 'none', $this->safety($authorized->tenantId, $authorized->actorUserId, $purpose), $purpose);
         try {
             $model = $this->providers->model()->generate($request);
             $valid = AgentRuntimeResponseData::validate($model->structuredOutput, $ids);
@@ -125,7 +126,7 @@ return $out;
             $r = new RuntimeRun;
             $r->agent_id = $a->id;
             $r->agent_version_id = $v->id;
-            $r->purpose = 'agent_draft_simulation';
+            $r->purpose = $mode===AiExecutionMode::Live&&in_array($v->status,[AgentVersionStatus::Published,AgentVersionStatus::Retired],true)?'public_webchat':'agent_draft_simulation';
             if (Schema::hasColumn('ai_runtime_runs', 'execution_mode')) {
                 $r->execution_mode = $mode->value;
             }
@@ -162,13 +163,13 @@ return $out;
 return $out;
     }
 
-    private function safety(int $tenant,int $user): string
+    private function safety(int $tenant,int $user,string $purpose='agent_draft_simulation'): string
     {
         $key = (string) config('app.key');
         if ($key === '') {
             throw new ModelProviderNotConfiguredException('Application safety material is not configured.');
         }
 
-return hash_hmac('sha256',$tenant.':'.$user.':agent_draft_simulation',$key);
+return hash_hmac('sha256',$tenant.':'.$user.':'.$purpose,$key);
     }
 }

@@ -1,6 +1,15 @@
 <?php
 
 return [
+    'webchat' => [
+        'session_ttl_seconds' => 86400,
+        'max_message_bytes' => 8000,
+        'max_allowed_origins' => 20,
+        'session_creations_per_minute' => 10,
+        'messages_per_minute' => 30,
+        'confirmations_per_minute' => 10,
+        'polls_per_minute' => 60,
+    ],
     'simulator' => [
         'max_scenarios_per_agent' => 50,
         'max_scenarios_per_run' => 50,

@@ -1,0 +1,1 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ $displayName }}</title></head><body><main><h1>{{ $displayName }}</h1><p>Chat público seguro.</p></main><script src="{{ route('ai.webchat.widget') }}" data-channel="{{ $publicKey }}" defer></script></body></html>
