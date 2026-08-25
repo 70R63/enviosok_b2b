@@ -109,14 +109,7 @@ final class PlatformPaymentService
                 'provider_payment_id' => $paymentId,
                 'status' => 'PROCESSING', 'processed_at' => null, 'error_code' => null,
             ]);
-            $this->validate($attempt, $payment);
-
-            $status = strtolower((string) ($payment['status'] ?? ''));
-            if ($attempt->onboarding_application_id) {
-                $this->processOnboardingPayment($attempt, $event, $payment, $status);
-            } else {
-                $this->processSaasOrderPayment($attempt, $event, $payment, $status);
-            }
+            $this->processVerifiedPayment($attempt, $payment, $event);
         } catch (Throwable $exception) {
             $errorCode = $this->safePaymentErrorCode($exception);
             $event->update([
@@ -129,6 +122,25 @@ final class PlatformPaymentService
                 'attempt_uuid' => $event->attempt?->uuid,
                 'reason' => $errorCode,
             ]);
+        }
+    }
+
+    /**
+     * Applies a provider payment after its payload has been verified.
+     * Both real webhooks and the guarded STAGE simulator use this authority.
+     */
+    public function processVerifiedPayment(
+        PlatformPaymentAttempt $attempt,
+        array $payment,
+        PlatformPaymentEvent $event,
+    ): void {
+        $this->validate($attempt, $payment);
+
+        $status = strtolower((string) ($payment['status'] ?? ''));
+        if ($attempt->onboarding_application_id) {
+            $this->processOnboardingPayment($attempt, $event, $payment, $status);
+        } else {
+            $this->processSaasOrderPayment($attempt, $event, $payment, $status);
         }
     }
 

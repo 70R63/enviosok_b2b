@@ -303,6 +303,28 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
         $this->assertOperationalCounts(1);
     }
 
+    public function test_stage_platform_payment_approves_onboarding_and_dispatches_provisioning_once(): void
+    {
+        Queue::fake();
+        [$application, $attempt] = $this->pending('stage-command');
+        $application->update(['total' => '100.00', 'currency' => 'MXN']);
+        $attempt->update(['provider_preference_id' => 'pref-stage', 'amount' => '100.00']);
+
+        $this->artisan('zigo:stage-platform-payment-approve', [
+            'attempt' => $attempt->uuid, '--confirm-stage' => true,
+        ])->assertExitCode(0);
+
+        $this->assertSame('APPROVED', $attempt->fresh()->status);
+        $this->assertSame('PAID', $application->fresh()->status);
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+
+        $this->artisan('zigo:stage-platform-payment-approve', [
+            'attempt' => $attempt->uuid, '--confirm-stage' => true,
+        ])->assertExitCode(0);
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+        $this->assertSame(1, PlatformPaymentEvent::count());
+    }
+
     public function test_audit_metadata_never_contains_passwords_or_tokens(): void
     {
         Queue::fake();

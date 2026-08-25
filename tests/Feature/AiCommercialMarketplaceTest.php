@@ -6,7 +6,7 @@ use App\Domain\AI\Commerce\AiCommercialActivationService;
 use App\Domain\AI\Usage\AiCapacityService;
 use App\Domain\Network\Billing\Models\{Entitlement, Subscription};
 use App\Domain\Network\Catalog\Models\{Module, Plan};
-use App\Domain\Network\Commerce\Models\{NetworkCommercialProduct, TenantSaasOrder};
+use App\Domain\Network\Commerce\Models\{NetworkCommercialProduct, PlatformPaymentAttempt, PlatformPaymentEvent, TenantSaasOrder};
 use App\Domain\Network\Tenancy\Models\Tenant;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
@@ -19,7 +19,7 @@ final class AiCommercialMarketplaceTest extends TestCase
     {
         parent::setUp();
         Http::preventStrayRequests();
-        config(['ai.enabled' => true]);
+        config(['ai.enabled' => true, 'zigo_payments.platform.account_id' => 'stage-account']);
         $this->schema();
     }
 
@@ -80,6 +80,67 @@ final class AiCommercialMarketplaceTest extends TestCase
         app(AiCommercialActivationService::class)->apply($order, $subscriptionB);
     }
 
+    public function test_stage_platform_payment_approves_ai_order_once_through_command(): void
+    {
+        [$tenant, $subscription, $entitlement] = $this->tenantWithAi();
+        $product = NetworkCommercialProduct::create([
+            'code' => 'AI-AGENT-STAGE', 'name' => 'Agente adicional', 'description' => 'Stage',
+            'type' => 'ADDON', 'billing_type' => 'MONTHLY', 'price' => '99.00', 'currency' => 'MXN',
+            'module_id' => $entitlement->module_id, 'is_active' => true,
+            'metadata' => ['ai_product' => true, 'ai_kind' => 'addon', 'ai_addons' => [AiCapacityService::MAX_AGENTS => 1]],
+        ]);
+        $order = $this->order($tenant, $product, $product->metadata);
+        $order->update(['status' => 'PENDING_PAYMENT', 'payment_status' => 'PENDING']);
+        $attempt = PlatformPaymentAttempt::create([
+            'tenant_id' => $tenant->id, 'saas_order_id' => $order->id, 'provider' => 'MERCADO_PAGO',
+            'status' => 'PENDING', 'provider_preference_id' => 'pref-stage',
+            'external_reference' => 'stage-'.$order->uuid, 'amount' => $order->total_amount, 'currency' => 'MXN',
+        ]);
+
+        $this->artisan('zigo:stage-platform-payment-approve', ['attempt' => $attempt->uuid, '--confirm-stage' => true])
+            ->assertExitCode(0);
+
+        $this->assertSame('APPROVED', $attempt->fresh()->status);
+        $this->assertSame('ACTIVATED', $order->fresh()->status);
+        $this->assertSame(2, app(AiCapacityService::class)->limit($tenant->fresh(), AiCapacityService::MAX_AGENTS));
+        $this->assertSame(1, Entitlement::where('tenant_id', $tenant->id)->where('code', 'AI_CORE')->count());
+        $this->assertSame(1, PlatformPaymentEvent::count());
+
+        $this->artisan('zigo:stage-platform-payment-approve', ['attempt' => $attempt->uuid, '--confirm-stage' => true])
+            ->assertExitCode(0);
+        $this->assertSame(2, app(AiCapacityService::class)->limit($tenant->fresh(), AiCapacityService::MAX_AGENTS));
+        $this->assertSame(1, PlatformPaymentEvent::count());
+    }
+
+    public function test_stage_platform_payment_is_blocked_in_production_without_changes(): void
+    {
+        [$tenant, $subscription, $entitlement] = $this->tenantWithAi();
+        $product = NetworkCommercialProduct::create([
+            'code' => 'AI-PROD-GUARD', 'name' => 'Agente adicional', 'description' => 'Stage',
+            'type' => 'ADDON', 'billing_type' => 'MONTHLY', 'price' => '99.00', 'currency' => 'MXN',
+            'module_id' => $entitlement->module_id, 'is_active' => true,
+            'metadata' => ['ai_product' => true, 'ai_kind' => 'addon', 'ai_addons' => [AiCapacityService::MAX_AGENTS => 1]],
+        ]);
+        $order = $this->order($tenant, $product, $product->metadata);
+        $order->update(['status' => 'PENDING_PAYMENT', 'payment_status' => 'PENDING']);
+        $attempt = PlatformPaymentAttempt::create([
+            'tenant_id' => $tenant->id, 'saas_order_id' => $order->id, 'provider' => 'MERCADO_PAGO',
+            'status' => 'PENDING', 'provider_preference_id' => 'pref-production',
+            'external_reference' => 'production-'.$order->uuid, 'amount' => $order->total_amount, 'currency' => 'MXN',
+        ]);
+        $previousEnvironment = app()->environment();
+        app()->detectEnvironment(fn () => 'production');
+        try {
+            $this->artisan('zigo:stage-platform-payment-approve', ['attempt' => $attempt->uuid, '--confirm-stage' => true])
+                ->assertExitCode(1);
+        } finally {
+            app()->detectEnvironment(fn () => $previousEnvironment);
+        }
+        $this->assertSame('PENDING', $attempt->fresh()->status);
+        $this->assertSame('PENDING_PAYMENT', $order->fresh()->status);
+        $this->assertSame(0, PlatformPaymentEvent::count());
+    }
+
     private function tenantWithLogistics(): array
     {
         $tenant = Tenant::create(['uuid' => (string) \Illuminate\Support\Str::uuid(), 'name' => 'Tenant', 'slug' => 'tenant', 'status' => 'active']);
@@ -115,6 +176,8 @@ final class AiCommercialMarketplaceTest extends TestCase
         Schema::create('network_entitlements', fn (Blueprint $t) => [$t->id(), $t->unsignedBigInteger('subscription_id'), $t->unsignedBigInteger('tenant_id'), $t->unsignedBigInteger('module_id'), $t->string('code'), $t->boolean('is_enabled'), $t->string('source'), $t->timestamps()]);
         Schema::create('network_entitlement_capacities', function (Blueprint $t): void {$t->id();$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('subscription_id');$t->unsignedBigInteger('entitlement_id');$t->string('capability_code');$t->unsignedInteger('quantity');$t->string('source');$t->string('source_key');$t->boolean('is_enabled')->default(true);$t->timestamps();$t->unique(['entitlement_id','capability_code','source','source_key']);});
         Schema::create('network_commercial_products', function (Blueprint $t): void {$t->id();$t->uuid('uuid')->unique();$t->string('code')->unique();$t->string('name');$t->text('description')->nullable();$t->string('type');$t->string('billing_type');$t->decimal('price',12,2);$t->char('currency',3);$t->unsignedBigInteger('module_id')->nullable();$t->unsignedBigInteger('plan_id')->nullable();$t->unsignedInteger('included_operations')->nullable();$t->boolean('is_active');$t->unsignedInteger('sort_order')->default(0);$t->json('metadata')->nullable();$t->timestamps();});
-        Schema::create('tenant_saas_orders', function (Blueprint $t): void {$t->id();$t->uuid('uuid')->unique();$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('commercial_product_id');$t->unsignedBigInteger('created_by_user_id');$t->string('purchase_key');$t->string('status');$t->string('payment_status');$t->unsignedInteger('quantity');$t->decimal('unit_amount',12,2);$t->decimal('subtotal',12,2);$t->decimal('tax_amount',12,2);$t->decimal('total_amount',12,2);$t->char('currency',3);$t->json('purchase_snapshot');$t->timestamp('expires_at')->nullable();$t->timestamp('activated_at')->nullable();$t->timestamps();$t->unique(['tenant_id','purchase_key']);});
+        Schema::create('tenant_saas_orders', function (Blueprint $t): void {$t->id();$t->uuid('uuid')->unique();$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('commercial_product_id');$t->unsignedBigInteger('created_by_user_id');$t->string('purchase_key');$t->string('status');$t->string('payment_status');$t->unsignedInteger('quantity');$t->decimal('unit_amount',12,2);$t->decimal('subtotal',12,2);$t->decimal('tax_amount',12,2);$t->decimal('total_amount',12,2);$t->char('currency',3);$t->json('purchase_snapshot');$t->string('payment_provider')->nullable();$t->string('payment_reference')->nullable();$t->timestamp('paid_at')->nullable();$t->timestamp('expires_at')->nullable();$t->timestamp('activated_at')->nullable();$t->timestamps();$t->unique(['tenant_id','purchase_key']);});
+        Schema::create('platform_payment_attempts', function (Blueprint $t): void {$t->id();$t->uuid('uuid')->unique();$t->unsignedBigInteger('tenant_id')->nullable();$t->unsignedBigInteger('saas_order_id')->nullable();$t->unsignedBigInteger('onboarding_application_id')->nullable();$t->string('provider');$t->string('status');$t->string('provider_preference_id')->nullable();$t->string('provider_payment_id')->nullable();$t->string('external_reference')->unique();$t->decimal('amount',12,2);$t->char('currency',3);$t->text('init_point')->nullable();$t->timestamp('approved_at')->nullable();$t->timestamp('rejected_at')->nullable();$t->timestamps();$t->unique(['provider','provider_payment_id']);});
+        Schema::create('platform_payment_events', function (Blueprint $t): void {$t->id();$t->string('provider');$t->string('event_key');$t->unsignedBigInteger('platform_payment_attempt_id')->nullable();$t->string('provider_payment_id')->nullable();$t->string('status');$t->string('error_code')->nullable();$t->timestamp('received_at');$t->timestamp('processed_at')->nullable();$t->timestamps();$t->unique(['provider','event_key']);});
     }
 }
