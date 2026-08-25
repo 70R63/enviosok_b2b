@@ -1,5 +1,6 @@
 <?php
 namespace App\Http\Controllers\Tenant;
+use App\Domain\AI\Tenancy\AiTenantBoundary;
 use App\Domain\AI\Agents\Models\Agent;use App\Domain\AI\Channels\WhatsApp\Models\WhatsAppChannel;use App\Domain\AI\Channels\WhatsApp\Services\ManageWhatsAppChannelService;use App\Http\Controllers\Controller;use App\Http\Support\AiLaunchpadHttpGate;use Illuminate\Http\Request;
 final class AiWhatsAppController extends Controller{
  public function show(Request$r,Agent$agent,AiLaunchpadHttpGate$gate,AiTenantBoundary$tenants){$gate->ensure($r->user());$gate->assertCurrentTenant($agent);$channel=WhatsAppChannel::where('tenant_id',$agent->tenant_id)->where('agent_id',$agent->id)->first();return view('tenant.admin.ai-agents.whatsapp',['tenant'=>$tenants->requireTenant(),'agent'=>$agent,'channel'=>$channel,'newVerifyToken'=>session('new_whatsapp_verify_token')]);}
