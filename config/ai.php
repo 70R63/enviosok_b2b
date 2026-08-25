@@ -1,6 +1,17 @@
 <?php
 
 return [
+    'whatsapp' => [
+        'graph_version' => 'v23.0',
+        'graph_base_url' => 'https://graph.facebook.com',
+        'customer_service_window_seconds' => 86400,
+        'confirmation_ttl_seconds' => 900,
+        'max_message_bytes' => 8000,
+        'runtime_per_minute' => 30,
+        'contention_retry_seconds' => 5,
+        'connect_timeout_seconds' => 5,
+        'request_timeout_seconds' => 20,
+    ],
     'webchat' => [
         'session_ttl_seconds' => 86400,
         'max_message_bytes' => 8000,

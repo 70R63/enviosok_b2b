@@ -38,6 +38,7 @@ use App\Http\Controllers\API\Hub\V1\{PostalController as V1PostalController,Quot
 
 use App\Http\Controllers\API\DEV\GuiaController as DevGuiaController ;
 use App\Http\Controllers\Webchat\PublicWebchatController;
+use App\Http\Controllers\WhatsApp\WhatsAppWebhookController;
 
 Route::prefix('ai/webchat/{publicKey}')->where(['publicKey'=>'wc_[A-Za-z0-9_-]{43}'])->group(function ():void {
     Route::options('/sessions', [PublicWebchatController::class,'options']);
@@ -48,6 +49,8 @@ Route::prefix('ai/webchat/{publicKey}')->where(['publicKey'=>'wc_[A-Za-z0-9_-]{4
     Route::get('/messages', [PublicWebchatController::class,'history'])->middleware('throttle:ai-webchat-poll')->name('ai.webchat.messages.index');
     Route::post('/actions/{actionRun}/confirm', [PublicWebchatController::class,'confirm'])->middleware('throttle:ai-webchat-confirm')->name('ai.webchat.actions.confirm');
 });
+
+Route::match(['GET','POST'],'ai/whatsapp/{channelKey}/webhook',function(\Illuminate\Http\Request$request,string$channelKey,WhatsAppWebhookController$controller){$resolver=app(\App\Domain\AI\Channels\WhatsApp\Services\ResolveWhatsAppChannelService::class);return$request->isMethod('GET')?$controller->verify($request,$channelKey,$resolver):$controller->receive($request,$channelKey,$resolver);})->where('channelKey','wa_[A-Za-z0-9_-]{43}')->middleware('throttle:ai-whatsapp-webhook')->name('ai.whatsapp.webhook');
 
 
 /*

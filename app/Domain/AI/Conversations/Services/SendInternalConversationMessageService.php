@@ -12,6 +12,7 @@ use App\Domain\AI\Conversations\Data\SendConversationMessageData;
 use App\Domain\AI\Conversations\Enums\ConversationMessageRole;
 use App\Domain\AI\Conversations\Enums\ConversationMessageStatus;
 use App\Domain\AI\Conversations\Enums\ConversationChannel;
+use App\Domain\AI\Conversations\Exceptions\ConversationTurnBusyException;
 use App\Domain\AI\Conversations\Models\Conversation;
 use App\Domain\AI\Conversations\Models\ConversationMessage;
 use App\Domain\AI\Conversations\Models\ConversationMessageCitation;
@@ -29,17 +30,20 @@ final class SendInternalConversationMessageService
 {
     public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private GenerateAgentDraftResponseService $runtime, private RecordLeadOutcomeCandidatesService $outcomes, private RequestHumanHandoffService $handoffs, private ActionExecutor $actions, private GeneratePostActionResponseService $postAction) {}
 
-    public function send(User $actor, Conversation $conversation, SendConversationMessageData $data): ConversationTurnResult
+    public function send(User $actor, Conversation $conversation, SendConversationMessageData $data, ?callable $beforeReserve = null): ConversationTurnResult
     {
         $authorized = $this->auth->authorize($actor);
         $this->tenants->assertResourceBelongsToCurrentTenant($conversation);
-        [$user,$assistant,$agent,$version,$history] = DB::transaction(function () use ($authorized, $conversation, $data) {
+        [$user,$assistant,$agent,$version,$history] = DB::transaction(function () use ($authorized, $conversation, $data, $beforeReserve) {
+            if ($beforeReserve) {
+                $beforeReserve();
+            }
             $c = Conversation::query()->lockForUpdate()->findOrFail($conversation->id);
             $authorized = $this->auth->revalidate($authorized);
             $this->recoverAbandonedTurn($c, $authorized);
             $agent = Agent::query()->whereKey($c->agent_id)->lockForUpdate()->firstOrFail();
             $version = AgentVersion::query()->where('agent_id', $agent->id)->whereKey($c->agent_version_id)->lockForUpdate()->firstOrFail();
-            $allowed = $c->channel === ConversationChannel::Webchat
+            $allowed = in_array($c->channel, [ConversationChannel::Webchat, ConversationChannel::WhatsApp], true)
                 ? [AgentVersionStatus::Published, AgentVersionStatus::Retired]
                 : [AgentVersionStatus::Draft, AgentVersionStatus::Testing];
             if (! in_array($version->status, $allowed, true)) {
@@ -129,12 +133,12 @@ final class SendInternalConversationMessageService
             ->lockForUpdate()
             ->get();
         if ($pending->count() !== 1) {
-            throw new \DomainException('A conversation turn is already in progress.');
+            throw new ConversationTurnBusyException('A conversation turn is already in progress.');
         }
         $lease = min(3600, max(60, (int) config('ai.conversation_stale_turn_seconds', 120)));
         $assistant = $pending->first();
         if ($assistant->created_at === null || $assistant->created_at->gt(now()->subSeconds($lease))) {
-            throw new \DomainException('A conversation turn is already in progress.');
+            throw new ConversationTurnBusyException('A conversation turn is already in progress.');
         }
         $assistant->fail($authorized, 'abandoned_turn');
         $conversation->finishTurn($authorized, false);

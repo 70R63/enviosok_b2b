@@ -19,7 +19,10 @@ use App\Domain\AI\Actions\Enums\{ActionConfirmationPolicy,ActionEffect};
 use App\Domain\AI\Actions\Models\ActionRun;
 use App\Domain\AI\Actions\Services\ConfirmActionRunService;
 use App\Domain\AI\Channels\Webchat\Models\WebchatChannel;
+use App\Domain\AI\Channels\WhatsApp\Models\{WhatsAppChannel,WhatsAppDelivery,WhatsAppInboundReceipt,WhatsAppSession};
+use App\Domain\AI\Channels\WhatsApp\Services\ProcessWhatsAppInboundService;
 use App\Domain\AI\Conversations\Data\SendConversationMessageData;
+use App\Domain\AI\Conversations\Enums\ConversationMessageRole;
 use App\Domain\AI\Conversations\Enums\ConversationMessageStatus;
 use App\Domain\AI\Conversations\Enums\ConversationStatus;
 use App\Domain\AI\Conversations\Models\Conversation;
@@ -63,6 +66,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -81,6 +85,7 @@ final class AiConversationCoreTest extends TestCase
         $this->actionMigration()->up();
         (require base_path('database/migrations/2026_08_29_100000_create_ai_leads_and_outcome_events.php'))->up();
         (require base_path('database/migrations/2026_09_01_100000_create_ai_webchat.php'))->up();
+        (require base_path('database/migrations/2026_09_02_100000_create_ai_whatsapp_channel.php'))->up();
         app(TenantContext::class)->clear();
         Http::preventStrayRequests();
     }
@@ -620,6 +625,185 @@ $evil=$this->withHeaders(['Origin'=>'https://evil.test'])->postJson("/api/ai/web
         $this->get("/chat/{$key}")->assertOk();$rotated=app(\App\Domain\AI\Channels\Webchat\Services\ManageWebchatChannelService::class)->rotate($owner,$agent);$this->get("/chat/{$key}")->assertNotFound();$this->get('/chat/'.$rotated->public_key)->assertOk();DB::table('ai_agents')->where('id',$agent->id)->update(['current_published_version_id'=>null]);$this->get('/chat/'.$rotated->public_key)->assertNotFound();DB::table('ai_agents')->where('id',$agent->id)->update(['current_published_version_id'=>$version->id]);Entitlement::where('tenant_id',$tenant->id)->where('code','AI_CORE')->update(['is_enabled'=>false]);$this->get('/chat/'.$rotated->public_key)->assertNotFound();Entitlement::where('tenant_id',$tenant->id)->where('code','AI_CORE')->update(['is_enabled'=>true]);$rotated->enabled=false;$rotated->save();$this->get('/chat/'.$rotated->public_key)->assertNotFound();
     }
 
+    public function test_whatsapp_knowledge_and_generic_action_run_end_to_end_through_live_core(): void
+    {
+        [$tenant,$owner]=$this->authorized('whatsapp-generic');[$agent,$version]=$this->agent($owner);$version->contractVersion->allowed_actions=['example.lookup_record'];$version->contractVersion->save();$this->ready($owner,$agent,'Consulta registros y responde con conocimiento.');$counter=(object)['handler'=>0,'model'=>0];$handler=new class($counter) implements ActionHandler{public function __construct(private object$c){}public function execute(ActionExecutionContext$context,array$arguments):ActionResultData{$this->c->handler++;return new ActionResultData(['record'=>'Encontrado']);}};app(ActionRegistry::class)->register(new ActionDefinition('example.lookup_record','Consultar registro','Consulta un registro confiable.',['type'=>'object','additionalProperties'=>false,'required'=>['query'],'properties'=>['query'=>['type'=>'string']]],['type'=>'object','additionalProperties'=>false,'required'=>['record'],'properties'=>['record'=>['type'=>'string']]],ActionEffect::Read,ActionConfirmationPolicy::None,$handler));$this->publishForWebchat($agent,$version);$channel=$this->whatsappChannel($tenant,$owner,$agent);
+        Http::fake(function($request)use($counter){if(str_contains($request->url(),'graph.facebook.com'))return Http::response(['messages'=>[['id'=>'wamid.out.generic']]],200);$counter->model++;$output=$counter->model===1?['answer'=>'Consultando.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false,'action_request'=>['action_key'=>'example.lookup_record','arguments'=>['query'=>'abc']]]:['answer'=>'Registro encontrado.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false];return Http::response($this->response($output),200);});
+        $receipt=$this->whatsappReceipt($channel,'wamid.in.generic','5218111111111','Consulta abc');app(ProcessWhatsAppInboundService::class)->process($receipt->id);$this->assertSame('succeeded',$receipt->fresh()->status);$this->assertSame(1,$counter->handler);$this->assertSame(2,$counter->model);$this->assertSame('whatsapp',Conversation::firstOrFail()->channel->value);$this->assertSame($version->id,Conversation::firstOrFail()->agent_version_id);$this->assertSame('succeeded',ActionRun::firstOrFail()->status->value);$this->assertSame('sent',WhatsAppDelivery::firstOrFail()->status);
+    }
+
+    public function test_whatsapp_existing_contact_stays_pinned_and_new_contact_uses_new_publication(): void
+    {
+        [$tenant,$owner]=$this->authorized('whatsapp-pinning');[$agent,$v1]=$this->agent($owner);$this->ready($owner,$agent,'Responde consultas.');$this->publishForWebchat($agent,$v1);$channel=$this->whatsappChannel($tenant,$owner,$agent);Http::fake(function($request){if(str_contains($request->url(),'graph.facebook.com'))return Http::response(['messages'=>[['id'=>'wamid.out.'.uniqid()]]],200);return Http::response($this->response(['answer'=>'Respuesta.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false]),200);});$this->processWhatsApp($channel,'wamid.pin.1','5218000000001','Hola');$first=WhatsAppSession::where('contact_hash',hash('sha256','5218000000001'))->firstOrFail();$this->assertSame($v1->id,$first->conversation_id?Conversation::findOrFail($first->conversation_id)->agent_version_id:null);
+        $v2=$this->version($owner,$agent,$v1->contractVersion);DB::table('ai_agent_versions')->where('id',$v1->id)->update(['status'=>'retired']);DB::table('ai_agent_versions')->where('id',$v2->id)->update(['status'=>'published']);DB::table('ai_agents')->where('id',$agent->id)->update(['current_published_version_id'=>$v2->id]);$agent->refresh();$this->processWhatsApp($channel,'wamid.pin.2','5218000000001','Otra');$this->processWhatsApp($channel,'wamid.pin.3','5218000000002','Nueva');$this->assertSame($v1->id,Conversation::findOrFail($first->conversation_id)->agent_version_id);$second=WhatsAppSession::where('contact_hash',hash('sha256','5218000000002'))->firstOrFail();$this->assertSame($v2->id,Conversation::findOrFail($second->conversation_id)->agent_version_id);$this->assertSame($v1->agent_contract_version_id,Conversation::findOrFail($first->conversation_id)->agentVersion->agent_contract_version_id);$this->assertSame($v2->agent_contract_version_id,Conversation::findOrFail($second->conversation_id)->agentVersion->agent_contract_version_id);
+    }
+
+    public function test_whatsapp_zigo_quote_uses_live_action_core_and_meta_delivery(): void
+    {
+        foreach(['quote']as$kind){$pass=0;[$tenant,$owner]=$this->authorized('whatsapp-zigo-'.$kind);$this->logisticsEntitlement($tenant,$kind==='quote'?'SHIPPING':'TRACKING');[$agent,$version]=$this->agent($owner);$key=$kind==='quote'?'zigo.quote_shipment':'zigo.track_shipment';$version->contractVersion->allowed_actions=[$key];$version->contractVersion->save();$this->ready($owner,$agent,$kind==='quote'?'Cotiza envíos terrestres.':'Rastrea envíos.');$this->logisticsCatalog($tenant);$arguments=$kind==='quote'?['origin_postal_code'=>'64000','destination_postal_code'=>'44100','origin_settlement'=>'Centro','destination_settlement'=>'Centro','package'=>['type'=>'caja','weight'=>3,'length'=>20,'width'=>20,'height'=>20]]:null;if($kind==='quote'){$this->mock(ZigoPostalCodeService::class,function($m){$m->shouldReceive('lookup')->with('64000')->andReturn(['success'=>true,'colonias'=>[['nombre'=>'Centro']],'municipio'=>'Monterrey','estado'=>'Nuevo León']);$m->shouldReceive('lookup')->with('44100')->andReturn(['success'=>true,'colonias'=>[['nombre'=>'Centro']],'municipio'=>'Guadalajara','estado'=>'Jalisco']);});}else{[$operation]=$this->authoritativeQuote($tenant);$operation->update(['status'=>'confirmed','provider'=>'ZIGO_LOCAL','service_code'=>'TERRESTRE']);$shipment=app(\App\Domain\Shipping\Local\LocalShipmentService::class)->create($tenant,$operation,['sender'=>['name'=>'A'],'recipient'=>['name'=>'B'],'package'=>['type'=>'caja','weight'=>3],'pricing'=>['final_price'=>179]]);$arguments=['shipment_reference'=>$shipment->uuid];}$this->publishForWebchat($agent,$version);$channel=$this->whatsappChannel($tenant,$owner,$agent);Http::fake(function($request)use(&$pass,$kind,$key,$arguments){if(str_contains($request->url(),'graph.facebook.com'))return Http::response(['messages'=>[['id'=>'wamid.out.'.$kind]]],200);$pass++;$output=$pass===1?['answer'=>'Procesando.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false,'action_request'=>['action_key'=>$key,'arguments'=>$arguments]]:['answer'=>$kind==='quote'?'Cotización lista.':'Rastreo listo.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false];return Http::response($this->response($output),200);});$this->processWhatsApp($channel,'wamid.in.'.$kind,'52180000'.($kind==='quote'?'001':'002'),$kind==='quote'?'Cotiza':'Rastrea');$this->assertSame('succeeded',ActionRun::where('tenant_id',$tenant->id)->latest('id')->firstOrFail()->status->value);$this->assertSame('sent',WhatsAppDelivery::where('tenant_id',$tenant->id)->latest('id')->firstOrFail()->status);$this->assertSame(2,$pass);app(TenantContext::class)->clear();}
+    }
+
+    public function test_whatsapp_zigo_guide_requires_opaque_confirmation_and_executes_once(): void
+    {
+        [$tenant,$owner]=$this->authorized('whatsapp-guide');$this->logisticsEntitlement($tenant,'SHIPPING');[$agent,$version]=$this->agent($owner);$version->contractVersion->allowed_actions=['zigo.create_shipment_guide'];$version->contractVersion->save();$this->ready($owner,$agent,'Crea guías desde cotizaciones autorizadas.');[$operation,$snapshot]=$this->authoritativeQuote($tenant);$arguments=['quote_reference'=>$operation->uuid,'option_reference'=>$snapshot->uuid,'sender'=>$this->guidePerson('A','8111111111','64000'),'recipient'=>$this->guidePerson('B','3311111111','44100'),'customer_reference'=>'whatsapp'];$this->publishForWebchat($agent,$version);$channel=$this->whatsappChannel($tenant,$owner,$agent);$model=0;Http::fake(function($request)use(&$model,$arguments){if(str_contains($request->url(),'graph.facebook.com'))return Http::response(['messages'=>[['id'=>'wamid.out.'.uniqid()]]],200);$model++;$output=$model===1?['answer'=>'Confirma la operación.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false,'action_request'=>['action_key'=>'zigo.create_shipment_guide','arguments'=>$arguments]]:['answer'=>'Guía creada.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false];return Http::response($this->response($output),200);});$this->processWhatsApp($channel,'wamid.guide.request','5218999999999','Crea la guía');$action=ActionRun::latest('id')->firstOrFail();$this->assertSame('awaiting_confirmation',$action->status->value);$this->assertDatabaseCount('local_shipments',0);$delivery=WhatsAppDelivery::where('kind','confirmation')->firstOrFail();$this->assertNotNull($delivery->confirmation_token_hash);$confirmId=null;foreach(Http::recorded()as[$request]){$data=$request->data();if(($data['type']??null)==='interactive')$confirmId=$data['interactive']['action']['buttons'][0]['reply']['id']??null;}$this->assertIsString($confirmId);$session=WhatsAppSession::findOrFail($delivery->whatsapp_session_id);$this->processWhatsApp($channel,'wamid.guide.other.start','5218777777777','Crea otra conversación');$otherSession=WhatsAppSession::where('contact_hash',hash('sha256','5218777777777'))->firstOrFail();$wrong=new WhatsAppInboundReceipt;$wrong->tenant_id=$tenant->id;$wrong->whatsapp_channel_id=$channel->id;$wrong->provider_message_id='wamid.guide.wrong-contact';$wrong->event_type='interactive';$wrong->status='received';$wrong->payload_encrypted=['provider_message_id'=>'wamid.guide.wrong-contact','event_type'=>'interactive','from'=>$otherSession->contact(),'reply_id'=>$confirmId];$wrong->save();app(ProcessWhatsAppInboundService::class)->process($wrong->id);$this->assertDatabaseCount('local_shipments',0);$receipt=new WhatsAppInboundReceipt;$receipt->tenant_id=$tenant->id;$receipt->whatsapp_channel_id=$channel->id;$receipt->provider_message_id='wamid.guide.confirm';$receipt->event_type='interactive';$receipt->status='received';$receipt->payload_encrypted=['provider_message_id'=>'wamid.guide.confirm','event_type'=>'interactive','from'=>$session->contact(),'reply_id'=>$confirmId];$receipt->save();app(ProcessWhatsAppInboundService::class)->process($receipt->id);$this->assertDatabaseCount('local_shipments',1);$this->assertSame('succeeded',$action->fresh()->status->value);$duplicate=$receipt->replicate(['provider_message_id']);$duplicate->provider_message_id='wamid.guide.confirm.retry';$duplicate->status='received';$duplicate->save();app(ProcessWhatsAppInboundService::class)->process($duplicate->id);$this->assertDatabaseCount('local_shipments',1);
+    }
+
+    public function test_whatsapp_zigo_tracking_runs_in_an_isolated_live_tenant(): void
+    {
+        [$tenant,$owner]=$this->authorized('whatsapp-zigo-track');$this->logisticsEntitlement($tenant,'TRACKING');[$agent,$version]=$this->agent($owner);$version->contractVersion->allowed_actions=['zigo.track_shipment'];$version->contractVersion->save();$this->ready($owner,$agent,'Rastrea envíos.');$this->logisticsCatalog($tenant);[$operation]=$this->authoritativeQuote($tenant);$operation->update(['status'=>'confirmed','provider'=>'ZIGO_LOCAL','service_code'=>'TERRESTRE']);$shipment=app(\App\Domain\Shipping\Local\LocalShipmentService::class)->create($tenant,$operation,['sender'=>['name'=>'A'],'recipient'=>['name'=>'B'],'package'=>['type'=>'caja','weight'=>3],'pricing'=>['final_price'=>179]]);$this->publishForWebchat($agent,$version);$channel=$this->whatsappChannel($tenant,$owner,$agent);$pass=0;Http::fake(function($request)use(&$pass,$shipment){if(str_contains($request->url(),'graph.facebook.com'))return Http::response(['messages'=>[['id'=>'wamid.out.track']]],200);$pass++;$output=$pass===1?['answer'=>'Procesando.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false,'action_request'=>['action_key'=>'zigo.track_shipment','arguments'=>['shipment_reference'=>$shipment->uuid]]]:['answer'=>'Rastreo listo.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false];return Http::response($this->response($output),200);});$this->processWhatsApp($channel,'wamid.in.track','5218000000002','Rastrea');$this->assertSame('succeeded',ActionRun::latest('id')->firstOrFail()->status->value);$this->assertSame('sent',WhatsAppDelivery::latest('id')->firstOrFail()->status);$this->assertSame(2,$pass);
+    }
+
+    public function test_whatsapp_handoff_human_delivery_and_lead_outcome_reuse_existing_cores(): void
+    {
+        [$tenant,$owner]=$this->authorized('whatsapp-handoff');[$agent,$version]=$this->agent($owner);$version->contractVersion->outcome_policy=['lead'=>['allowed_fields'=>['name','phone'],'required_fields'=>['name','phone']],'outcomes'=>['valid_lead','resolved_consultation']];$version->contractVersion->save();$this->ready($owner,$agent,'Atiende y escala solicitudes.');$this->publishForWebchat($agent,$version);$channel=$this->whatsappChannel($tenant,$owner,$agent);$model=0;Http::fake(function($request)use(&$model){if(str_contains($request->url(),'graph.facebook.com'))return Http::response(['messages'=>[['id'=>'wamid.out.'.uniqid()]]],200);$model++;return Http::response($this->response(['answer'=>'Una persona continuará la atención.','citation_ids'=>['K1'],'confidence'=>'medium','needs_handoff'=>true,'handoff_reason'=>'human_requested','lead_candidate'=>null,'resolved_candidate'=>false]),200);});$this->processWhatsApp($channel,'wamid.handoff.1','5218111111111','Atiende y escala solicitudes');$conversation=Conversation::where('channel','whatsapp')->firstOrFail();$this->assertSame(ConversationStatus::HandoffRequested,$conversation->fresh()->status);$this->assertDatabaseCount('ai_human_handoffs',1);$handoff=HumanHandoff::firstOrFail();app(TakeHumanHandoffService::class)->take($owner,$handoff);$this->processWhatsApp($channel,'wamid.handoff.2','5218111111111','¿Sigue ahí?');$this->assertSame(1,$model);$this->assertSame(2,ConversationMessage::where('role','user')->count());$human=app(SendHumanConversationMessageService::class)->send($owner,$conversation->fresh(),HumanConversationMessageData::from('Sí, continúo contigo.'));app(\App\Domain\AI\Channels\WhatsApp\Services\DeliverWhatsAppHumanMessageService::class)->deliver($conversation->fresh(),$human);$this->assertSame('sent',WhatsAppDelivery::where('conversation_message_id',$human->id)->firstOrFail()->status);
+    }
+
+    public function test_whatsapp_live_turn_reuses_lead_and_outcome_core_idempotently(): void
+    {
+        [$tenant, $owner] = $this->authorized('whatsapp-lead-outcome');
+        [$agent, $version] = $this->agent($owner);
+        $version->contractVersion->outcome_policy = [
+            'lead' => ['allowed_fields' => ['name', 'phone'], 'required_fields' => ['name', 'phone']],
+            'outcomes' => ['valid_lead', 'resolved_consultation'],
+        ];
+        $version->contractVersion->save();
+        $this->ready($owner, $agent, 'Registro de contacto resuelto para Ana y su teléfono.');
+        $this->publishForWebchat($agent, $version);
+        $channel = $this->whatsappChannel($tenant, $owner, $agent);
+        $modelCalls = 0;
+        Http::fake(function ($request) use (&$modelCalls) {
+            if (str_contains($request->url(), 'graph.facebook.com')) {
+                return Http::response(['messages' => [['id' => 'wamid.out.lead']]], 200);
+            }
+            $modelCalls++;
+            return Http::response($this->response([
+                'answer' => 'Contacto registrado y consulta resuelta.',
+                'citation_ids' => ['K1'],
+                'confidence' => 'high',
+                'needs_handoff' => false,
+                'handoff_reason' => 'none',
+                'lead_candidate' => ['fields' => [['key' => 'name', 'value' => 'Ana'], ['key' => 'phone', 'value' => '5218111111111']]],
+                'resolved_candidate' => true,
+            ]), 200);
+        });
+
+        $receipt = $this->whatsappReceipt($channel, 'wamid.lead.1', '5218111111111', 'Registro de contacto resuelto para Ana y su teléfono');
+        app(ProcessWhatsAppInboundService::class)->process($receipt->id);
+        app(ProcessWhatsAppInboundService::class)->process($receipt->id);
+
+        $this->assertSame(1, $modelCalls);
+        $this->assertDatabaseCount('ai_leads', 1);
+        $this->assertDatabaseCount('ai_outcome_events', 2);
+        $this->assertDatabaseCount('ai_conversation_messages', 2);
+    }
+
+    public function test_whatsapp_disable_entitlement_window_and_ambiguous_delivery_fail_closed(): void
+    {
+        [$tenant, $owner] = $this->authorized('whatsapp-boundaries');
+        [$agent, $version] = $this->agent($owner);
+        $this->ready($owner, $agent, 'Consulta operativa del canal WhatsApp.');
+        $this->publishForWebchat($agent, $version);
+        $channel = $this->whatsappChannel($tenant, $owner, $agent);
+        $modelCalls = 0;
+        $providerCalls = 0;
+        Http::fake(function ($request) use (&$modelCalls, &$providerCalls) {
+            if (str_contains($request->url(), 'graph.facebook.com')) {
+                $providerCalls++;
+                throw new \Illuminate\Http\Client\ConnectionException('ambiguous');
+            }
+            $modelCalls++;
+            return Http::response($this->response([
+                'answer' => 'Respuesta operativa.', 'citation_ids' => ['K1'], 'confidence' => 'high',
+                'needs_handoff' => false, 'handoff_reason' => 'none', 'lead_candidate' => null,
+                'resolved_candidate' => false,
+            ]), 200);
+        });
+
+        $first = $this->whatsappReceipt($channel, 'wamid.boundary.1', '5218666666666', 'Consulta operativa del canal WhatsApp');
+        app(ProcessWhatsAppInboundService::class)->process($first->id);
+        app(ProcessWhatsAppInboundService::class)->process($first->id);
+        $this->assertSame(1, $modelCalls);
+        $this->assertSame(1, $providerCalls);
+        $this->assertSame('ambiguous', WhatsAppDelivery::firstOrFail()->status);
+
+        $channel->enabled = false;
+        $channel->save();
+        $this->processWhatsApp($channel, 'wamid.boundary.disabled', '5218666666666', 'Consulta operativa del canal WhatsApp');
+        $this->assertSame(1, $modelCalls);
+
+        $channel->enabled = true;
+        $channel->save();
+        \App\Domain\Network\Billing\Models\Entitlement::where('tenant_id', $tenant->id)->where('code', 'AI_CORE')->update(['is_enabled' => false]);
+        $this->processWhatsApp($channel, 'wamid.boundary.entitlement', '5218666666666', 'Consulta operativa del canal WhatsApp');
+        $this->assertSame(1, $modelCalls);
+
+        \App\Domain\Network\Billing\Models\Entitlement::where('tenant_id', $tenant->id)->where('code', 'AI_CORE')->update(['is_enabled' => true]);
+        $session = WhatsAppSession::firstOrFail();
+        $session->service_window_ends_at = now()->subSecond();
+        $session->save();
+        try {
+            app(\App\Domain\AI\Channels\WhatsApp\Services\WhatsAppDeliveryService::class)->text($channel, $session, ConversationMessage::where('role', 'assistant')->firstOrFail());
+            $this->fail('Expired service window accepted an outbound delivery.');
+        } catch (\DomainException) {
+            $this->addToAssertionCount(1);
+        }
+        $this->assertSame(1, $providerCalls);
+    }
+
+    public function test_whatsapp_turn_contention_keeps_distinct_receipt_recoverable(): void
+    {
+        Queue::fake();
+        [$tenant, $owner] = $this->authorized('whatsapp-contention');
+        [$agent, $version] = $this->agent($owner);
+        $this->ready($owner, $agent, 'Atención ordenada de mensajes concurrentes.');
+        $this->publishForWebchat($agent, $version);
+        $channel = $this->whatsappChannel($tenant, $owner, $agent);
+        $modelCalls = 0;
+        Http::fake(function ($request) use (&$modelCalls) {
+            if (str_contains($request->url(), 'graph.facebook.com')) return Http::response(['messages' => [['id' => 'wamid.out.contention']]], 200);
+            $modelCalls++;
+            return Http::response($this->response(['answer' => 'Mensaje atendido.', 'citation_ids' => ['K1'], 'confidence' => 'high', 'needs_handoff' => false, 'handoff_reason' => 'none', 'lead_candidate' => null, 'resolved_candidate' => false]), 200);
+        });
+        $this->processWhatsApp($channel, 'wamid.contention.a', '5218555555555', 'Atención ordenada de mensajes concurrentes');
+        $conversation = Conversation::where('channel', 'whatsapp')->firstOrFail();
+        DB::table('ai_conversations')->where('id', $conversation->id)->update(['turn_in_progress' => true, 'next_sequence' => 5]);
+        $activeUser = new ConversationMessage;
+        $activeUser->conversation_id = $conversation->id;
+        $activeUser->sequence = 3;
+        $activeUser->role = ConversationMessageRole::User;
+        $activeUser->status = ConversationMessageStatus::Completed;
+        $activeUser->content = 'Turno activo';
+        $activeUser->completed_at = now();
+        $activeUser->save();
+        $activeAssistant = new ConversationMessage;
+        $activeAssistant->conversation_id = $conversation->id;
+        $activeAssistant->sequence = 4;
+        $activeAssistant->role = ConversationMessageRole::Assistant;
+        $activeAssistant->status = ConversationMessageStatus::Pending;
+        $activeAssistant->content = null;
+        $activeAssistant->needs_handoff = false;
+        $activeAssistant->save();
+        $receipt = $this->whatsappReceipt($channel, 'wamid.contention.b', '5218555555555', 'Atención ordenada de mensajes concurrentes');
+        app(ProcessWhatsAppInboundService::class)->process($receipt->id);
+        $this->assertSame('received', $receipt->fresh()->status);
+        $this->assertSame('turn_waiting', $receipt->fresh()->safe_error_code);
+        $this->assertSame(1, $modelCalls);
+        Queue::assertPushed(\App\Domain\AI\Channels\WhatsApp\Jobs\ProcessWhatsAppInboundJob::class, 1);
+        $authorized = app(AiLifecycleAuthorization::class)->authorize($owner);
+        DB::transaction(function () use ($activeAssistant, $conversation, $authorized) {
+            $activeAssistant->fresh()->fail($authorized, 'test_turn_released');
+            $conversation->fresh()->finishTurn($authorized, false);
+        });
+        app(ProcessWhatsAppInboundService::class)->process($receipt->id);
+        $this->assertSame('succeeded', $receipt->fresh()->status);
+        $this->assertSame(2, $modelCalls);
+    }
+
+    private function processWhatsApp(WhatsAppChannel$c,string$id,string$from,string$text):void{app(ProcessWhatsAppInboundService::class)->process($this->whatsappReceipt($c,$id,$from,$text)->id);}
+    private function whatsappReceipt(WhatsAppChannel$c,string$id,string$from,string$text):WhatsAppInboundReceipt{$r=new WhatsAppInboundReceipt;$r->tenant_id=$c->tenant_id;$r->whatsapp_channel_id=$c->id;$r->provider_message_id=$id;$r->event_type='text';$r->status='received';$r->payload_encrypted=['provider_message_id'=>$id,'event_type'=>'text','from'=>$from,'profile_name'=>'Persona','text'=>$text];$r->save();return$r;}
+    private function whatsappChannel(Tenant$t,User$owner,Agent$a):WhatsAppChannel{$c=new WhatsAppChannel;$c->tenant_id=$t->id;$c->agent_id=$a->id;$c->enabled=true;$c->phone_number_id='pn_test';$c->created_by_user_id=$owner->id;$c->setAccessToken('meta-test-token');$c->setAppSecret('meta-test-secret');$c->setVerifyToken('verify-test-token');$c->save();return$c;}
+    private function version(User$owner,Agent$agent,AgentContractVersion$c1):AgentVersion{$c2=$c1->replicate(['uuid']);$c2->version_number=((int)$c1->version_number)+1;$c2->status=AgentContractVersionStatus::Accepted;$c2->save();$v1=$agent->versions()->latest('version_number')->firstOrFail();$v2=$v1->replicate(['uuid']);$v2->version_number=((int)$v1->version_number)+1;$v2->agent_contract_version_id=$c2->id;$v2->status=AgentVersionStatus::Draft;$v2->save();return$v2;}
+
     private function startWebchat(WebchatChannel$channel):string{return$this->withHeader('Origin','https://cliente.test')->postJson('/api/ai/webchat/'.$channel->public_key.'/sessions',[])->assertOk()->json('session_token');}
     private function webchatMessage(WebchatChannel$channel,string$token,string$client,string$message){return$this->withHeaders(['Origin'=>'https://cliente.test','Authorization'=>'Bearer '.$token])->postJson('/api/ai/webchat/'.$channel->public_key.'/messages',['client_message_id'=>$client,'message'=>$message]);}
     private function webchatChannel(Tenant$tenant,User$owner,Agent$agent):WebchatChannel{$channel=new WebchatChannel;$channel->tenant_id=$tenant->id;$channel->agent_id=$agent->id;$channel->enabled=true;$channel->display_name='Asistente';$channel->welcome_message='Hola';$channel->primary_color='#2563EB';$channel->launcher_label='Chat';$channel->allowed_origins=['https://cliente.test'];$channel->created_by_user_id=$owner->id;$channel->save();return$channel;}
@@ -742,7 +926,7 @@ $evil=$this->withHeaders(['Origin'=>'https://evil.test'])->postJson("/api/ai/web
 
     private function logisticsEntitlement(Tenant $tenant,string $code):void
     {
-        $module=Module::firstOrCreate(['code'=>$code],['name'=>$code,'type'=>'core','is_active'=>true,'sort_order'=>2]);$subscription=Subscription::where('tenant_id',$tenant->id)->firstOrFail();Entitlement::firstOrCreate(['subscription_id'=>$subscription->id,'code'=>$code],['tenant_id'=>$tenant->id,'module_id'=>$module->id,'is_enabled'=>true,'source'=>'plan']);
+        $module=Module::firstOrCreate(['code'=>$code],['name'=>$code,'type'=>'core','is_active'=>true,'sort_order'=>2]);$subscription=Subscription::where('tenant_id',$tenant->id)->firstOrFail();Entitlement::firstOrCreate(['subscription_id'=>$subscription->id,'code'=>$code],['tenant_id'=>$tenant->id,'module_id'=>$module->id,'is_enabled'=>true,'source'=>'plan']);$this->assertTrue(app(\App\Domain\Network\Billing\EntitlementService::class)->has($tenant,$code));
     }
 
     private function logisticsCatalog(Tenant $tenant):LocalShippingService

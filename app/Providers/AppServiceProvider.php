@@ -11,6 +11,8 @@ use App\Domain\Network\Commerce\Contracts\PlatformPaymentProvider;
 use App\Domain\Network\Commerce\MercadoPagoPlatformPaymentProvider;
 use App\Domain\Shipping\Local\Routing\{GoogleRoutesDistanceProvider,RouteDistanceProvider};
 use App\Domain\AI\Actions\ActionRegistry;
+use App\Domain\AI\Channels\WhatsApp\Contracts\WhatsAppProvider;
+use App\Infrastructure\WhatsApp\MetaCloudWhatsAppProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -26,6 +28,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(PlatformPaymentProvider::class, MercadoPagoPlatformPaymentProvider::class);
         $this->app->bind(RouteDistanceProvider::class, GoogleRoutesDistanceProvider::class);
         $this->app->singleton(ActionRegistry::class, fn ($app) => new ActionRegistry($app->make(\App\Domain\Network\Billing\EntitlementService::class)));
+        $this->app->bind(WhatsAppProvider::class, MetaCloudWhatsAppProvider::class);
     }
 
     /**

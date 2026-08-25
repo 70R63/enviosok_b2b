@@ -57,6 +57,7 @@ class RouteServiceProvider extends ServiceProvider
             RateLimiter::for('ai-webchat-'.$operation, fn (Request $request) => Limit::perMinute((int) config('ai.webchat.'.$setting))
                 ->by(hash('sha256',(string)$request->route('publicKey').'|'.$request->ip().'|'.($operation==='start'?'':(string)$request->bearerToken()))));
         }
+        RateLimiter::for('ai-whatsapp-webhook',fn(Request$request)=>Limit::perMinute((int)config('ai.whatsapp.runtime_per_minute',30))->by(hash('sha256',(string)$request->route('channelKey').'|'.$request->ip())));
 
         RateLimiter::for('onboarding-checkout', function (Request $request) {
             return Limit::perMinute(10)

@@ -26,6 +26,7 @@ use App\Http\Controllers\Tenant\AiKnowledgeController;
 use App\Http\Controllers\Tenant\AiAgentKnowledgeController;
 use App\Http\Controllers\Tenant\AiKnowledgeIndexController;
 use App\Http\Controllers\Tenant\AiWebchatController;
+use App\Http\Controllers\Tenant\AiWhatsAppController;
 use App\Http\Controllers\Tenant\TenantAuthController;
 use App\Http\Controllers\Tenant\OwnerActivationController;
 use App\Http\Controllers\Tenant\TenantSetupController;
@@ -301,6 +302,8 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
                 Route::get('/ai-agents/{agent}/channels/webchat', [AiWebchatController::class, 'show'])->name('ai-agents.webchat.show');
                 Route::put('/ai-agents/{agent}/channels/webchat', [AiWebchatController::class, 'save'])->middleware('throttle:10,1')->name('ai-agents.webchat.update');
                 Route::post('/ai-agents/{agent}/channels/webchat/rotate', [AiWebchatController::class, 'rotate'])->middleware('throttle:6,1')->name('ai-agents.webchat.rotate');
+                Route::get('/ai-agents/{agent}/channels/whatsapp', [AiWhatsAppController::class, 'show'])->name('ai-agents.whatsapp.show');
+                Route::put('/ai-agents/{agent}/channels/whatsapp', [AiWhatsAppController::class, 'save'])->middleware('throttle:10,1')->name('ai-agents.whatsapp.update');
                 Route::get('/ai-agents/{agent}/simulator', [\App\Http\Controllers\Tenant\AiSimulatorController::class, 'show'])->name('ai-agents.simulator.show');
                 Route::post('/ai-agents/{agent}/simulator/scenarios', [\App\Http\Controllers\Tenant\AiSimulatorController::class, 'store'])->middleware('throttle:10,1')->name('ai-agents.simulator.scenarios.store');
                 Route::put('/ai-agents/{agent}/simulator/scenarios/{scenario}', [\App\Http\Controllers\Tenant\AiSimulatorController::class, 'update'])->middleware('throttle:10,1')->name('ai-agents.simulator.scenarios.update');

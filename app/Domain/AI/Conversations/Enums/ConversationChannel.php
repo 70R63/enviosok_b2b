@@ -6,4 +6,5 @@ enum ConversationChannel: string
 {
     case InternalTest = 'internal_test';
     case Webchat = 'webchat';
+    case WhatsApp = 'whatsapp';
 }

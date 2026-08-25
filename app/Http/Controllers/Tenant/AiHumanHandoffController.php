@@ -13,6 +13,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Tenant\CloseConversationRequest;
 use App\Http\Requests\Tenant\SendHumanConversationMessageRequest;
 use App\Http\Support\AiLaunchpadHttpGate;
+use App\Domain\AI\Channels\WhatsApp\Services\DeliverWhatsAppHumanMessageService;
 
 final class AiHumanHandoffController extends Controller
 {
@@ -36,12 +37,13 @@ final class AiHumanHandoffController extends Controller
         return redirect()->route('tenant.admin.ai-conversations.show', $handoff->conversation);
     }
 
-    public function send(SendHumanConversationMessageRequest $request, Conversation $conversation, AiLaunchpadHttpGate $gate, SendHumanConversationMessageService $service)
+    public function send(SendHumanConversationMessageRequest $request, Conversation $conversation, AiLaunchpadHttpGate $gate, SendHumanConversationMessageService $service, DeliverWhatsAppHumanMessageService $whatsapp)
     {
         $gate->ensure($request->user());
         $gate->assertCurrentTenant($conversation);
         try {
-            $service->send($request->user(), $conversation, $request->messageData());
+            $message=$service->send($request->user(), $conversation, $request->messageData());
+            $whatsapp->deliver($conversation, $message);
         } catch (\DomainException) {
             return back()->withErrors(['message' => 'Sólo la persona asignada puede responder.']);
         }

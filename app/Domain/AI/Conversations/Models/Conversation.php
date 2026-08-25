@@ -8,6 +8,7 @@ use App\Domain\AI\Agents\Models\Agent;
 use App\Domain\AI\Agents\Models\AgentVersion;
 use App\Domain\AI\Conversations\Enums\ConversationChannel;
 use App\Domain\AI\Conversations\Enums\ConversationStatus;
+use App\Domain\AI\Conversations\Exceptions\ConversationTurnBusyException;
 use App\Domain\AI\Handoff\Models\HumanHandoff;
 use App\Domain\AI\Leads\Models\Lead;
 use App\Domain\AI\Leads\Models\OutcomeEvent;
@@ -42,10 +43,10 @@ final class Conversation extends AiTenantModel
         parent::booted();
         self::creating(function (self $m) {
             $m->uuid ??= (string) Str::uuid();
-            if (! in_array($m->channel, [ConversationChannel::InternalTest, ConversationChannel::Webchat], true) || $m->status !== ConversationStatus::Open || $m->turn_in_progress || $m->next_sequence !== 1) {
+            if (! in_array($m->channel, [ConversationChannel::InternalTest, ConversationChannel::Webchat, ConversationChannel::WhatsApp], true) || $m->status !== ConversationStatus::Open || $m->turn_in_progress || $m->next_sequence !== 1) {
                 throw new \DomainException('Invalid initial conversation state.');
             }$version = AgentVersion::query()->where('agent_id', $m->agent_id)->findOrFail($m->agent_version_id);
-            $allowed = $m->channel === ConversationChannel::Webchat
+            $allowed = in_array($m->channel, [ConversationChannel::Webchat, ConversationChannel::WhatsApp], true)
                 ? [AgentVersionStatus::Published, AgentVersionStatus::Retired]
                 : [AgentVersionStatus::Draft, AgentVersionStatus::Testing];
             if (! in_array($version->status, $allowed, true)) {
@@ -105,7 +106,7 @@ final class Conversation extends AiTenantModel
         if ($this->originalAiStatus() !== ConversationStatus::Open->value) {
             throw new \DomainException('Only an open AI conversation accepts AI turns.');
         }if ($this->turn_in_progress) {
-            throw new \DomainException('A conversation turn is already in progress.');
+            throw new ConversationTurnBusyException('A conversation turn is already in progress.');
         }$user = $this->next_sequence;
         $assistant = $user + 1;
         $this->persistNamedLifecycle(['turn_in_progress', 'next_sequence'], function () use ($assistant) {
@@ -149,6 +150,18 @@ final class Conversation extends AiTenantModel
         if ($this->status !== ConversationStatus::HumanActive || $this->turn_in_progress) {
             throw new \DomainException('Conversation is not available for a human message.');
         } $sequence = $this->next_sequence;
+        $this->persistNamedLifecycle(['next_sequence'], fn () => $this->next_sequence = $sequence + 1);
+
+        return $sequence;
+    }
+
+    public function reserveVisitorMessageDuringHumanHandoff(AuthorizedAiLifecycleActor $a): int
+    {
+        $this->assertLifecycleActor($a);
+        if ($this->status !== ConversationStatus::HumanActive || $this->turn_in_progress) {
+            throw new \DomainException('Conversation is not accepting a visitor message during human handoff.');
+        }
+        $sequence = $this->next_sequence;
         $this->persistNamedLifecycle(['next_sequence'], fn () => $this->next_sequence = $sequence + 1);
 
         return $sequence;
