@@ -1,7 +1,7 @@
-@extends('layouts.tenant-admin')
+@extends('tenant.admin.layout')
 @section('title','WhatsApp · '.$agent->name)
 @section('content')
-<section class="card"><h1>WhatsApp</h1><p>Conecta un número de Meta WhatsApp Cloud API para conversaciones individuales con el Agent publicado.</p>
+<section class="card"><div class="inline"><a class="z-btn z-btn--ghost" href="{{ route('tenant.admin.ai-agents.show',$agent) }}">Volver al agente</a></div><h1>WhatsApp</h1><p>Conecta un número de Meta WhatsApp Cloud API para conversaciones individuales con el Agent publicado.</p>
 @if($errors->any())<p role="alert">{{ $errors->first() }}</p>@endif
 @if($channel)<p>Webhook: <code>{{ url('/api/ai/whatsapp/'.$channel->webhook_key.'/webhook') }}</code></p>@endif
 @if($newVerifyToken)<p>Token de verificación nuevo (se muestra una sola vez): <code>{{ $newVerifyToken }}</code></p>@endif
