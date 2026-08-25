@@ -8,6 +8,7 @@ use App\Domain\Network\Billing\SaasSubscriptionLifecycleService;
 use App\Domain\Network\Billing\SubscriptionService;
 use App\Domain\Network\Commerce\Models\TenantOperationAllowance;
 use App\Domain\Network\Commerce\Models\TenantSaasOrder;
+use App\Domain\AI\Commerce\AiCommercialActivationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
@@ -17,6 +18,7 @@ final class TenantSaasActivationService
     public function __construct(
         private SubscriptionService $subscriptions,
         private SaasSubscriptionLifecycleService $lifecycle,
+        private AiCommercialActivationService $aiProducts,
     ) {}
 
     public function activate(TenantSaasOrder $order): TenantSaasOrder
@@ -33,7 +35,10 @@ final class TenantSaasActivationService
 
             $snapshot = $locked->purchase_snapshot;
             $type = $snapshot['type'];
-            if ($type === 'PLAN') {
+            if ($this->aiProducts->applies($locked)) {
+                $subscription = $this->subscriptions->currentForTenant($locked->tenant) ?? throw new RuntimeException('SUBSCRIPTION_REQUIRED');
+                $this->aiProducts->apply($locked, $subscription);
+            } elseif ($type === 'PLAN') {
                 $this->subscriptions->activatePaidPlan($locked->tenant, (int) $snapshot['plan_id'], $snapshot['billing_type'], $locked->created_by_user_id);
             } elseif ($type === 'MODULE' || $type === 'ADDON') {
                 $subscription = $this->subscriptions->currentForTenant($locked->tenant) ?? throw new RuntimeException('SUBSCRIPTION_REQUIRED');
