@@ -18,6 +18,7 @@ use App\Domain\AI\Conversations\Models\{Conversation,ConversationMessage};
 use App\Domain\AI\Conversations\Services\SendInternalConversationMessageService;
 use App\Domain\Network\Billing\EntitlementService;
 use App\Domain\Network\Tenancy\Models\Tenant;
+use App\Domain\AI\Usage\AiCapacityService;
 use App\Models\User;
 use Illuminate\Support\Facades\{DB,Queue,RateLimiter};
 
@@ -31,6 +32,7 @@ final class ProcessWhatsAppInboundService
         private AiLifecycleAuthorization $authorization,
         private EntitlementService $entitlements,
         private WhatsAppDeliveryStatusPolicy $statusPolicy,
+        private AiCapacityService $capacity,
     ) {}
 
     public function process(int $id): void
@@ -102,18 +104,20 @@ final class ProcessWhatsAppInboundService
     private function authorizeTurn(int $channelId, int $sessionId, int $conversationId): void
     {
         $candidate = WhatsAppChannel::query()->findOrFail($channelId);
-        Agent::query()->lockForUpdate()->findOrFail($candidate->agent_id);
+        $tenant = Tenant::query()->findOrFail($candidate->tenant_id);
+        $this->capacity->lockAuthority($tenant);
+        $agent = Agent::query()->lockForUpdate()->findOrFail($candidate->agent_id);
         $channel = WhatsAppChannel::query()->lockForUpdate()->findOrFail($channelId);
         $session = WhatsAppSession::query()->where('whatsapp_channel_id', $channel->id)->lockForUpdate()->findOrFail($sessionId);
-        if (! $channel->enabled || (int) $session->conversation_id !== $conversationId || ! $session->insideWindow()) throw new \DomainException('channel_unavailable');
-        $tenant = Tenant::query()->findOrFail($channel->tenant_id);
-        $this->entitlements->lockCurrentAuthority($tenant);
+        if (! $channel->enabled || (int) $channel->tenant_id !== (int) $tenant->id || (int) $channel->agent_id !== (int) $agent->id || (int) $session->tenant_id !== (int) $tenant->id || (int) $session->conversation_id !== $conversationId || ! $session->insideWindow()) throw new \DomainException('channel_unavailable');
         if (! $this->entitlements->has($tenant, (string) config('ai.entitlement.module_code', 'AI_CORE'))) throw new \DomainException('channel_unavailable');
     }
 
     private function session(WhatsAppChannel $candidate, string $contact, ?string $name): WhatsAppSession
     {
         return DB::transaction(function () use ($candidate, $contact, $name) {
+            $tenant = Tenant::query()->findOrFail($candidate->tenant_id);
+            $this->capacity->lockAuthority($tenant);
             $agent = Agent::query()->lockForUpdate()->findOrFail($candidate->agent_id);
             $channel = WhatsAppChannel::query()->lockForUpdate()->findOrFail($candidate->id);
             if (! $channel->enabled) throw new \DomainException('channel_unavailable');
@@ -131,6 +135,7 @@ final class ProcessWhatsAppInboundService
             $conversation->next_sequence = 1;
             $conversation->created_by_user_id = $channel->created_by_user_id;
             $conversation->save();
+            $this->capacity->consume($tenant,AiCapacityService::MONTHLY_CONVERSATIONS,'conversation:'.$conversation->id);
             $session = new WhatsAppSession;
             $session->tenant_id = $channel->tenant_id;
             $session->whatsapp_channel_id = $channel->id;

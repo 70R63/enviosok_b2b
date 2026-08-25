@@ -6,6 +6,7 @@ use App\Domain\AI\Agents\Models\{Agent,AgentContract,AgentContractVersion,AgentV
 use App\Domain\AI\Agents\Services\{CreateAgentDraftService,UpdateAgentContractActionsService};
 use App\Domain\AI\Support\Exceptions\{AiDisabledException,AiEntitlementException,AiTenantContextException,AiTenantMismatchException};
 use App\Domain\AI\Support\Exceptions\AiImmutableAttributeException;
+use App\Domain\AI\Usage\AiCapacityService;
 use App\Domain\Network\Billing\Models\{Entitlement,Subscription};
 use App\Domain\Network\Catalog\Models\{Module,Plan};
 use App\Domain\Network\Tenancy\Models\{Tenant,TenantMembership};
@@ -71,6 +72,7 @@ final class AiAgentDomainTest extends TestCase
 
     public function test_code_is_unique_per_tenant_but_reusable_across_tenants():void
     {
+        config(['ai.capacity.defaults.MAX_AGENTS' => 100]);
         [$first,$firstActor]=$this->authorizedTenant('code-a');$this->service()->create($firstActor,$this->draft('shared'));
         try{$this->service()->create($firstActor,$this->draft('shared'));$this->fail('Duplicate code should fail.');}catch(QueryException){$this->assertSame(1,Agent::count());}
         [$second,$secondActor]=$this->authorizedTenant('code-b');$this->service()->create($secondActor,$this->draft('shared'));$this->assertSame(1,Agent::count());
@@ -93,6 +95,7 @@ final class AiAgentDomainTest extends TestCase
 
     public function test_cross_tenant_contract_and_cross_agent_contract_version_are_rejected():void
     {
+        config(['ai.capacity.defaults.MAX_AGENTS' => 100]);
         [$first,$actorA]=$this->authorizedTenant('cross-a');$createdA=$this->service()->create($actorA,$this->draft('cross-a'));
         [$second,$actorB]=$this->authorizedTenant('cross-b');$createdB=$this->service()->create($actorB,$this->draft('cross-b'));
         app(TenantContext::class)->set($first);
@@ -129,6 +132,7 @@ final class AiAgentDomainTest extends TestCase
 
     public function test_transaction_rolls_back_on_duplicate_failure():void
     {
+        config(['ai.capacity.defaults.MAX_AGENTS' => 100]);
         [$tenant,$actor]=$this->authorizedTenant('rollback');$this->service()->create($actor,$this->draft('rollback'));
         $before=['agents'=>DB::table('ai_agents')->count(),'contracts'=>DB::table('ai_agent_contracts')->count(),'contract_versions'=>DB::table('ai_agent_contract_versions')->count(),'agent_versions'=>DB::table('ai_agent_versions')->count()];
         try{$this->service()->create($actor,$this->draft('rollback'));$this->fail('Duplicate should fail.');}catch(QueryException){}
@@ -167,6 +171,7 @@ final class AiAgentDomainTest extends TestCase
 
     public function test_save_and_bulk_writes_cannot_change_identity_or_relations():void
     {
+        config(['ai.capacity.defaults.MAX_AGENTS' => 100]);
         [$tenant,$actor]=$this->authorizedTenant('immutable-all');$one=$this->service()->create($actor,$this->draft('immutable-one'));$two=$this->service()->create($actor,$this->draft('immutable-two'));
         foreach([
             [$one->agent,'created_by_user_id',$actor->id+100],[$one->contract,'agent_id',$two->agent->id],[$one->contractVersion,'agent_contract_id',$two->contract->id],[$one->contractVersion,'version_number',2],[$one->agentVersion,'agent_id',$two->agent->id],[$one->agentVersion,'agent_contract_version_id',$two->contractVersion->id],[$one->agentVersion,'version_number',2],
@@ -187,6 +192,7 @@ final class AiAgentDomainTest extends TestCase
 
     public function test_all_cross_tenant_and_cross_agent_links_are_rejected():void
     {
+        config(['ai.capacity.defaults.MAX_AGENTS' => 100]);
         [$first,$actorA]=$this->authorizedTenant('links-a');$a=$this->service()->create($actorA,$this->draft('links-a'));
         [$second,$actorB]=$this->authorizedTenant('links-b');$b=$this->service()->create($actorB,$this->draft('links-b'));app(TenantContext::class)->set($first);
         foreach([
@@ -213,6 +219,26 @@ final class AiAgentDomainTest extends TestCase
         $this->assertSame([0,0,0,0],[DB::table('ai_agents')->count(),DB::table('ai_agent_contracts')->count(),DB::table('ai_agent_contract_versions')->count(),DB::table('ai_agent_versions')->count()]);
     }
 
+    public function test_agent_limit_uses_real_creation_service():void{config(['ai.capacity.defaults.MAX_AGENTS'=>1]);[$tenant,$actor]=$this->authorizedTenant('capacity-create');$this->service()->create($actor,$this->draft('CAPACITY_A'));$this->assertSame(1,Agent::count());try{$this->service()->create($actor,$this->draft('CAPACITY_B'));$this->fail('Second Agent must exceed capacity.');}catch(\App\Domain\AI\Usage\Exceptions\AiCapacityExceededException){$this->addToAssertionCount(1);}$this->assertSame(1,Agent::count());}
+
+    public function test_historical_ai_core_defaults_are_real_and_block_new_agent(): void
+    {
+        [$tenant, $actor] = $this->authorizedTenant('legacy-defaults');
+        $historical = $this->standaloneAgent($actor, 'historical');
+        $capacity = app(AiCapacityService::class);
+        $this->assertSame([1, 1, 0, 1000, 100, 250], [
+            $capacity->limit($tenant, AiCapacityService::MAX_AGENTS),
+            $capacity->limit($tenant, AiCapacityService::MAX_WEBCHAT_CHANNELS),
+            $capacity->limit($tenant, AiCapacityService::MAX_WHATSAPP_CHANNELS),
+            $capacity->limit($tenant, AiCapacityService::MONTHLY_RUNTIME_UNITS),
+            $capacity->limit($tenant, AiCapacityService::MONTHLY_ACTION_RUNS),
+            $capacity->limit($tenant, AiCapacityService::MONTHLY_CONVERSATIONS),
+        ]);
+        $this->assertSame(1, $capacity->used($tenant, AiCapacityService::MAX_AGENTS));
+        try { $this->service()->create($actor, $this->draft('legacy-second')); $this->fail('Legacy capacity must block a second Agent.'); }
+        catch (\App\Domain\AI\Usage\Exceptions\AiCapacityExceededException) { $this->addToAssertionCount(1); }
+        $this->assertDatabaseHas('ai_agents', ['id' => $historical->id]);
+    }
     private function service():CreateAgentDraftService{return app(CreateAgentDraftService::class);}
     private function standaloneAgent(User$actor,string$code):Agent{$agent=new Agent();$agent->code=strtoupper($code);$agent->name=ucwords(str_replace('-',' ',$code));$agent->type=AgentType::Sales;$agent->status=AgentStatus::Draft;$agent->created_by_user_id=$actor->id;$agent->save();return$agent;}
     private function draft(string$code):CreateAgentDraftData{return new CreateAgentDraftData($code,'Sales Agent',null,AgentType::Sales,$this->contract(),$this->configuration());}

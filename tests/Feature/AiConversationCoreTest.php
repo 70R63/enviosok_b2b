@@ -75,8 +75,10 @@ final class AiConversationCoreTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:', 'ai.enabled' => true, 'ai.default_provider' => 'openai', 'ai.providers.openai.api_key' => 'test-secret', 'ai.providers.openai.model' => 'gpt-5.6-luna', 'app.key' => 'base64:'.base64_encode(str_repeat('c', 32))]);
+        config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:', 'ai.enabled' => true, 'ai.default_provider' => 'openai', 'ai.providers.openai.api_key' => 'test-secret', 'ai.providers.openai.model' => 'gpt-5.6-luna', 'app.key' => 'base64:'.base64_encode(str_repeat('c', 32)), 'ai.capacity.defaults' => ['MAX_AGENTS'=>100,'MAX_WEBCHAT_CHANNELS'=>100,'MAX_WHATSAPP_CHANNELS'=>100,'MONTHLY_RUNTIME_UNITS'=>100000,'MONTHLY_ACTION_RUNS'=>100000,'MONTHLY_CONVERSATIONS'=>100000]]);
         $this->schema();
+        Schema::table('ai_runtime_runs', fn (Blueprint $table) => $table->string('execution_mode', 20)->default('live'));
+        (require base_path('database/migrations/2026_08_25_120000_create_ai_capacity_tables.php'))->up();
         (require base_path('database/migrations/2026_08_09_100000_create_local_shipping_foundation_tables.php'))->up();
         (require base_path('database/migrations/2026_08_20_100000_extend_local_shipping_for_tenant_logistics.php'))->up();
         (require base_path('database/migrations/2026_08_27_110000_add_provider_observability_to_ai_runtime_runs.php'))->up();
@@ -547,7 +549,7 @@ final class AiConversationCoreTest extends TestCase
     {
         [$tenant,$owner]=$this->httpTenant('zigo-guide-ambiguous','owner');$this->logisticsEntitlement($tenant,'SHIPPING');[$agent,$version]=$this->agent($owner);$version->contractVersion->allowed_actions=['zigo.create_shipment_guide'];$version->contractVersion->save();$this->ready($owner,$agent,'Crear guía con revisión humana si el resultado es ambiguo.');[$operation,$snapshot]=$this->authoritativeQuote($tenant);$arguments=['quote_reference'=>$operation->uuid,'option_reference'=>$snapshot->uuid,'sender'=>$this->guidePerson('A','8111111111','64000'),'recipient'=>$this->guidePerson('B','3311111111','44100'),'customer_reference'=>'ambiguous'];$calls=0;LocalShipment::creating(function()use(&$calls){$calls++;throw new \RuntimeException('Connection lost after create request.');});
         Http::fake(['api.openai.com/*'=>Http::sequence()->push($this->response(['answer'=>'Requiere confirmación.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false,'action_request'=>['action_key'=>'zigo.create_shipment_guide','arguments'=>$arguments]]),200)->push($this->response(['answer'=>'No pude confirmar el resultado; una persona debe revisarlo.','citation_ids'=>['K1'],'confidence'=>'low','needs_handoff'=>true,'handoff_reason'=>'policy_restriction','lead_candidate'=>null,'resolved_candidate'=>false]),200)]);
-        $conversation=app(StartInternalTestConversationService::class)->start($owner,$agent);app(SendInternalConversationMessageService::class)->send($owner,$conversation,SendConversationMessageData::from('Crear guía con revisión humana si el resultado es ambiguo.'));$action=ActionRun::firstOrFail();$base='http://zigo-guide-ambiguous.test/admin';$this->actingAs($owner)->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertRedirect();$this->assertSame('failed',$action->fresh()->status->value);$this->assertSame('action_failed',$action->fresh()->safe_error_code);$this->assertSame(1,$calls);$this->assertSame(0,LocalShipment::count());$this->assertSame(ConversationStatus::HandoffRequested,$conversation->fresh()->status);$this->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertSessionHasErrors('action');$this->assertSame(1,$calls);
+        $conversation=app(StartInternalTestConversationService::class)->start($owner,$agent);app(SendInternalConversationMessageService::class)->send($owner,$conversation,SendConversationMessageData::from('Crear guía con revisión humana si el resultado es ambiguo.'));$action=ActionRun::firstOrFail();$base='http://zigo-guide-ambiguous.test/admin';$this->actingAs($owner)->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertRedirect();$this->assertSame('failed',$action->fresh()->status->value);$this->assertSame('action_failed',$action->fresh()->safe_error_code);$this->assertSame(1,$calls);$this->assertSame(0,LocalShipment::count());$this->assertSame(ConversationStatus::Open,$conversation->fresh()->status);$this->assertSame(1,count(Http::recorded()));$this->assertSame('failed',RuntimeRun::where('purpose','post_action_synthesis')->firstOrFail()->status->value);$this->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertSessionHasErrors('action');$this->assertSame(1,$calls);
     }
 
     public function test_zigo_tracking_action_passes_through_runtime_and_can_handoff(): void
@@ -853,6 +855,23 @@ $evil=$this->withHeaders(['Origin'=>'https://evil.test'])->postJson("/api/ai/web
         Bus::fake();
         $i = app(RequestKnowledgeIndexingService::class)->request($u, $s, $v);
         app(BuildKnowledgeIndexService::class)->build($i->id);
+    }
+
+    public function test_internal_runtime_is_simulation_and_live_webchat_alone_consumes_quota(): void
+    {
+        [$tenant,$owner]=$this->authorized('usage-modes');[$agent,$version]=$this->agent($owner);$this->ready($owner,$agent,'Pregunta interna Atendemos con conocimiento.');
+        Http::fake(['api.openai.com/*'=>Http::response($this->response(['answer'=>'Respuesta interna.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none']),200)]);
+        $conversation=app(StartInternalTestConversationService::class)->start($owner,$agent);
+        app(SendInternalConversationMessageService::class)->send($owner,$conversation,SendConversationMessageData::from('Pregunta interna'));
+        $this->assertSame('simulation',RuntimeRun::firstOrFail()->execution_mode->value);
+        $this->assertSame(0,DB::table('network_usage_events')->where('metric','ai_runtime_units')->sum('quantity'));
+        $entitlement=Entitlement::where('tenant_id',$tenant->id)->where('code','AI_CORE')->firstOrFail();
+        app(\App\Domain\AI\Usage\AiCapacityProvisioningService::class)->override($entitlement,\App\Domain\AI\Usage\AiCapacityService::MONTHLY_RUNTIME_UNITS,1);
+        $this->publishForWebchat($agent,$version);$channel=$this->webchatChannel($tenant,$owner,$agent);$token=$this->startWebchat($channel);
+        Http::fake(['api.openai.com/*'=>Http::response($this->response(['answer'=>'Respuesta pública.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none']),200)]);
+        $this->webchatMessage($channel,$token,(string)\Illuminate\Support\Str::uuid(),'Pregunta pública')->assertOk();
+        $this->assertSame('live',RuntimeRun::latest('id')->firstOrFail()->execution_mode->value);
+        $this->assertSame(1,DB::table('network_usage_events')->where('metric','ai_runtime_units')->sum('quantity'));
     }
 
     private function authorized(string $s): array

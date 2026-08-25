@@ -1,0 +1,9 @@
+<?php
+namespace App\Domain\AI\Usage;
+use App\Domain\AI\Actions\Models\ActionRun;use App\Domain\AI\Runtime\Enums\AiExecutionMode;use App\Domain\AI\Runtime\Models\RuntimeRun;use App\Domain\Network\Billing\Models\UsageEvent;use App\Domain\Network\Tenancy\Models\Tenant;use Illuminate\Support\Facades\DB;
+final class MeteredRuntimeRunService{
+ public function __construct(private AiCapacityService$capacity){}
+ public function start(Tenant$t,AiExecutionMode$mode,callable$create):RuntimeRun{return DB::transaction(function()use($t,$mode,$create){$this->capacity->lockAuthority($t);$run=$create();if(!$run instanceof RuntimeRun||!$run->exists)throw new \LogicException('Runtime factory must persist a RuntimeRun.');if($mode===AiExecutionMode::Live)$this->capacity->consume($t,AiCapacityService::MONTHLY_RUNTIME_UNITS,'runtime_run:'.$run->id);return$run;});}
+ public function reserve(Tenant$t,RuntimeRun$run):void{DB::transaction(fn()=>$this->capacity->consume($t,AiCapacityService::MONTHLY_RUNTIME_UNITS,'runtime_run:'.$run->id));}
+ public function reservePostAction(Tenant$t,ActionRun$action,callable$create):RuntimeRun{return DB::transaction(function()use($t,$action,$create){$this->capacity->lockAuthority($t);$key='post_action_runtime:'.$action->id;$event=UsageEvent::query()->where('tenant_id',$t->id)->where('metric','ai_runtime_units')->where('idempotency_key',$key)->first();if($event){$runId=(int)($event->metadata['runtime_run_id']??0);if($runId<1)throw new \LogicException('Post-action Runtime reservation is inconsistent.');return RuntimeRun::query()->findOrFail($runId);}$run=$create();if(!$run instanceof RuntimeRun||!$run->exists)throw new \LogicException('Runtime factory must persist a RuntimeRun.');$this->capacity->consume($t,AiCapacityService::MONTHLY_RUNTIME_UNITS,$key,['runtime_run_id'=>$run->id,'action_run_id'=>$action->id]);return$run;});}
+}

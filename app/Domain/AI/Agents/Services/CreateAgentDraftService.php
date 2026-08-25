@@ -9,10 +9,12 @@ use App\Domain\Network\Tenancy\TenantAccessService;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
+use App\Domain\AI\Usage\AiCapacityService;
+use App\Domain\Network\Tenancy\Models\Tenant;
 use InvalidArgumentException;
 final class CreateAgentDraftService
 {
-    public function __construct(private AiFeatureGate$featureGate,private AiTenantBoundary$tenants,private AiEntitlementGate$entitlements,private TenantAccessService$access){}
+    public function __construct(private AiFeatureGate$featureGate,private AiTenantBoundary$tenants,private AiEntitlementGate$entitlements,private TenantAccessService$access,private AiCapacityService$capacity){}
     public function create(User$actor,CreateAgentDraftData$data):CreatedAgentDraft
     {
         $this->featureGate->ensureEnabled();$this->tenants->requireTenant();$this->entitlements->ensureAllowed();
@@ -21,6 +23,7 @@ final class CreateAgentDraftService
         if(!preg_match('/^[A-Z0-9][A-Z0-9_-]{1,79}$/',$code))throw new InvalidArgumentException('Agent code is invalid.');
         if($name===''||mb_strlen($name)>160)throw new InvalidArgumentException('Agent name is invalid.');
         return DB::transaction(function()use($actor,$data,$code,$name):CreatedAgentDraft{
+            $this->capacity->assertResourceAvailable(Tenant::query()->findOrFail($this->tenants->requireTenant()->id),AiCapacityService::MAX_AGENTS);
             $agent=new Agent();
             $agent->code=$code;$agent->name=$name;$agent->description=$data->description;$agent->type=$data->type;$agent->status=AgentStatus::Draft;$agent->created_by_user_id=$actor->id;$agent->save();
             $contract=new AgentContract();

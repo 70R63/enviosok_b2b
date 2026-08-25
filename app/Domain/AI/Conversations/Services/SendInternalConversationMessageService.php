@@ -19,11 +19,13 @@ use App\Domain\AI\Conversations\Models\ConversationMessageCitation;
 use App\Domain\AI\Handoff\Services\RequestHumanHandoffService;
 use App\Domain\AI\Leads\Services\RecordLeadOutcomeCandidatesService;
 use App\Domain\AI\Runtime\Models\RuntimeRun;
+use App\Domain\AI\Runtime\Enums\AiExecutionMode;
 use App\Domain\AI\Runtime\Services\GenerateAgentDraftResponseService;
 use App\Domain\AI\Tenancy\AiTenantBoundary;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use App\Domain\AI\Actions\Enums\ActionRunStatus;
+use App\Domain\AI\Actions\Models\ActionRun;
 use App\Domain\AI\Actions\Services\{ActionExecutor,GeneratePostActionResponseService};
 
 final class SendInternalConversationMessageService
@@ -70,7 +72,8 @@ final class SendInternalConversationMessageService
             return [$user, $assistant, $agent, $version, $history];
         });
         try {
-            $result = $this->runtime->generate($actor, $agent, $data->message, $version, $history);
+            $mode = in_array($conversation->channel, [ConversationChannel::Webchat, ConversationChannel::WhatsApp], true) ? AiExecutionMode::Live : AiExecutionMode::Simulation;
+            $result = $this->runtime->generate($actor, $agent, $data->message, $version, $history, $mode);
             if ($result->actionRequest) {
                 $run = RuntimeRun::query()->findOrFail((int) $result->runtimeRunId);
                 $user = DB::transaction(function () use ($authorized, $conversation, $user, $run) {
@@ -82,8 +85,18 @@ final class SendInternalConversationMessageService
                 });
                 $action = $this->actions->reserve($conversation, $user, $run, $result->actionRequest);
                 if ($action->status === ActionRunStatus::Requested) {
-                    $action = $this->actions->execute($action);
-                    $result = $this->postAction->generate($actor, $agent, $version, $action);
+                    $postActionRun = null;
+                    $action = $this->actions->execute($action, function (ActionRun $locked) use (&$postActionRun, $actor, $agent, $version, $mode): void {
+                        $postActionRun = $this->postAction->reserve($actor, $agent, $version, $locked, $mode);
+                    });
+                    if (! $postActionRun instanceof RuntimeRun) {
+                        throw new \LogicException('Post-action Runtime was not reserved.');
+                    }
+                    if ($action->status !== ActionRunStatus::Succeeded) {
+                        $this->postAction->failReserved($actor, $postActionRun);
+                        throw new \DomainException('Action execution failed.');
+                    }
+                    $result = $this->postAction->generateReserved($actor, $agent, $version, $action, $postActionRun);
                 }
             }
             [$leadCandidate, $resolvedCandidate] = [$result->leadCandidate, $result->resolvedCandidate];

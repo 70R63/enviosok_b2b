@@ -8,7 +8,7 @@
 @php($canUseAi=in_array($membership?->role??null,['owner','admin'],true)&&app(\App\Domain\Network\Billing\EntitlementService::class)->has($tenant,'AI_CORE'))
 @php($workspace=app(\App\Domain\Network\ProductShell\TenantWorkspaceResolver::class)->resolveForPresentation($tenant))
 @php($isAiWorkspace=$workspace===\App\Domain\Network\ProductShell\TenantWorkspace::ZigoAi)
-@php($productName=$isAiWorkspace?'ZIGO AI':'ZIGO')
+@php($productName=$isAiWorkspace?'Agentes IA':'ZIGO')
 <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>@yield('title','Administración') · {{ $branding?->brand_name??$tenant->name }}</title>
 <link rel="icon" href="{{ $faviconUrl }}"><link rel="stylesheet" href="{{ asset('css/zigo-design-system.css') }}?v={{ $designSystemVersion }}"><style>
 :root{--tenant-primary:{{ $safeColor($branding?->primary_color,'#1769E0') }};--tenant-secondary:{{ $safeColor($branding?->secondary_color,'#0B2445') }};--tenant-accent:{{ $safeColor($branding?->accent_color,'#168CFF') }}}

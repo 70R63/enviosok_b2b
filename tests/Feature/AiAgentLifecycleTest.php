@@ -8,6 +8,7 @@ use App\Domain\AI\Agents\Exceptions\{AgentContractNotAcceptedException,AgentVers
 use App\Domain\AI\Agents\Models\{Agent,AgentContractVersion,AgentLifecycleEvent,AgentVersion};
 use App\Domain\AI\Agents\Services\{AgentAggregateLifecycleService,AgentContractVersionLifecycleService,AgentVersionLifecycleService,CreateAgentDraftService,CreateAgentVersionService};
 use App\Domain\AI\Support\CanonicalJsonHasher;
+use App\Domain\AI\Usage\AiCapacityService;
 use App\Domain\AI\Support\Exceptions\{AiImmutableAttributeException,AiTenantContextException,AiTenantMismatchException};
 use App\Domain\AI\Support\Exceptions\{AiDisabledException,AiEntitlementException};
 use App\Domain\Network\Billing\Models\{Entitlement,Subscription};
@@ -23,7 +24,7 @@ use Tests\TestCase;
 
 final class AiAgentLifecycleTest extends TestCase
 {
-    protected function setUp():void{parent::setUp();config(['ai.enabled'=>true,'ai.entitlement.module_code'=>'AI_CORE']);$this->schema();app(TenantContext::class)->clear();}
+    protected function setUp():void{parent::setUp();config(['ai.enabled'=>true,'ai.entitlement.module_code'=>'AI_CORE','ai.capacity.defaults.MAX_AGENTS'=>100,'ai.capacity.defaults.MAX_WEBCHAT_CHANNELS'=>100,'ai.capacity.defaults.MAX_WHATSAPP_CHANNELS'=>100,'ai.capacity.defaults.MONTHLY_RUNTIME_UNITS'=>100000,'ai.capacity.defaults.MONTHLY_ACTION_RUNS'=>100000,'ai.capacity.defaults.MONTHLY_CONVERSATIONS'=>100000]);$this->schema();app(TenantContext::class)->clear();}
 
     public function test_incremental_migration_up_down_foreign_keys_indexes_and_restrict():void
     {
@@ -105,6 +106,18 @@ final class AiAgentLifecycleTest extends TestCase
     {
         [$tenant,$actor,$created]=$this->publishedAggregate('aggregate');$service=app(AgentAggregateLifecycleService::class);$service->suspendContract($actor,$created->contract,'Operational hold');$this->assertSame(AgentContractStatus::Suspended,$created->contract->refresh()->status);$this->assertSame(AgentStatus::Paused,$created->agent->refresh()->status);$service->resumeContract($actor,$created->contract,'Terms restored');$this->assertSame(AgentContractStatus::Active,$created->contract->refresh()->status);$this->assertSame(AgentStatus::Paused,$created->agent->refresh()->status);$service->resume($actor,$created->agent,'Resume operation');$this->assertSame(AgentStatus::Active,$created->agent->refresh()->status);$service->endContract($actor,$created->contract,'Relationship ended');$this->assertSame(AgentContractStatus::Ended,$created->contract->refresh()->status);$this->assertSame(AgentStatus::Retired,$created->agent->refresh()->status);$this->assertSame(AgentVersionStatus::Retired,$created->agentVersion->refresh()->status);
         [$tenant2,$actor2,$created2]=$this->publishedAggregate('agent-retire');$service->retire($actor2,$created2->agent,'Agent withdrawn');$this->assertSame(AgentStatus::Retired,$created2->agent->refresh()->status);$this->assertSame(AgentContractStatus::Ended,$created2->contract->refresh()->status);$this->assertSame(AgentVersionStatus::Retired,$created2->agentVersion->refresh()->status);
+    }
+
+    public function test_retired_agent_releases_real_creation_capacity(): void
+    {
+        config(['ai.capacity.defaults.MAX_AGENTS' => 1]);
+        [$tenant, $actor, $created] = $this->publishedAggregate('capacity-retired');
+        $capacity = app(AiCapacityService::class);
+        $this->assertSame(1, $capacity->used($tenant, AiCapacityService::MAX_AGENTS));
+        app(AgentAggregateLifecycleService::class)->retire($actor, $created->agent, 'Capacity released');
+        $this->assertSame(0, $capacity->used($tenant, AiCapacityService::MAX_AGENTS));
+        $replacement = app(CreateAgentDraftService::class)->create($actor, new CreateAgentDraftData('replacement', 'Replacement', null, AgentType::Sales, $this->contract(), $this->configuration()));
+        $this->assertNotSame($created->agent->id, $replacement->agent->id);
     }
 
     public function test_audit_is_tenant_scoped_append_only_and_contains_no_full_content():void

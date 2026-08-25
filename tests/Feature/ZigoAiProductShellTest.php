@@ -51,7 +51,7 @@ final class ZigoAiProductShellTest extends TestCase
     {
         [$tenant, $owner] = $this->tenant('ai-shell', ['AI_CORE']);
         $response = $this->actingAs($owner)->get($this->url($tenant, '/admin'))->assertOk();
-        $response->assertSee('ZIGO AI')->assertSee($tenant->name)->assertSee('AGENTES CREADOS')
+        $response->assertSee('Agentes IA')->assertSee($tenant->name)->assertSee('AGENTES CREADOS')
             ->assertSee('Mis agentes')->assertSee('Crear agente')->assertSee('Facturación')
             ->assertDontSee('Motor logístico')->assertDontSee('Recolecciones y despacho')->assertDontSee('Drivers')
             ->assertDontSee('OPERACIONES USADAS')->assertDontSee('href="#"', false);

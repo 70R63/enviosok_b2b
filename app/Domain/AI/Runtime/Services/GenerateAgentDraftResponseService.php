@@ -32,10 +32,11 @@ use Illuminate\Support\Facades\Schema;
 use App\Domain\AI\Actions\ActionRegistry;
 use App\Domain\AI\Runtime\Support\ActionRuntimeOutputSchema;
 use App\Domain\Network\Tenancy\Models\Tenant;
+use App\Domain\AI\Usage\MeteredRuntimeRunService;
 
 final class GenerateAgentDraftResponseService
 {
-    public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private KnowledgeRetriever $retriever, private ProviderRegistry $providers, private AgentRuntimePolicyCompiler $policy, private ActionRegistry $actions) {}
+    public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private KnowledgeRetriever $retriever, private ProviderRegistry $providers, private AgentRuntimePolicyCompiler $policy, private ActionRegistry $actions, private MeteredRuntimeRunService $runs) {}
 
     public function generate(User $actor, Agent $agent, RuntimeQuestionData $q, ?AgentVersion $pinnedVersion = null, array $history = [], AiExecutionMode $mode = AiExecutionMode::Live): AgentRuntimeResponseData
     {
@@ -122,7 +123,7 @@ return $out;
 
     private function start($actor, Agent $a, AgentVersion $v, AiExecutionMode $mode): RuntimeRun
     {
-        return DB::transaction(function () use ($actor, $a, $v, $mode) {
+        $tenant=Tenant::query()->findOrFail($actor->tenantId);return $this->runs->start($tenant,$mode,function () use ($actor, $a, $v, $mode) {
             $r = new RuntimeRun;
             $r->agent_id = $a->id;
             $r->agent_version_id = $v->id;
