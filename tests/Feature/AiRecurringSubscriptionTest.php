@@ -220,6 +220,7 @@ final class AiRecurringSubscriptionTest extends TestCase
         Http::fake(['https://api.mercadopago.com/v1/payments/pay-pending' => Http::response(['id' => 'pay-pending', 'status' => 'pending', 'preapproval_id' => 'mp-sub-pending'])]);
         $this->withHeaders($this->signatureHeaders('pay-pending', 'req-pending'))->postJson('/api/payments/mercado-pago/subscriptions/webhook', ['type' => 'payment', 'data' => ['id' => 'pay-pending']])->assertOk();
         $this->assertSame('2026-09-01 00:00:00', $this->subscription->fresh()->current_period_end->format('Y-m-d H:i:s'));
+        $this->assertSame('active', $this->subscription->fresh()->status);
     }
 
     public function test_duplicate_subscription_webhook_is_idempotent(): void
@@ -257,6 +258,70 @@ final class AiRecurringSubscriptionTest extends TestCase
         Http::assertSentCount(1);
     }
 
+    public function test_rejected_recurring_payment_enters_grace_once(): void
+    {
+        config(['ai.billing.grace_days' => 3]);
+        $this->subscription->update(['status' => 'active', 'provider_subscription_id' => 'mp-sub-failed', 'current_period_end' => now()->addMonth()]);
+        Http::fake(['https://api.mercadopago.com/v1/payments/pay-failed' => Http::response(['id' => 'pay-failed', 'status' => 'rejected', 'preapproval_id' => 'mp-sub-failed'])]);
+        $this->withHeaders($this->signatureHeaders('pay-failed', 'req-failed'))->postJson('/api/payments/mercado-pago/subscriptions/webhook', ['type' => 'payment', 'data' => ['id' => 'pay-failed']])->assertOk();
+        $grace = $this->subscription->fresh()->grace_ends_at;
+        $this->assertSame('grace', $this->subscription->fresh()->status);
+        $this->assertNotNull($grace);
+        $this->withHeaders($this->signatureHeaders('pay-failed', 'req-failed'))->postJson('/api/payments/mercado-pago/subscriptions/webhook', ['type' => 'payment', 'data' => ['id' => 'pay-failed']])->assertOk();
+        $this->assertTrue($grace->equalTo($this->subscription->fresh()->grace_ends_at));
+        $this->assertSame(1, DB::table('network_subscription_events')->where('event', 'payment_failed')->count());
+    }
+
+    public function test_grace_lifecycle_suspends_after_deadline_without_deleting_data(): void
+    {
+        $this->subscription->update(['status' => 'grace', 'grace_ends_at' => now()->subSecond()]);
+        $this->artisan('ai:process-billing-lifecycle')->assertSuccessful();
+        $this->assertSame('suspended', $this->subscription->fresh()->status);
+        $this->assertDatabaseHas('network_tenants', ['id' => $this->tenant->id]);
+        $this->assertDatabaseHas('network_entitlements', ['subscription_id' => $this->subscription->id]);
+    }
+
+    public function test_cancel_at_period_end_keeps_active_then_cancels_provider(): void
+    {
+        $this->subscription->update(['status' => 'active', 'provider_subscription_id' => 'mp-sub-cancel', 'current_period_end' => now()->addDay()]);
+        $cancelled = app(RecurringSubscriptionService::class)->cancelAtPeriodEnd($this->subscription);
+        $this->assertTrue($cancelled->cancel_at_period_end);
+        $this->assertSame('active', $cancelled->status);
+        Http::fake(['https://api.mercadopago.com/preapproval/mp-sub-cancel' => Http::response(['id' => 'mp-sub-cancel', 'status' => 'canceled'])]);
+        $this->subscription->update(['current_period_end' => now()->subSecond()]);
+        $this->artisan('ai:process-billing-lifecycle')->assertSuccessful();
+        $this->assertSame('canceled', $this->subscription->fresh()->status);
+        $this->assertSame('canceled', $this->subscription->fresh()->provider_status);
+        Http::assertSentCount(1);
+    }
+
+    public function test_duplicate_cancel_request_is_idempotent_and_keeps_period(): void
+    {
+        $this->subscription->update(['status' => 'active', 'current_period_end' => now()->addDay()]);
+        app(RecurringSubscriptionService::class)->cancelAtPeriodEnd($this->subscription);
+        app(RecurringSubscriptionService::class)->cancelAtPeriodEnd($this->subscription);
+        $this->assertSame(1, DB::table('network_subscription_events')->where('event', 'cancellation_scheduled')->count());
+        $this->assertSame('active', $this->subscription->fresh()->status);
+    }
+
+    public function test_provider_cancel_failure_keeps_cancellation_scheduled(): void
+    {
+        $this->subscription->update(['status' => 'active', 'provider_subscription_id' => 'mp-sub-failure', 'cancel_at_period_end' => true, 'current_period_end' => now()->subSecond()]);
+        Http::fake(['https://api.mercadopago.com/preapproval/mp-sub-failure' => Http::response([], 500)]);
+        $this->artisan('ai:process-billing-lifecycle')->assertSuccessful();
+        $fresh = $this->subscription->fresh();
+        $this->assertTrue($fresh->cancel_at_period_end);
+        $this->assertSame('active', $fresh->status);
+    }
+
+    public function test_canceled_subscription_is_not_renewed_by_late_payment(): void
+    {
+        $this->subscription->update(['status' => 'canceled', 'billing_frequency' => 'MONTHLY', 'current_period_end' => '2026-09-01 00:00:00']);
+        $result = app(RecurringSubscriptionService::class)->renew($this->subscription, 'late-payment');
+        $this->assertSame('canceled', $result->status);
+        $this->assertSame('2026-09-01 00:00:00', $result->current_period_end->format('Y-m-d H:i:s'));
+    }
+
     private function signatureHeaders(string $id, string $requestId): array
     {
         $ts = '1720000000';
@@ -288,7 +353,7 @@ final class AiRecurringSubscriptionTest extends TestCase
             $table->id(); $table->uuid('uuid'); $table->string('code'); $table->string('name'); $table->string('type'); $table->string('billing_type'); $table->decimal('price', 12, 2); $table->char('currency', 3); $table->unsignedBigInteger('plan_id')->nullable(); $table->boolean('is_active'); $table->boolean('is_public'); $table->json('metadata')->nullable(); $table->timestamps();
         });
         Schema::create('network_subscriptions', function (Blueprint $table): void {
-            $table->id(); $table->uuid('uuid'); $table->unsignedBigInteger('tenant_id'); $table->unsignedBigInteger('plan_id'); $table->string('status'); $table->timestamp('started_at')->nullable(); $table->timestamp('current_period_start')->nullable(); $table->timestamp('current_period_end')->nullable(); $table->timestamp('trial_ends_at')->nullable(); $table->string('billing_frequency')->nullable(); $table->string('provider_subscription_id')->nullable(); $table->string('provider_plan_id')->nullable(); $table->string('provider_status')->nullable(); $table->timestamp('next_payment_date')->nullable(); $table->boolean('cancel_at_period_end')->default(false); $table->timestamps();
+            $table->id(); $table->uuid('uuid'); $table->unsignedBigInteger('tenant_id'); $table->unsignedBigInteger('plan_id'); $table->string('status'); $table->timestamp('started_at')->nullable(); $table->timestamp('current_period_start')->nullable(); $table->timestamp('current_period_end')->nullable(); $table->timestamp('trial_ends_at')->nullable(); $table->timestamp('grace_ends_at')->nullable(); $table->timestamp('canceled_at')->nullable(); $table->timestamp('ended_at')->nullable(); $table->string('billing_frequency')->nullable(); $table->string('provider_subscription_id')->nullable(); $table->string('provider_plan_id')->nullable(); $table->string('provider_status')->nullable(); $table->timestamp('next_payment_date')->nullable(); $table->boolean('cancel_at_period_end')->default(false); $table->timestamps();
         });
         Schema::create('network_entitlements', function (Blueprint $table): void {
             $table->id(); $table->unsignedBigInteger('subscription_id'); $table->unsignedBigInteger('tenant_id'); $table->unsignedBigInteger('module_id'); $table->string('code'); $table->boolean('is_enabled'); $table->string('source'); $table->timestamps(); $table->unique(['subscription_id', 'module_id']);

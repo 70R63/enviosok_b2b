@@ -51,6 +51,7 @@ return [
     'entitlement' => ['module_code' => 'AI_CORE'],
     'capacity' => ['defaults' => ['MAX_AGENTS'=>(int)env('AI_DEFAULT_MAX_AGENTS',1),'MAX_WEBCHAT_CHANNELS'=>(int)env('AI_DEFAULT_MAX_WEBCHAT_CHANNELS',1),'MAX_WHATSAPP_CHANNELS'=>(int)env('AI_DEFAULT_MAX_WHATSAPP_CHANNELS',0),'MONTHLY_RUNTIME_UNITS'=>(int)env('AI_DEFAULT_MONTHLY_RUNTIME_UNITS',1000),'MONTHLY_ACTION_RUNS'=>(int)env('AI_DEFAULT_MONTHLY_ACTION_RUNS',100),'MONTHLY_CONVERSATIONS'=>(int)env('AI_DEFAULT_MONTHLY_CONVERSATIONS',250)]],
     'cost_guard' => ['global_monthly_budget_usd' => env('AI_PROVIDER_GLOBAL_MONTHLY_BUDGET_USD', null), 'alert_thresholds' => [0.70, 0.85, 0.95, 1.00]],
+    'billing' => ['grace_days' => (int) env('AI_BILLING_GRACE_DAYS', 3)],
     'knowledge' => ['disk' => env('AI_KNOWLEDGE_DISK', 'local')],
     'request_timeout' => (int) env('AI_REQUEST_TIMEOUT', 30),
     'max_attempts' => (int) env('AI_MAX_ATTEMPTS', 3),

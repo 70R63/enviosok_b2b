@@ -39,6 +39,7 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(30);
         $schedule->command('zigo:subscriptions:billing-cycle --notify --suspend')->dailyAt('04:10')->withoutOverlapping(60);
         $schedule->command('ai:expire-trials')->dailyAt('04:20')->withoutOverlapping(30);
+        $schedule->command('ai:process-billing-lifecycle')->hourly()->withoutOverlapping(30);
         
     }
 

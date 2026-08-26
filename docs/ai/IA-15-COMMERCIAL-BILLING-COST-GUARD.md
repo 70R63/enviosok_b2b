@@ -38,3 +38,12 @@ estado local. Los eventos recurrentes se deduplican mediante
 `PlatformPaymentEvent` (provider + event key). Estados `authorized/approved`,
 `paused` y `canceled` se mapean explícitamente a `active`, `past_due` y
 `canceled`; estados pendientes conservan el estado local hasta nueva evidencia.
+
+Los pagos definitivos rechazados pasan a `grace` durante los días configurados
+en `AI_BILLING_GRACE_DAYS` (3 por defecto); los pagos `pending` no cambian el
+ciclo. Al vencer el plazo, el procesador horario pasa la suscripción a
+`suspended` sin borrar datos ni entitlements. Cancelar renovación sólo marca
+`cancel_at_period_end`: el servicio permanece activo hasta el cierre. En esa
+fecha se solicita la cancelación al proveedor y, únicamente tras respuesta
+confirmada, se marca localmente `canceled`; los errores conservan la marca para
+reintento. Todas estas transiciones y eventos son idempotentes.
