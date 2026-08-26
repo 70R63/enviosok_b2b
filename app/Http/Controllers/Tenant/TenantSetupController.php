@@ -5,13 +5,15 @@ namespace App\Http\Controllers\Tenant;
 use App\Domain\Network\Onboarding\Models\SaasOnboardingApplication;
 use App\Domain\Network\Tenancy\{TenantAccessService, TenantContext};
 use App\Domain\Payments\Models\TenantPaymentConnection;
+use App\Domain\AI\Usage\AiCapacityService;
+use App\Domain\Network\ProductShell\{TenantWorkspace, TenantWorkspaceResolver};
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 final class TenantSetupController extends Controller
 {
-    public function show(Request $request, TenantContext $context, TenantAccessService $access)
+    public function show(Request $request, TenantContext $context, TenantAccessService $access, TenantWorkspaceResolver $workspaces, AiCapacityService $capacities)
     {
         abort_unless($access->role($request->user()) === 'owner', 403);
         $application = $this->application($context, $request->user()->id);
@@ -28,6 +30,8 @@ final class TenantSetupController extends Controller
         $subscription = $tenant->subscriptions()->where('status', 'active')->with('entitlements.module')->first();
         return view('tenant.admin.setup', [
             'tenant' => $tenant, 'application' => $application->fresh(), 'subscription' => $subscription,
+            'isAiWorkspace' => $workspaces->resolveForPresentation($tenant) === TenantWorkspace::ZigoAi,
+            'aiCapacity' => $capacities->summary($tenant),
             'connection' => TenantPaymentConnection::where('tenant_id', $tenant->id)
                 ->where('provider', 'MERCADO_PAGO')->first(),
         ]);

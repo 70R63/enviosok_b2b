@@ -113,6 +113,8 @@ final class ZigoSaasOnboardingOwnerActivationTest extends TestCase
         $this->post('http://recovery.zigo-envios.com/admin/login', [
             'email' => $owner->email, 'password' => 'Nueva-clave-123',
         ])->assertRedirect('http://recovery.zigo-envios.com/admin/setup');
+        $this->post('http://recovery.zigo-envios.com/admin/logout')->assertRedirect('http://recovery.zigo-envios.com/admin/login');
+        $this->get('http://recovery.zigo-envios.com/admin')->assertRedirect('http://recovery.zigo-envios.com/admin/login');
     }
 
     public function test_welcome_urls_use_the_persisted_stage_and_production_domains(): void
