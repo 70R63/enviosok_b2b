@@ -11,6 +11,7 @@ final class OnboardingStateService
     private const TRANSITIONS = [
         SaasOnboardingApplication::DRAFT => [
             SaasOnboardingApplication::PENDING_PAYMENT,
+            SaasOnboardingApplication::TRIAL_READY,
             SaasOnboardingApplication::CANCELLED,
         ],
         SaasOnboardingApplication::PENDING_PAYMENT => [
@@ -20,6 +21,7 @@ final class OnboardingStateService
         ],
         SaasOnboardingApplication::EXPIRED => [SaasOnboardingApplication::PAID],
         SaasOnboardingApplication::PAID => [SaasOnboardingApplication::PROVISIONING],
+        SaasOnboardingApplication::TRIAL_READY => [SaasOnboardingApplication::PROVISIONING],
         SaasOnboardingApplication::PROVISIONING => [
             SaasOnboardingApplication::ACTIVE,
             SaasOnboardingApplication::FAILED,

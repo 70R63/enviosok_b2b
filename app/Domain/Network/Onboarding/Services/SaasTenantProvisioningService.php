@@ -40,7 +40,7 @@ final class SaasTenantProvisioningService
         if ($application->status === SaasOnboardingApplication::PROVISIONING) {
             return $application;
         }
-        if (!in_array($application->status, [SaasOnboardingApplication::PAID, SaasOnboardingApplication::FAILED], true)) {
+        if (!in_array($application->status, [SaasOnboardingApplication::PAID, SaasOnboardingApplication::TRIAL_READY, SaasOnboardingApplication::FAILED], true)) {
             throw new OnboardingProvisioningException('ONBOARDING_NOT_PROVISIONABLE');
         }
 
@@ -54,12 +54,13 @@ final class SaasTenantProvisioningService
         );
 
         try {
-            $application = $this->prepareLegacyCompany($application);
+            $isTrial = $application->status === SaasOnboardingApplication::TRIAL_READY;
+            if (!$isTrial) $application = $this->prepareLegacyCompany($application);
             $active = DB::transaction(function () use ($application): SaasOnboardingApplication {
                 $onboarding = SaasOnboardingApplication::query()
                     ->whereKey($application->id)->lockForUpdate()->firstOrFail();
                 if ($onboarding->status === SaasOnboardingApplication::ACTIVE) return $onboarding;
-                if ($onboarding->status !== SaasOnboardingApplication::PROVISIONING || !$onboarding->paid_at) {
+                if ($onboarding->status !== SaasOnboardingApplication::PROVISIONING || (!$onboarding->paid_at && !str_contains((string)$onboarding->purchase_key, 'ai-trial'))) {
                     throw new OnboardingProvisioningException('PAID_STATE_REQUIRED');
                 }
 
@@ -111,13 +112,17 @@ final class SaasTenantProvisioningService
                 $tenant->branding()->updateOrCreate([], ['brand_name' => $onboarding->company_name]);
                 $this->audit($onboarding, 'BRANDING_CREATED');
 
-                $order = $this->commercialOrder($onboarding, $tenant, $owner, $snapshot);
-                $subscription = $this->subscription($onboarding, $tenant, $plan, $snapshot);
-                $this->entitlements($onboarding, $tenant, $subscription, $snapshot, $order);
-                if (($snapshot['ai_product'] ?? false) === true) {
-                    $this->aiProducts->apply($order, $subscription);
+                $order = null;
+                $subscription = null;
+                if (str_contains((string)$onboarding->purchase_key, 'ai-trial')) {
+                    $subscription = app(\App\Domain\AI\Commerce\AiTrialService::class)->start($tenant, $plan);
+                } else {
+                    $order = $this->commercialOrder($onboarding, $tenant, $owner, $snapshot);
+                    $subscription = $this->subscription($onboarding, $tenant, $plan, $snapshot);
+                    $this->entitlements($onboarding, $tenant, $subscription, $snapshot, $order);
+                    if (($snapshot['ai_product'] ?? false) === true) $this->aiProducts->apply($order, $subscription);
                 }
-                $this->allowance($onboarding, $tenant, $subscription, $snapshot, $order);
+                if ($order) $this->allowance($onboarding, $tenant, $subscription, $snapshot, $order);
                 $domain = $this->domain($onboarding, $tenant);
 
                 $this->assertInvariants($onboarding->fresh(), $tenant->fresh(), $owner, $plan, $subscription, $snapshot, $domain);
@@ -325,12 +330,13 @@ final class SaasTenantProvisioningService
         $expectedCodes = collect($snapshot['modules'] ?? [])->pluck('code')->sort()->values()->all();
         $actualCodes = $subscription->entitlements()->where('is_enabled', true)->pluck('code')->sort()->values()->all();
         $hostname = $this->subdomains->hostname($onboarding->requested_subdomain);
+        $isTrial = str_contains((string)$onboarding->purchase_key, 'ai-trial');
         $valid = $onboarding->tenant_id === $tenant->id
             && $onboarding->owner_user_id === $owner->id
             && $tenant->current_plan_id === $plan->id
             && $tenant->memberships()->where('user_id', $owner->id)->where('role', 'owner')->where('status', 'active')->exists()
-            && $subscription->status === 'active' && $subscription->plan_id === $plan->id
-            && $expectedCodes === $actualCodes && $tenant->branding()->exists()
+            && in_array($subscription->status, $isTrial ? ['trial','trialing'] : ['active'], true) && $subscription->plan_id === $plan->id
+            && ($isTrial || $expectedCodes === $actualCodes) && $tenant->branding()->exists()
             && $domain->is_primary && $domain->status === 'verified' && $domain->domain === $hostname;
         if (!$valid) throw new OnboardingProvisioningException('ACTIVE_INVARIANTS_FAILED');
     }

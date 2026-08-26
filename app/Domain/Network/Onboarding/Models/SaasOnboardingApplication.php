@@ -14,6 +14,7 @@ final class SaasOnboardingApplication extends Model
 {
     public const DRAFT = 'DRAFT';
     public const PENDING_PAYMENT = 'PENDING_PAYMENT';
+    public const TRIAL_READY = 'TRIAL_READY';
     public const PAID = 'PAID';
     public const PROVISIONING = 'PROVISIONING';
     public const ACTIVE = 'ACTIVE';
@@ -23,7 +24,7 @@ final class SaasOnboardingApplication extends Model
 
     public const STATUSES = [
         self::DRAFT, self::PENDING_PAYMENT, self::PAID, self::PROVISIONING,
-        self::ACTIVE, self::FAILED, self::CANCELLED, self::EXPIRED,
+        self::ACTIVE, self::FAILED, self::CANCELLED, self::EXPIRED, self::TRIAL_READY,
     ];
 
     public const BILLING_PERIODS = ['monthly', 'annual'];

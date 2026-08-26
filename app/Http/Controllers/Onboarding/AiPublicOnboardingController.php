@@ -24,7 +24,7 @@ final class AiPublicOnboardingController extends Controller
 {
     public function landing()
     {
-        return view('agentes-ia.landing', ['product' => $this->baseProduct()]);
+        return view('agentes-ia.landing', ['product' => $this->baseProduct(), 'trial' => $this->trialProduct()]);
     }
 
     public function pricing()
@@ -44,11 +44,14 @@ final class AiPublicOnboardingController extends Controller
         OnboardingSubdomainService $subdomains,
         OnboardingStateService $states,
         OnboardingMetadataSanitizer $sanitizer,
+        \App\Domain\Network\Onboarding\Services\SaasTenantProvisioningService $provisioning,
     ) {
         $data = $request->validated();
         $product = $this->product((string) ($data['offer'] ?? ''));
         $plan = $this->ensureAiPlan($product);
         $purchaseKey = $this->purchaseKey($request);
+        $isTrial = (bool) data_get($product->metadata, 'trial', false);
+        if ($isTrial) $purchaseKey = 'ai-trial:'.$purchaseKey;
         unset($data['offer'], $data['requested_subdomain']);
 
         $application = $applications->createOrRecover($data + [
@@ -85,6 +88,11 @@ final class AiPublicOnboardingController extends Controller
                         'existing_user_record' => User::where('email', $application->contact_email)->exists(),
                     ]), 'created_at' => now()],
             );
+            if ($isTrial) {
+                $application = $states->transition($application, SaasOnboardingApplication::TRIAL_READY, 'AI_TRIAL_READY', 'public_session');
+                $application = $provisioning->provision($application);
+                return redirect()->route('agentes-ia.onboarding.summary', $application->public_token);
+            }
         }
 
         return redirect()->route('agentes-ia.onboarding.summary', $application->public_token);
@@ -128,6 +136,11 @@ final class AiPublicOnboardingController extends Controller
     private function baseProduct(): NetworkCommercialProduct
     {
         return $this->product('');
+    }
+
+    private function trialProduct(): ?NetworkCommercialProduct
+    {
+        return NetworkCommercialProduct::query()->where('is_active', true)->whereJsonContains('metadata->ai_product', true)->whereJsonContains('metadata->trial', true)->when(Schema::hasColumn('network_commercial_products','is_public'), fn($q)=>$q->where('is_public',true))->first();
     }
 
     private function product(string $uuid): NetworkCommercialProduct
