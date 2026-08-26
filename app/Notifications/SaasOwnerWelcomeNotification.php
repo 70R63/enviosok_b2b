@@ -37,10 +37,11 @@ final class SaasOwnerWelcomeNotification extends Notification
                 ->line('Este enlace es válido durante '.$this->expiresInMinutes.' minutos y sólo puede utilizarse una vez.');
         } else {
             $mail->line('Puedes ingresar con tu cuenta ZIGO existente.')
-                ->action('IR A MI PLATAFORMA', $this->actionUrl);
+                ->action('IR A MI PLATAFORMA', $this->actionUrl)
+                ->line('¿No recuerdas tu contraseña? Restablece tu acceso desde el login: '.rtrim($this->adminUrl, '/').'/forgot-password');
         }
 
-        return $mail->line('Si necesitas recuperar tu contraseña, utiliza la opción disponible en el login.')
+        return $mail
             ->salutation('Equipo ZIGO');
     }
 }

@@ -84,6 +84,37 @@ final class ZigoSaasOnboardingOwnerActivationTest extends TestCase
         $this->assertDatabaseCount('users', 2);
     }
 
+    public function test_tenant_admin_exposes_neutral_password_recovery_and_valid_reset_restores_login(): void
+    {
+        Notification::fake();
+        [$application, $owner] = $this->activeApplication('recovery');
+
+        $this->get('http://recovery.zigo-envios.com/admin/login')
+            ->assertOk()->assertSee('¿Olvidaste tu contraseña?');
+        $this->post('http://recovery.zigo-envios.com/admin/forgot-password', ['email' => $owner->email])
+            ->assertSessionHas('status', 'Si existe una cuenta asociada, enviaremos instrucciones de acceso.');
+        $this->post('http://recovery.zigo-envios.com/admin/forgot-password', ['email' => 'missing@example.test'])
+            ->assertSessionHas('status', 'Si existe una cuenta asociada, enviaremos instrucciones de acceso.');
+        Notification::assertSentTo($owner, \App\Notifications\ZigoResetPasswordNotification::class);
+
+        $before = $owner->password;
+        $this->post('http://recovery.zigo-envios.com/admin/reset-password', [
+            'token' => 'invalid-token', 'email' => $owner->email,
+            'password' => 'Nueva-clave-123', 'password_confirmation' => 'Nueva-clave-123',
+        ])->assertSessionHasErrors('email');
+        $this->assertSame($before, $owner->fresh()->password);
+
+        $token = Password::broker()->createToken($owner);
+        $this->post('http://recovery.zigo-envios.com/admin/reset-password', [
+            'token' => $token, 'email' => $owner->email,
+            'password' => 'Nueva-clave-123', 'password_confirmation' => 'Nueva-clave-123',
+        ])->assertRedirect('http://recovery.zigo-envios.com/admin/login');
+        $this->assertTrue(Hash::check('Nueva-clave-123', $owner->fresh()->password));
+        $this->post('http://recovery.zigo-envios.com/admin/login', [
+            'email' => $owner->email, 'password' => 'Nueva-clave-123',
+        ])->assertRedirect('http://recovery.zigo-envios.com/admin/setup');
+    }
+
     public function test_welcome_urls_use_the_persisted_stage_and_production_domains(): void
     {
         Notification::fake();
@@ -97,6 +128,11 @@ final class ZigoSaasOnboardingOwnerActivationTest extends TestCase
             str_contains($notification->toMail($stageOwner)->actionUrl, 'bruniverse-stage.zigo-envios.com/admin/login'));
         Notification::assertSentTo($productionOwner, SaasOwnerWelcomeNotification::class, fn ($notification) =>
             str_contains($notification->toMail($productionOwner)->actionUrl, 'bruniverse.zigo-envios.com/admin/login'));
+    }
+
+    public function test_public_zigo_header_links_to_ai_agents(): void
+    {
+        $this->get('/')->assertOk()->assertSee('Agentes IA')->assertSee('/agentes-ia', false);
     }
 
     public function test_owner_setup_preserves_entitlements_and_finishes_to_dashboard(): void

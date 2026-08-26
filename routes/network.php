@@ -28,6 +28,7 @@ use App\Http\Controllers\Tenant\AiKnowledgeIndexController;
 use App\Http\Controllers\Tenant\AiWebchatController;
 use App\Http\Controllers\Tenant\AiWhatsAppController;
 use App\Http\Controllers\Tenant\TenantAuthController;
+use App\Http\Controllers\Tenant\TenantPasswordResetController;
 use App\Http\Controllers\Tenant\OwnerActivationController;
 use App\Http\Controllers\Tenant\TenantSetupController;
 use App\Http\Controllers\Tenant\TenantB2cController;
@@ -268,6 +269,10 @@ Route::middleware(['tenant.resolve', 'tenant.subscription', 'tenant.entitlement:
 Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->group(function (): void {
     Route::get('/login', [TenantAuthController::class, 'create'])->name('login');
     Route::post('/login', [TenantAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
+    Route::get('/forgot-password', [TenantPasswordResetController::class, 'create'])->name('password.request');
+    Route::post('/forgot-password', [TenantPasswordResetController::class, 'store'])->middleware('throttle:5,1')->name('password.email');
+    Route::get('/reset-password/{token}', [TenantPasswordResetController::class, 'reset'])->middleware('throttle:10,1')->name('password.reset');
+    Route::post('/reset-password', [TenantPasswordResetController::class, 'update'])->middleware('throttle:10,1')->name('password.update');
     Route::get('/activate/{applicationToken}/{token}', [OwnerActivationController::class, 'create'])
         ->middleware('throttle:10,1')->name('activation.create');
     Route::post('/activate/{applicationToken}', [OwnerActivationController::class, 'store'])
