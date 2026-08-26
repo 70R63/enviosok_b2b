@@ -114,7 +114,7 @@ final class SaasTenantProvisioningService
 
                 $order = null;
                 $subscription = null;
-                if (str_contains((string)$onboarding->purchase_key, 'ai-trial')) {
+                if ($isTrial) {
                     $subscription = app(\App\Domain\AI\Commerce\AiTrialService::class)->start($tenant, $plan);
                 } else {
                     $order = $this->commercialOrder($onboarding, $tenant, $owner, $snapshot);
@@ -125,7 +125,7 @@ final class SaasTenantProvisioningService
                 if ($order) $this->allowance($onboarding, $tenant, $subscription, $snapshot, $order);
                 $domain = $this->domain($onboarding, $tenant);
 
-                $this->assertInvariants($onboarding->fresh(), $tenant->fresh(), $owner, $plan, $subscription, $snapshot, $domain);
+                $this->assertInvariants($onboarding->fresh(), $tenant->fresh(), $owner, $plan, $subscription, $snapshot, $domain, $isTrial);
                 $tenant->update(['status' => 'active', 'current_plan_id' => $plan->id]);
                 $active = $this->states->transition(
                     $onboarding->fresh(),
@@ -162,7 +162,7 @@ final class SaasTenantProvisioningService
 
     private function prepareLegacyCompany(SaasOnboardingApplication $application, bool $isTrial=false): SaasOnboardingApplication
     {
-        return DB::transaction(function () use ($application): SaasOnboardingApplication {
+        return DB::transaction(function () use ($application, $isTrial): SaasOnboardingApplication {
             $onboarding = SaasOnboardingApplication::query()
                 ->whereKey($application->id)->lockForUpdate()->firstOrFail();
             if ($onboarding->status !== SaasOnboardingApplication::PROVISIONING || (!$onboarding->paid_at && !$isTrial)) {
@@ -325,12 +325,11 @@ final class SaasTenantProvisioningService
         return $domain;
     }
 
-    private function assertInvariants($onboarding, Tenant $tenant, User $owner, Plan $plan, Subscription $subscription, array $snapshot, TenantDomain $domain): void
+    private function assertInvariants($onboarding, Tenant $tenant, User $owner, Plan $plan, Subscription $subscription, array $snapshot, TenantDomain $domain, bool $isTrial=false): void
     {
         $expectedCodes = collect($snapshot['modules'] ?? [])->pluck('code')->sort()->values()->all();
         $actualCodes = $subscription->entitlements()->where('is_enabled', true)->pluck('code')->sort()->values()->all();
         $hostname = $this->subdomains->hostname($onboarding->requested_subdomain);
-        $isTrial = str_contains((string)$onboarding->purchase_key, 'ai-trial');
         $valid = $onboarding->tenant_id === $tenant->id
             && $onboarding->owner_user_id === $owner->id
             && $tenant->current_plan_id === $plan->id
