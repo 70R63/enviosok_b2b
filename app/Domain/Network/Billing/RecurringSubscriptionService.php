@@ -3,13 +3,16 @@ namespace App\Domain\Network\Billing;
 use App\Domain\Network\Billing\Contracts\RecurringSubscriptionProvider;
 use App\Domain\Network\Billing\Models\Subscription;
 use App\Domain\Network\Commerce\Models\{NetworkCommercialProduct,PlatformPaymentEvent};
+use App\Domain\Network\Billing\Models\Entitlement;
+use App\Domain\Network\Catalog\Models\Module;
+use App\Domain\AI\Usage\AiCapacityProvisioningService;
 use App\Domain\Network\Tenancy\Models\Tenant;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
 final class RecurringSubscriptionService
 {
- public function __construct(private RecurringSubscriptionProvider $provider,private SubscriptionService $subscriptions){}
+ public function __construct(private RecurringSubscriptionProvider $provider,private SubscriptionService $subscriptions,private AiCapacityProvisioningService $capacities){}
  public function syncPlan(NetworkCommercialProduct $product,string $frequency):NetworkCommercialProduct
  {
   $meta=$product->metadata??[]; $key=strtolower($frequency)==='annual'?'provider_plan_id_annual':'provider_plan_id_monthly'; if(!empty($meta[$key]))return$product;
@@ -22,8 +25,10 @@ final class RecurringSubscriptionService
  }
  public function reconcile(Subscription $subscription):Subscription
  {
-  if(!$subscription->provider_subscription_id)return$subscription; $remote=$this->provider->retrieve($subscription->provider_subscription_id); if(isset($remote['external_reference'])&&$remote['external_reference']!=='ai-sub:'.$subscription->uuid)throw new RuntimeException('RECURRING_REFERENCE_MISMATCH'); $status=strtolower((string)($remote['status']??'')); $mapped=match($status){'authorized','approved'=>'active','paused'=>'past_due','cancelled','canceled'=>'canceled',default=>$subscription->status}; $updates=['provider_status'=>$status,'status'=>$mapped]; if(!empty($remote['next_payment_date']))$updates['next_payment_date']=$remote['next_payment_date']; if($mapped==='active'&&(!$subscription->current_period_end||!$subscription->current_period_end->isFuture()))$updates['current_period_end']=now()->addMonthsNoOverflow($subscription->billing_frequency==='ANNUAL'?12:1); $subscription->update($updates); return$subscription->fresh();
+  if(!$subscription->provider_subscription_id)return$subscription; $remote=$this->provider->retrieve($subscription->provider_subscription_id); if(isset($remote['external_reference'])&&$remote['external_reference']!=='ai-sub:'.$subscription->uuid)throw new RuntimeException('RECURRING_REFERENCE_MISMATCH'); $status=strtolower((string)($remote['status']??'')); $mapped=match($status){'authorized','approved'=>'active','paused'=>'past_due','cancelled','canceled'=>'canceled',default=>$subscription->status}; $updates=['provider_status'=>$status,'status'=>$mapped]; if(!empty($remote['next_payment_date']))$updates['next_payment_date']=$remote['next_payment_date']; if($mapped==='active'){ $product=NetworkCommercialProduct::query()->whereJsonContains('metadata->provider_plan_id_monthly',(string)($remote['preapproval_plan_id']??''))->orWhereJsonContains('metadata->provider_plan_id_annual',(string)($remote['preapproval_plan_id']??''))->first(); if($product?->plan_id)$updates['plan_id']=$product->plan_id; if(!$subscription->current_period_end||!$subscription->current_period_end->isFuture())$updates['current_period_end']=now()->addMonthsNoOverflow($subscription->billing_frequency==='ANNUAL'?12:1); } $subscription->update($updates); if($mapped==='active')$this->applyPlanCapacity($subscription->fresh()); return$subscription->fresh();
  }
+ private function applyPlanCapacity(Subscription $subscription): void
+ { $module=Module::where('code','AI_CORE')->first(); $ent=$module?->id?Entitlement::where('subscription_id',$subscription->id)->where('module_id',$module->id)->where('code','AI_CORE')->first():null; if(!$ent)return; foreach(DB::table('network_plan_module_capacities')->where('plan_id',$subscription->plan_id)->where('module_id',$module->id)->get() as $row)$this->capacities->override($ent,$row->capability_code,(int)$row->quantity); }
  public function cancelAtPeriodEnd(Subscription $subscription):Subscription{return DB::transaction(function()use($subscription){$s=Subscription::whereKey($subscription->id)->lockForUpdate()->firstOrFail();$s->update(['cancel_at_period_end'=>true]);return$s->fresh();});}
  public function renew(Subscription $subscription,string $paymentId):Subscription
  {
