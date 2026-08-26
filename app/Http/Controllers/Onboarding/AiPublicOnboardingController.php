@@ -35,7 +35,9 @@ final class AiPublicOnboardingController extends Controller
 
     public function start(Request $request)
     {
-        return view('agentes-ia.start', ['product' => $this->product((string) $request->query('offer'))]);
+        $offer=(string)$request->query('offer');
+        if ($offer==='') $offer=(string)optional($this->trialProduct())->uuid;
+        return view('agentes-ia.start', ['product' => $this->product($offer)]);
     }
 
     public function storeStart(
@@ -77,10 +79,7 @@ final class AiPublicOnboardingController extends Controller
                 $application, [], null, (string) config('zigo_onboarding.tax_rate', '0.00'),
                 $selection['plan_offer_uuid'], null,
             );
-            $application = $states->transition(
-                $application, SaasOnboardingApplication::PENDING_PAYMENT,
-                'AI_READY_FOR_CHECKOUT', 'public_session',
-            );
+            $application = $states->transition($application, $isTrial ? SaasOnboardingApplication::TRIAL_READY : SaasOnboardingApplication::PENDING_PAYMENT, $isTrial ? 'AI_TRIAL_READY' : 'AI_READY_FOR_CHECKOUT', 'public_session');
             $application->events()->firstOrCreate(
                 ['event' => 'AI_CONTACT_CONTEXT_CAPTURED'],
                 ['from_status' => $application->status, 'to_status' => $application->status,
@@ -89,7 +88,6 @@ final class AiPublicOnboardingController extends Controller
                     ]), 'created_at' => now()],
             );
             if ($isTrial) {
-                $application = $states->transition($application, SaasOnboardingApplication::TRIAL_READY, 'AI_TRIAL_READY', 'public_session');
                 $application = $provisioning->provision($application);
                 return redirect()->route('agentes-ia.onboarding.summary', $application->public_token);
             }

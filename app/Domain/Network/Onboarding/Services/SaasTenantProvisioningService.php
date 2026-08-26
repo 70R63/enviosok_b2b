@@ -44,6 +44,7 @@ final class SaasTenantProvisioningService
             throw new OnboardingProvisioningException('ONBOARDING_NOT_PROVISIONABLE');
         }
 
+        $isTrial = $application->status === SaasOnboardingApplication::TRIAL_READY || str_starts_with((string)$application->purchase_key, 'ai-trial:');
         $retried = $application->status === SaasOnboardingApplication::FAILED;
         $application = $this->states->transition(
             $application,
@@ -54,13 +55,12 @@ final class SaasTenantProvisioningService
         );
 
         try {
-            $isTrial = $application->status === SaasOnboardingApplication::TRIAL_READY;
-            if (!$isTrial) $application = $this->prepareLegacyCompany($application);
-            $active = DB::transaction(function () use ($application): SaasOnboardingApplication {
+            $application = $this->prepareLegacyCompany($application, $isTrial);
+            $active = DB::transaction(function () use ($application, $isTrial): SaasOnboardingApplication {
                 $onboarding = SaasOnboardingApplication::query()
                     ->whereKey($application->id)->lockForUpdate()->firstOrFail();
                 if ($onboarding->status === SaasOnboardingApplication::ACTIVE) return $onboarding;
-                if ($onboarding->status !== SaasOnboardingApplication::PROVISIONING || (!$onboarding->paid_at && !str_contains((string)$onboarding->purchase_key, 'ai-trial'))) {
+                if ($onboarding->status !== SaasOnboardingApplication::PROVISIONING || (!$onboarding->paid_at && !$isTrial)) {
                     throw new OnboardingProvisioningException('PAID_STATE_REQUIRED');
                 }
 
@@ -160,12 +160,12 @@ final class SaasTenantProvisioningService
         }
     }
 
-    private function prepareLegacyCompany(SaasOnboardingApplication $application): SaasOnboardingApplication
+    private function prepareLegacyCompany(SaasOnboardingApplication $application, bool $isTrial=false): SaasOnboardingApplication
     {
         return DB::transaction(function () use ($application): SaasOnboardingApplication {
             $onboarding = SaasOnboardingApplication::query()
                 ->whereKey($application->id)->lockForUpdate()->firstOrFail();
-            if ($onboarding->status !== SaasOnboardingApplication::PROVISIONING || !$onboarding->paid_at) {
+            if ($onboarding->status !== SaasOnboardingApplication::PROVISIONING || (!$onboarding->paid_at && !$isTrial)) {
                 throw new OnboardingProvisioningException('PAID_STATE_REQUIRED');
             }
             $snapshot = $onboarding->commercial_snapshot_json;
