@@ -1,4 +1,5 @@
 @extends('tenant.admin.layout')
+@php($isAiWorkspace = $isAiWorkspace ?? false)
 @php($hasLogo=$branding?->logo_path && Storage::disk('public')->exists($branding->logo_path))
 @php($hasHero=$branding?->hero_image_path && Storage::disk('public')->exists($branding->hero_image_path))
 @php($hasStoredFavicon=is_string($branding?->favicon_path) && Storage::disk('public')->exists($branding->favicon_path))
@@ -11,10 +12,15 @@
 <nav class="z-breadcrumbs" aria-label="Ruta"><span>Configuración</span></nav>
 <header class="z-page-header"><div><div class="z-eyebrow">Tenant Admin</div><h1>Configuración</h1><p class="z-muted">Administra la identidad de tu portal y cómo se completan las entregas.</p></div></header>
 <div class="z-grid">
+@unless($isAiWorkspace)
 <a class="z-card z-card--interactive" href="{{ route('tenant.admin.delivery-proof-options.index') }}"><span class="z-badge z-badge--success">Operativa</span><h2>Entregas y evidencia</h2><p class="z-muted">Define quién puede recibir, evidencia requerida e intentos permitidos.</p><strong>Administrar entregas →</strong></a>
 <a class="z-card z-card--interactive" href="{{ route('tenant.admin.payments.index') }}"><span class="z-badge z-badge--info">Checkout</span><h2>Pagos</h2><p class="z-muted">Conecta la cuenta seller de Mercado Pago del tenant.</p><strong>Administrar pagos →</strong></a>
 <section class="z-card"><span class="z-badge {{ $domain ? 'z-badge--success' : 'z-badge--warning' }}">{{ $domain ? 'Dominio verificado' : 'Pendiente' }}</span><h2>Portal y dominio</h2>@if($domain)<span class="z-sr-only">{{ strtoupper($domain->environment) }} {{ strtoupper($domain->status) }}</span><p><strong>{{ $domain->domain }}</strong><br><span class="z-muted">{{ $domain->environment === 'production' ? 'Producción' : ucfirst($domain->environment) }} · {{ $domain->status === 'verified' ? 'Verificado' : ucfirst($domain->status) }}</span></p>@else<p class="z-muted">No existe un dominio principal configurado.</p>@endif @if($previewUrl)<a class="z-btn z-btn--outline" href="{{ $previewUrl }}" target="_blank" rel="noopener noreferrer">Vista previa del portal</a>@endif<p class="z-help">Los dominios personalizados, SSL y activación se administran desde ZIGO Network.</p></section>
 </div>
+@else
+<section class="z-card"><span class="z-badge z-badge--info">Agentes IA</span><h2>Administración de agentes</h2><p class="z-muted">La identidad, comportamiento y canales se administran desde Mis agentes.</p><a class="z-btn z-btn--outline" href="{{ route('tenant.admin.ai-agents.index') }}">Administrar agentes</a></section>
+<section class="z-card"><h2>Acceso administrativo</h2><p class="z-muted">Consola administrativa</p><strong>{{ $domain?->domain ?? $tenant->name }}</strong></section>
+@endunless
 <section class="z-card z-form-section" style="margin-top:1rem"><div class="z-form-section__head"><div class="z-eyebrow">White label</div><h2>Identidad y soporte</h2><p class="z-muted">Estos valores alimentan tokens dinámicos; no se genera CSS independiente por tenant.</p></div>
 @if($canEdit)<form class="z-stack" method="POST" enctype="multipart/form-data" action="{{ route('tenant.admin.configuration.update') }}">@csrf @method('PATCH')
 <div class="z-form-grid"><label class="z-field"><span>Nombre comercial</span><input name="brand_name" value="{{ old('brand_name',$branding?->brand_name) }}" aria-describedby="brand-help">@error('brand_name')<span class="z-field-error">{{ $message }}</span>@enderror<span class="z-help" id="brand-help">Nombre visible para tus clientes.</span></label><label class="z-field"><span>Slogan <span class="z-muted">(opcional)</span></span><input name="tagline" maxlength="120" value="{{ old('tagline',$branding?->tagline) }}">@error('tagline')<span class="z-field-error">{{ $message }}</span>@enderror<span class="z-help">Texto plano, máximo 120 caracteres. Si queda vacío no se muestra.</span></label><label class="z-field"><span>Email de soporte</span><input type="email" name="support_email" value="{{ old('support_email',$branding?->support_email) }}">@error('support_email')<span class="z-field-error">{{ $message }}</span>@enderror</label><label class="z-field"><span>Teléfono de soporte</span><input name="support_phone" value="{{ old('support_phone',$branding?->support_phone) }}">@error('support_phone')<span class="z-field-error">{{ $message }}</span>@enderror</label></div>

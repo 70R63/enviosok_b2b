@@ -6,10 +6,11 @@ use App\Domain\Network\Tenancy\TenantAccessService;
 use App\Domain\Network\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Tenant\UpdateTenantConfigurationRequest;
+use App\Domain\Network\ProductShell\TenantWorkspaceResolver;
 
 final class TenantConfigurationController extends Controller
 {
-    public function edit(TenantContext $context, TenantAccessService $access)
+    public function edit(TenantContext $context, TenantAccessService $access, TenantWorkspaceResolver $workspaces)
     {
         $tenant = $context->tenant()->load(['branding', 'domains']);
         $domain = $tenant->domains->firstWhere('is_primary', true);
@@ -20,6 +21,7 @@ final class TenantConfigurationController extends Controller
             'domain' => $domain,
             'canEdit' => $access->hasRole(['owner', 'admin'], auth()->user()),
             'previewUrl' => $domain && $domain->status === 'verified' ? 'https://'.$domain->domain.'/white-label' : null,
+            'isAiWorkspace' => $workspaces->resolveForPresentation($tenant)->value === 'zigo_ai',
         ]);
     }
 
