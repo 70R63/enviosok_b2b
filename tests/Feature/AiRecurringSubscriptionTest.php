@@ -15,6 +15,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 final class AiRecurringSubscriptionTest extends TestCase
@@ -32,6 +33,7 @@ final class AiRecurringSubscriptionTest extends TestCase
             'ai.enabled' => true,
             'zigo_payments.platform.access_token' => 'test-token',
             'zigo_payments.providers.mercado_pago.api_url' => 'https://api.mercadopago.com',
+            'zigo_payments.platform.webhook_secret' => 'webhook-secret',
         ]);
 
         $this->createSchema();
@@ -160,9 +162,111 @@ final class AiRecurringSubscriptionTest extends TestCase
         $this->assertSame(500, $capacity->limit($this->tenant, 'MONTHLY_CONVERSATIONS', $reconciled));
     }
 
+    public function test_valid_subscription_webhook_reconciles_server_side(): void
+    {
+        Http::fake(['https://api.mercadopago.com/preapproval/mp-sub-growth' => Http::response([
+            'id' => 'mp-sub-growth', 'status' => 'authorized',
+            'external_reference' => 'ai-sub:'.$this->subscription->uuid,
+            'preapproval_plan_id' => 'mp-plan-growth',
+            'auto_recurring' => ['transaction_amount' => '1299.00', 'currency_id' => 'MXN'],
+        ])]);
+        $this->subscription->update(['provider_subscription_id' => 'mp-sub-growth', 'provider_plan_id' => 'mp-plan-growth']);
+        $requestId = 'req-sub-1';
+        $response = $this->withHeaders($this->signatureHeaders('mp-sub-growth', $requestId))->postJson('/api/payments/mercado-pago/subscriptions/webhook', [
+            'type' => 'subscription_preapproval', 'data' => ['id' => 'mp-sub-growth'],
+        ]);
+        $response->assertOk();
+        $this->assertSame('active', $this->subscription->fresh()->status);
+        Http::assertSentCount(1);
+    }
+
+    public function test_invalid_subscription_webhook_signature_is_rejected(): void
+    {
+        $response = $this->withHeaders(['x-request-id' => 'req-invalid', 'x-signature' => 'ts=1,v1=invalid'])
+            ->postJson('/api/payments/mercado-pago/subscriptions/webhook', ['type' => 'subscription_preapproval', 'data' => ['id' => 'missing']]);
+        $response->assertUnauthorized();
+        Http::assertNothingSent();
+    }
+
+    public function test_monthly_payment_webhook_renews_once(): void
+    {
+        $subscription = $this->subscription->update(['status' => 'active', 'billing_frequency' => 'MONTHLY', 'provider_subscription_id' => 'mp-sub-monthly', 'current_period_start' => '2026-08-01 00:00:00', 'current_period_end' => '2026-09-01 00:00:00', 'next_payment_date' => '2026-09-01 00:00:00']);
+        $paymentId = 'pay-monthly-001'; $requestId = 'req-payment-1';
+        Http::fake(['https://api.mercadopago.com/v1/payments/'.$paymentId => Http::response(['id' => $paymentId, 'status' => 'approved', 'preapproval_id' => 'mp-sub-monthly'])]);
+        $payload = ['type' => 'payment', 'data' => ['id' => $paymentId]];
+        $this->withHeaders($this->signatureHeaders($paymentId, $requestId))->postJson('/api/payments/mercado-pago/subscriptions/webhook', $payload)->assertOk();
+        $fresh = $this->subscription->fresh();
+        $this->assertSame('2026-09-01 00:00:00', $fresh->current_period_start->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-10-01 00:00:00', $fresh->current_period_end->format('Y-m-d H:i:s'));
+        $this->withHeaders($this->signatureHeaders($paymentId, $requestId))->postJson('/api/payments/mercado-pago/subscriptions/webhook', $payload)->assertOk();
+        $this->assertSame('2026-10-01 00:00:00', $this->subscription->fresh()->current_period_end->format('Y-m-d H:i:s'));
+    }
+
+    public function test_annual_payment_webhook_adds_twelve_months_once(): void
+    {
+        $this->subscription->update(['status' => 'active', 'billing_frequency' => 'ANNUAL', 'provider_subscription_id' => 'mp-sub-annual', 'current_period_start' => '2026-01-01 00:00:00', 'current_period_end' => '2027-01-01 00:00:00', 'next_payment_date' => '2027-01-01 00:00:00']);
+        $paymentId = 'pay-annual-001'; $requestId = 'req-payment-annual';
+        Http::fake(['https://api.mercadopago.com/v1/payments/'.$paymentId => Http::response(['id' => $paymentId, 'status' => 'approved', 'preapproval_id' => 'mp-sub-annual'])]);
+        $payload = ['type' => 'payment', 'data' => ['id' => $paymentId]];
+        $this->withHeaders($this->signatureHeaders($paymentId, $requestId))->postJson('/api/payments/mercado-pago/subscriptions/webhook', $payload)->assertOk();
+        $this->assertSame('2028-01-01 00:00:00', $this->subscription->fresh()->current_period_end->format('Y-m-d H:i:s'));
+        $this->withHeaders($this->signatureHeaders($paymentId, $requestId))->postJson('/api/payments/mercado-pago/subscriptions/webhook', $payload)->assertOk();
+        $this->assertSame('2028-01-01 00:00:00', $this->subscription->fresh()->current_period_end->format('Y-m-d H:i:s'));
+    }
+
+    public function test_pending_payment_does_not_renew(): void
+    {
+        $this->subscription->update(['status' => 'active', 'billing_frequency' => 'MONTHLY', 'provider_subscription_id' => 'mp-sub-pending', 'current_period_end' => '2026-09-01 00:00:00']);
+        Http::fake(['https://api.mercadopago.com/v1/payments/pay-pending' => Http::response(['id' => 'pay-pending', 'status' => 'pending', 'preapproval_id' => 'mp-sub-pending'])]);
+        $this->withHeaders($this->signatureHeaders('pay-pending', 'req-pending'))->postJson('/api/payments/mercado-pago/subscriptions/webhook', ['type' => 'payment', 'data' => ['id' => 'pay-pending']])->assertOk();
+        $this->assertSame('2026-09-01 00:00:00', $this->subscription->fresh()->current_period_end->format('Y-m-d H:i:s'));
+    }
+
+    public function test_duplicate_subscription_webhook_is_idempotent(): void
+    {
+        $this->subscription->update(['provider_subscription_id' => 'mp-sub-growth', 'provider_plan_id' => 'mp-plan-growth']);
+        Http::fake(['https://api.mercadopago.com/preapproval/mp-sub-growth' => Http::response([
+            'id' => 'mp-sub-growth', 'status' => 'authorized',
+            'external_reference' => 'ai-sub:'.$this->subscription->uuid,
+            'preapproval_plan_id' => 'mp-plan-growth',
+            'auto_recurring' => ['transaction_amount' => '1299.00', 'currency_id' => 'MXN'],
+        ])]);
+        $payload = ['type' => 'subscription_preapproval', 'data' => ['id' => 'mp-sub-growth']];
+        $headers = $this->signatureHeaders('mp-sub-growth', 'req-sub-duplicate');
+        $this->withHeaders($headers)->postJson('/api/payments/mercado-pago/subscriptions/webhook', $payload)->assertOk();
+        $this->withHeaders($headers)->postJson('/api/payments/mercado-pago/subscriptions/webhook', $payload)->assertOk();
+        $this->assertSame(1, DB::table('platform_payment_events')->count());
+        $this->assertSame('active', $this->subscription->fresh()->status);
+        Http::assertSentCount(1);
+    }
+
+    public function test_rejected_payment_does_not_renew(): void
+    {
+        $this->subscription->update(['status' => 'active', 'billing_frequency' => 'MONTHLY', 'provider_subscription_id' => 'mp-sub-rejected', 'current_period_end' => '2026-09-01 00:00:00']);
+        Http::fake(['https://api.mercadopago.com/v1/payments/pay-rejected' => Http::response(['id' => 'pay-rejected', 'status' => 'rejected', 'preapproval_id' => 'mp-sub-rejected'])]);
+        $this->withHeaders($this->signatureHeaders('pay-rejected', 'req-rejected'))->postJson('/api/payments/mercado-pago/subscriptions/webhook', ['type' => 'payment', 'data' => ['id' => 'pay-rejected']])->assertOk();
+        $this->assertSame('2026-09-01 00:00:00', $this->subscription->fresh()->current_period_end->format('Y-m-d H:i:s'));
+    }
+
+    public function test_payment_for_unknown_subscription_does_not_renew(): void
+    {
+        $end = $this->subscription->current_period_end->format('Y-m-d H:i:s');
+        Http::fake(['https://api.mercadopago.com/v1/payments/pay-unknown' => Http::response(['id' => 'pay-unknown', 'status' => 'approved', 'preapproval_id' => 'mp-sub-unknown'])]);
+        $this->withHeaders($this->signatureHeaders('pay-unknown', 'req-unknown'))->postJson('/api/payments/mercado-pago/subscriptions/webhook', ['type' => 'payment', 'data' => ['id' => 'pay-unknown']])->assertOk();
+        $this->assertSame($end, $this->subscription->fresh()->current_period_end->format('Y-m-d H:i:s'));
+        Http::assertSentCount(1);
+    }
+
+    private function signatureHeaders(string $id, string $requestId): array
+    {
+        $ts = '1720000000';
+        $manifest = 'id:'.strtolower($id).';request-id:'.$requestId.';ts:'.$ts.';';
+        return ['x-request-id' => $requestId, 'x-signature' => 'ts='.$ts.',v1='.hash_hmac('sha256', $manifest, 'webhook-secret')];
+    }
+
     private function createSchema(): void
     {
-        foreach (['network_plan_module_capacities', 'network_entitlement_capacities', 'network_entitlements', 'network_subscriptions', 'network_plan_modules', 'network_commercial_products', 'network_tenants', 'network_plans', 'network_modules'] as $table) {
+        foreach (['platform_payment_events', 'network_subscription_events', 'network_plan_module_capacities', 'network_entitlement_capacities', 'network_entitlements', 'network_subscriptions', 'network_plan_modules', 'network_commercial_products', 'network_tenants', 'network_plans', 'network_modules'] as $table) {
             Schema::dropIfExists($table);
         }
         Schema::create('network_modules', function (Blueprint $table): void {
@@ -191,6 +295,12 @@ final class AiRecurringSubscriptionTest extends TestCase
         });
         Schema::create('network_entitlement_capacities', function (Blueprint $table): void {
             $table->id(); $table->unsignedBigInteger('tenant_id'); $table->unsignedBigInteger('subscription_id'); $table->unsignedBigInteger('entitlement_id'); $table->string('capability_code'); $table->unsignedInteger('quantity'); $table->string('source'); $table->string('source_key'); $table->boolean('is_enabled')->default(true); $table->timestamps(); $table->unique(['entitlement_id', 'capability_code', 'source', 'source_key']);
+        });
+        Schema::create('network_subscription_events', function (Blueprint $table): void {
+            $table->id(); $table->unsignedBigInteger('subscription_id'); $table->unsignedBigInteger('tenant_id'); $table->unsignedBigInteger('actor_user_id')->nullable(); $table->string('event'); $table->string('from_status')->nullable(); $table->string('to_status')->nullable(); $table->json('metadata')->nullable(); $table->timestamp('created_at')->nullable();
+        });
+        Schema::create('platform_payment_events', function (Blueprint $table): void {
+            $table->id(); $table->string('provider'); $table->string('event_key'); $table->unsignedBigInteger('platform_payment_attempt_id')->nullable(); $table->string('provider_payment_id')->nullable(); $table->string('status'); $table->string('error_code')->nullable(); $table->timestamp('received_at'); $table->timestamp('processed_at')->nullable(); $table->timestamps(); $table->unique(['provider', 'event_key']);
         });
     }
 }
