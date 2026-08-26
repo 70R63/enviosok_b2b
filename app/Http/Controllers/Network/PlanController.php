@@ -20,7 +20,7 @@ class PlanController extends Controller
         return redirect()->route('network.plans.show',$plan)->with('success','Plan creado correctamente.');
     }
     public function show(Plan $plan) { $plan->load(['modules'=>fn($q)=>$q->orderBy('sort_order')]); return view('network.plans.show',compact('plan')); }
-    public function edit(Plan $plan) { $plan->load('modules'); return view('network.plans.edit',['plan'=>$plan,'moduleGroups'=>$this->moduleGroups()]); }
+    public function edit(Plan $plan) { $plan->load('modules'); return view('network.plans.edit',['plan'=>$plan,'moduleGroups'=>$this->moduleGroups($plan)]); }
     public function update(UpdatePlanRequest $request, Plan $plan,NetworkAdminAuditService$audit)
     {
         $validated=$request->validated();$submitted=collect($validated['modules'])->keyBy('id');unset($validated['modules']);
@@ -33,9 +33,11 @@ class PlanController extends Controller
         if($used){$before=$plan->status;$plan->update(['status'=>'inactive']);NetworkCommercialProduct::where('plan_id',$plan->id)->update(['is_active'=>false,'is_public'=>false,'archived_at'=>now()]);$audit->record($request->user()->id,'plan.archived',$plan,['status'=>$before],['status'=>'inactive']);return back()->with('success','Plan utilizado: fue archivado, no eliminado.');}
         $audit->record($request->user()->id,'plan.deleted',$plan,$plan->toArray(),[]);$plan->modules()->detach();NetworkCommercialProduct::where('plan_id',$plan->id)->delete();$plan->delete();return redirect()->route('network.plans.index')->with('success','Plan no utilizado eliminado.');
     }
-    private function moduleGroups(): array
+    private function moduleGroups(?Plan $plan=null): array
     {
         $labels=['B2C'=>'CANALES','B2B'=>'CANALES','SHIPPING'=>'LOGÍSTICA','TRACKING'=>'LOGÍSTICA','CRM'=>'NEGOCIO','INVOICING'=>'NEGOCIO','DRIVER'=>'OPERACIÓN','COMMERCE'=>'COMERCIAL','MARKETING'=>'COMERCIAL','GPS'=>'VISIBILIDAD','WAREHOUSE'=>'FULFILLMENT','API'=>'INTEGRACIONES'];
-        return Module::orderBy('sort_order')->orderBy('name')->get()->groupBy(fn(Module $module)=>$labels[$module->code]??strtoupper($module->type))->all();
+        $modules=Module::orderBy('sort_order')->orderBy('name')->get();
+        if ($plan && str_starts_with((string)$plan->code,'AI_')) $modules=$modules->where('code','AI_CORE')->values();
+        return $modules->groupBy(fn(Module $module)=>$labels[$module->code]??strtoupper($module->type))->all();
     }
 }
