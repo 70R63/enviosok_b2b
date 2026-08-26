@@ -5,7 +5,7 @@ final class SubscriptionService
 {
  public function __construct(private EntitlementService$entitlements){}
  public function currentForTenant(Tenant|int$tenant):?Subscription{if(!Schema::hasTable('network_subscriptions'))return null;$id=$tenant instanceof Tenant?$tenant->id:$tenant;return Subscription::with('plan')->where('tenant_id',$id)->whereIn('status',Subscription::CURRENT_STATUSES)->where('started_at','<=',now())->where('current_period_end','>=',now())->latest('started_at')->first();}
- public function activeForTenant(Tenant|int$tenant):?Subscription{$s=$this->currentForTenant($tenant);return$s&&in_array($s->status,['trial','active','past_due','grace'],true)?$s:null;}
+ public function activeForTenant(Tenant|int$tenant):?Subscription{$s=$this->currentForTenant($tenant);return$s&&in_array($s->status,['trial','trialing','active','past_due','grace'],true)?$s:null;}
  public function historyForTenant(Tenant|int$tenant){if(!Schema::hasTable('network_subscriptions'))return collect();$id=$tenant instanceof Tenant?$tenant->id:$tenant;return Subscription::with('plan')->where('tenant_id',$id)->latest('started_at')->get();}
  public function create(Tenant$tenant,array$data,?int$actorId=null):Subscription
  {

@@ -29,7 +29,8 @@ final class AiPublicOnboardingController extends Controller
 
     public function pricing()
     {
-        return view('agentes-ia.pricing', ['product' => $this->baseProduct()]);
+        $products = NetworkCommercialProduct::query()->where('is_active', true)->whereIn('type', ['PLAN','ADDON'])->whereJsonContains('metadata->ai_product', true)->whereJsonContains('metadata->ai_kind', 'base')->whereIn('billing_type', ['MONTHLY','ANNUAL'])->when(Schema::hasColumn('network_commercial_products','is_public'), fn($q)=>$q->where('is_public',true))->orderBy('sort_order')->get();
+        return view('agentes-ia.pricing', ['product' => $products->first(), 'products' => $products]);
     }
 
     public function start(Request $request)
@@ -132,9 +133,10 @@ final class AiPublicOnboardingController extends Controller
     private function product(string $uuid): NetworkCommercialProduct
     {
         $query = NetworkCommercialProduct::query()->where('is_active', true)
-            ->where('type', 'ADDON')->whereJsonContains('metadata->ai_product', true)
+            ->whereIn('type', ['PLAN','ADDON'])->whereJsonContains('metadata->ai_product', true)
             ->whereJsonContains('metadata->ai_kind', 'base')
-            ->whereIn('billing_type', ['MONTHLY', 'ANNUAL'])->where('price', '>', 0)
+            ->whereIn('billing_type', ['MONTHLY', 'ANNUAL'])
+            ->where(function($q) use ($uuid){$q->where('price','>',0); if ($uuid !== '') $q->orWhereJsonContains('metadata->trial',true);})
             ->when(Schema::hasColumn('network_commercial_products', 'is_public'), fn ($q) => $q->where('is_public', true));
         if (Str::isUuid($uuid)) $query->where('uuid', $uuid);
         return $query->orderBy('sort_order')->firstOrFail();
@@ -143,8 +145,9 @@ final class AiPublicOnboardingController extends Controller
     private function ensureAiPlan(NetworkCommercialProduct $product): Plan
     {
         $module = Module::query()->where('code', 'AI_CORE')->where('is_active', true)->firstOrFail();
+        $planCode = (string) data_get($product->metadata, 'ai_plan_code', 'AI_INICIAL');
         $plan = Plan::query()->firstOrCreate(
-            ['code' => 'AI_AGENTS'],
+            ['code' => $planCode],
             ['name' => 'Agentes IA', 'status' => 'active', 'monthly_price' => $product->billing_type === 'MONTHLY' ? $product->price : 0, 'annual_price' => $product->billing_type === 'ANNUAL' ? $product->price : null, 'currency' => $product->currency],
         );
         $plan->modules()->syncWithoutDetaching([$module->id => ['is_included' => true, 'limit_value' => null]]);
