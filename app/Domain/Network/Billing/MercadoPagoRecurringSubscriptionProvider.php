@@ -15,6 +15,7 @@ final class MercadoPagoRecurringSubscriptionProvider implements RecurringSubscri
  public function createSubscription(array $payload):array{return$this->request('post','/preapproval',$payload);}
  public function retrieve(string $id):array{return$this->request('get','/preapproval/'.rawurlencode($id));}
  public function update(string $id,array $payload):array{return$this->request('put','/preapproval/'.rawurlencode($id),$payload);}
+ public function retrievePayment(string $id):array{return$this->request('get','/v1/payments/'.rawurlencode($id));}
  public function validateWebhook(\Illuminate\Http\Request $request,string $id):bool
  {
   $secret=(string)config('zigo_payments.platform.webhook_secret'); $sig=(string)$request->header('x-signature'); $rid=(string)$request->header('x-request-id'); preg_match('/(?:^|,)\s*ts=([^,]+)/',$sig,$ts); preg_match('/(?:^|,)\s*v1=([^,]+)/',$sig,$v1); if(!$secret||!$rid||!isset($ts[1],$v1[1])||!ctype_digit($ts[1]))return false; $manifest='id:'.strtolower(trim($id)).';request-id:'.$rid.';ts:'.$ts[1].';'; return hash_equals(hash_hmac('sha256',$manifest,$secret),trim($v1[1]));
