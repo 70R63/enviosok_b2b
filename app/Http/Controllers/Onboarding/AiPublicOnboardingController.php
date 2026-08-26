@@ -24,7 +24,8 @@ final class AiPublicOnboardingController extends Controller
 {
     public function landing()
     {
-        return view('agentes-ia.landing', ['product' => $this->baseProduct(), 'trial' => $this->trialProduct()]);
+        $trial=$this->trialProduct();
+        return view('agentes-ia.landing', ['product' => $trial ?? $this->baseProduct(), 'trial' => $trial]);
     }
 
     public function pricing()
