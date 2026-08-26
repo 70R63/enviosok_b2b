@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Onboarding;
 
+use App\Domain\AI\Commerce\AiTrialEligibilityService;
 use App\Domain\Network\Catalog\Models\{Module, Plan};
 use App\Domain\Network\Commerce\Models\NetworkCommercialProduct;
 use App\Domain\Network\Commerce\PlatformPaymentService;
@@ -48,6 +49,7 @@ final class AiPublicOnboardingController extends Controller
         OnboardingStateService $states,
         OnboardingMetadataSanitizer $sanitizer,
         \App\Domain\Network\Onboarding\Services\SaasTenantProvisioningService $provisioning,
+        AiTrialEligibilityService $trialEligibility,
     ) {
         $data = $request->validated();
         $product = $this->product((string) ($data['offer'] ?? ''));
@@ -55,6 +57,10 @@ final class AiPublicOnboardingController extends Controller
         $purchaseKey = $this->purchaseKey($request);
         $isTrial = (bool) data_get($product->metadata, 'trial', false);
         if ($isTrial) $purchaseKey = 'ai-trial:'.$purchaseKey;
+        if ($isTrial && ! SaasOnboardingApplication::where('purchase_key', $purchaseKey)->exists()
+            && ! $trialEligibility->canStart((string) $data['contact_email'], $purchaseKey)) {
+            return back()->withErrors(['trial' => 'La prueba gratuita ya no está disponible para esta cuenta. Puedes elegir un plan para continuar.']);
+        }
         unset($data['offer'], $data['requested_subdomain']);
 
         $application = $applications->createOrRecover($data + [

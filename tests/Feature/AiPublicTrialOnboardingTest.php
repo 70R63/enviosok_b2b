@@ -6,8 +6,10 @@ use App\Domain\Network\Catalog\Models\{Module,Plan};
 use App\Domain\Network\Commerce\Models\{NetworkCommercialProduct,PlatformPaymentAttempt,TenantSaasOrder};
 use App\Domain\Network\Onboarding\Models\SaasOnboardingApplication;
 use App\Domain\Network\Tenancy\Models\Tenant;
+use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\{DB,Http,Schema};
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 final class AiPublicTrialOnboardingTest extends TestCase
@@ -32,6 +34,45 @@ final class AiPublicTrialOnboardingTest extends TestCase
   $a=SaasOnboardingApplication::where('contact_email','trial-owner@example.test')->firstOrFail(); $this->assertSame('ACTIVE',$a->status); $this->assertNull($a->paid_at); $this->assertNotNull($a->tenant_id); $this->assertNotNull($a->owner_user_id); $this->assertNotNull($a->legacy_empresa_id); $this->assertSame(0,PlatformPaymentAttempt::where('onboarding_application_id',$a->id)->count()); $this->assertSame(0,TenantSaasOrder::where('payment_status','APPROVED')->count());
   $t=Tenant::findOrFail($a->tenant_id); $this->assertSame('active',$t->status); $this->assertSame('trialcompany',$t->slug); $this->assertDatabaseHas('network_tenant_memberships',['tenant_id'=>$t->id,'user_id'=>$a->owner_user_id,'role'=>'owner','status'=>'active']); $this->assertDatabaseHas('network_tenant_domains',['tenant_id'=>$t->id,'is_primary'=>1,'status'=>'verified']);
   $s=Subscription::where('tenant_id',$t->id)->firstOrFail(); $this->assertSame('trialing',$s->status); $this->assertSame('TRIAL',$s->billing_frequency); $this->assertSame(Plan::where('code','AI_TRIAL')->value('id'),$s->plan_id); $this->assertDatabaseHas('network_entitlements',['subscription_id'=>$s->id,'tenant_id'=>$t->id,'code'=>'AI_CORE','is_enabled'=>1]); $c=app(AiCapacityService::class); $this->assertSame(1,$c->limit($t,'MAX_AGENTS')); $this->assertSame(1,$c->limit($t,'MAX_WEBCHAT_CHANNELS')); $this->assertSame(0,$c->limit($t,'MAX_WHATSAPP_CHANNELS')); $this->assertSame(50,$c->limit($t,'MONTHLY_CONVERSATIONS')); $events=$a->events()->pluck('event')->all(); foreach(['AI_PRODUCT_SELECTED','AI_TRIAL_READY','PROVISIONING_STARTED','PROVISIONING_COMPLETED'] as $event) $this->assertContains($event,$events); $this->assertDatabaseMissing('saas_onboarding_events',['onboarding_application_id'=>$a->id,'event'=>'AI_READY_FOR_CHECKOUT']);
+ }
+ public function test_trial_post_replay_does_not_duplicate_provisioned_resources(): void
+ {
+  $this->postTrial('replay@example.test','replay-company');
+  $before=array_map(fn($t)=>(int)DB::table($t)->count(),['saas_onboarding_applications','network_tenants','users','empresas','network_tenant_memberships','network_tenant_domains','network_subscriptions','network_entitlements']);
+  $this->postTrial('replay@example.test','replay-company');
+  $after=array_map(fn($t)=>(int)DB::table($t)->count(),['saas_onboarding_applications','network_tenants','users','empresas','network_tenant_memberships','network_tenant_domains','network_subscriptions','network_entitlements']);
+  $this->assertSame($before,$after); $this->assertSame(0,PlatformPaymentAttempt::count());
+ }
+ public function test_owner_existing_without_trial_history_is_reused(): void
+ {
+  $empresa=DB::table('empresas')->insertGetId(['estatus'=>1,'contacto'=>'Existing','nombre'=>'Existing','email'=>'existing@example.test','telefono'=>'5551234567','created_at'=>now(),'updated_at'=>now()]);
+  $user=User::create(['name'=>'Existing','apellido_paterno'=>'Owner','email'=>'existing@example.test','password'=>password_hash('secret',PASSWORD_BCRYPT),'empresa_id'=>$empresa]);
+  $this->postTrial('existing@example.test','existing-company');
+  $this->assertSame($user->id,SaasOnboardingApplication::where('contact_email','existing@example.test')->value('owner_user_id')); $this->assertSame(1,User::where('email','existing@example.test')->count());
+ }
+ public function test_same_email_cannot_receive_second_ai_trial_on_another_tenant(): void
+ {
+  $this->postTrial('trial-repeat@example.test','trial-first');
+  $first=SaasOnboardingApplication::where('contact_email','trial-repeat@example.test')->firstOrFail();
+  Subscription::where('tenant_id',$first->tenant_id)->update(['status'=>'suspended','trial_ends_at'=>now()->subMinute()]);
+  $this->withSession(['ai_onboarding_purchase_key'=>(string)\Illuminate\Support\Str::uuid()])->withHeader('Host','zigo.local')->post('/agentes-ia/comenzar',['offer'=>$this->trial->uuid,'contact_name'=>'Repeat','contact_last_name'=>'Owner','contact_email'=>'trial-repeat@example.test','contact_phone'=>'5551234567','company_name'=>'Second','company_legal_name'=>'Second SA','tax_id'=>'SECOND010101AA1','requested_subdomain'=>'trial-second'])->assertSessionHasErrors();
+  $this->assertSame(1,Subscription::where('billing_frequency','TRIAL')->count());
+ }
+ public function test_expired_trial_is_suspended_without_deleting_tenant_data(): void
+ {
+  $this->postTrial('expiry@example.test','expiry-company'); $a=SaasOnboardingApplication::where('contact_email','expiry@example.test')->firstOrFail(); $s=Subscription::where('tenant_id',$a->tenant_id)->firstOrFail();
+  Carbon::setTestNow($s->trial_ends_at->copy()->addMinute()); $this->artisan('ai:expire-trials')->assertSuccessful(); Carbon::setTestNow();
+  $this->assertSame('suspended',$s->fresh()->status); $this->assertDatabaseHas('network_tenants',['id'=>$a->tenant_id]); $this->assertDatabaseHas('users',['id'=>$a->owner_user_id]); $this->assertDatabaseHas('network_tenant_domains',['tenant_id'=>$a->tenant_id]); $this->assertDatabaseHas('network_entitlements',['tenant_id'=>$a->tenant_id]);
+ }
+ public function test_paid_ai_onboarding_remains_pending_payment_and_is_not_provisioned_as_trial(): void
+ {
+  $paid=NetworkCommercialProduct::create(['uuid'=>'22222222-2222-4222-8222-222222222222','code'=>'AI_INITIAL','name'=>'Inicial','description'=>'Paid','type'=>'PLAN','billing_type'=>'MONTHLY','price'=>599,'currency'=>'MXN','is_active'=>true,'is_public'=>true,'metadata'=>['ai_product'=>true,'ai_kind'=>'base','trial'=>false,'ai_plan_code'=>'AI_INITIAL']]);
+  $this->withHeader('Host','zigo.local')->post('/agentes-ia/comenzar',['offer'=>$paid->uuid,'contact_name'=>'Paid','contact_last_name'=>'Owner','contact_email'=>'paid@example.test','contact_phone'=>'5551234567','company_name'=>'Paid Co','company_legal_name'=>'Paid Co SA','tax_id'=>'PAID010101AA1','requested_subdomain'=>'paid-company'])->assertRedirect();
+  $a=SaasOnboardingApplication::where('contact_email','paid@example.test')->firstOrFail(); $this->assertSame('PENDING_PAYMENT',$a->status); $this->assertNull($a->paid_at); $this->assertNull($a->tenant_id); $this->assertSame(0,Subscription::count()); $this->assertSame(0,PlatformPaymentAttempt::count()); $this->assertDatabaseHas('saas_onboarding_events',['onboarding_application_id'=>$a->id,'event'=>'AI_READY_FOR_CHECKOUT']); $this->assertDatabaseMissing('saas_onboarding_events',['onboarding_application_id'=>$a->id,'event'=>'AI_TRIAL_READY']);
+ }
+ private function postTrial(string $email,string $subdomain): void
+ {
+  $this->withHeader('Host','zigo.local')->post('/agentes-ia/comenzar',['offer'=>$this->trial->uuid,'contact_name'=>'Trial','contact_last_name'=>'Owner','contact_email'=>$email,'contact_phone'=>'5551234567','company_name'=>'Trial Company','company_legal_name'=>'Trial Company SA de CV','tax_id'=>'TRIAL010101AA1','requested_subdomain'=>$subdomain])->assertRedirect();
  }
  private function schema():void
  {
