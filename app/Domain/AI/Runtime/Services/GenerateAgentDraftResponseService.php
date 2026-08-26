@@ -33,10 +33,11 @@ use App\Domain\AI\Actions\ActionRegistry;
 use App\Domain\AI\Runtime\Support\ActionRuntimeOutputSchema;
 use App\Domain\Network\Tenancy\Models\Tenant;
 use App\Domain\AI\Usage\MeteredRuntimeRunService;
+use App\Domain\AI\Cost\AiCostGuard;
 
 final class GenerateAgentDraftResponseService
 {
-    public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private KnowledgeRetriever $retriever, private ProviderRegistry $providers, private AgentRuntimePolicyCompiler $policy, private ActionRegistry $actions, private MeteredRuntimeRunService $runs) {}
+    public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private KnowledgeRetriever $retriever, private ProviderRegistry $providers, private AgentRuntimePolicyCompiler $policy, private ActionRegistry $actions, private MeteredRuntimeRunService $runs, private ?AiCostGuard $costGuard = null) {}
 
     public function generate(User $actor, Agent $agent, RuntimeQuestionData $q, ?AgentVersion $pinnedVersion = null, array $history = [], AiExecutionMode $mode = AiExecutionMode::Live): AgentRuntimeResponseData
     {
@@ -84,15 +85,20 @@ return [$a, $v];
                 $sources[] = $knowledge[((int) substr($id, 1)) - 1];
             }$result = new AgentRuntimeResponseData($valid->answer, $valid->citationIds, $valid->confidence, $valid->needsHandoff, $valid->handoffReason, $sources, $run->id, $valid->leadCandidate, $valid->resolvedCandidate, $valid->actionRequest);
             $pricing = (config('ai.providers.openai.pricing') ?? [])[$model->model] ?? null;
-            if (! is_array($pricing)) {
-                throw new InvalidModelResponseException('Pricing snapshot is not configured.');
-            }DB::transaction(fn () => $run->fresh()->complete($this->auth->authorize($actor), $model, $result, $pricing));
+            if ($this->costGuard && Schema::hasTable('ai_cost_ledger')) {
+                $ledger = $this->costGuard->record($tenant, $run, ['input_tokens'=>$model->inputUnits,'cached_input_tokens'=>$model->cachedInputUnits,'output_tokens'=>$model->outputUnits,'total_tokens'=>$model->totalUnits]);
+                $snapshot = $ledger->rate_snapshot ?? null;
+                if (is_array($snapshot)) $pricing = $snapshot;
+            }
+            if (! is_array($pricing)) throw new InvalidModelResponseException('Pricing snapshot is not configured.');
+            DB::transaction(fn () => $run->fresh()->complete($this->auth->authorize($actor), $model, $result, $pricing));
 
             return $result;
         } catch (\Throwable$e) {
             $code = match (true) {
                 $e instanceof ModelProviderNotConfiguredException => 'provider_not_configured',$e instanceof ModelProviderAuthenticationException => 'provider_authentication',$e instanceof ModelProviderRateLimitException => 'provider_rate_limit',$e instanceof ModelProviderTimeoutException => 'provider_timeout',$e instanceof ModelProviderUnavailableException => 'provider_unavailable',$e instanceof InvalidModelResponseException => 'invalid_model_response',default => 'runtime_failed'
             };
+            $this->costGuard?->release($run);
             DB::transaction(fn () => $run->fresh()->fail($this->auth->authorize($actor), $code, $e instanceof ModelProviderException ? $e->failure : null));
             throw $e;
         }
