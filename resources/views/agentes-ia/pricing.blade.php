@@ -1,0 +1,3 @@
+@extends('layouts.ai-public')
+@section('title','Planes · Agentes IA')
+@section('content')<section class="hero"><p class="muted">Planes configurables desde el catálogo</p><h1>Agentes IA</h1>@if($product)<div class="price">${{ number_format((float)$product->price,2) }} {{ $product->currency }}</div><p>{{ $product->billing_type === 'ANNUAL' ? 'Anual' : 'Mensual' }}</p><p>{{ $product->description }}</p><ul><li>Agentes, Webchat y conversaciones según capacidad contratada</li><li>Conocimiento, acciones y handoff humano</li><li>Ampliaciones disponibles desde tu cuenta</li></ul><a class="btn" href="{{ route('agentes-ia.start',['offer'=>$product->uuid]) }}">Comenzar</a>@else<p class="muted">El producto no está disponible temporalmente.</p>@endif</section>@endsection

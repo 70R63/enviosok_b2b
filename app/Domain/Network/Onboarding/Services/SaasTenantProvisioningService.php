@@ -10,6 +10,7 @@ use App\Domain\Network\Commerce\Models\{
 };
 use App\Domain\Network\Onboarding\Exceptions\OnboardingProvisioningException;
 use App\Domain\Network\Onboarding\Models\SaasOnboardingApplication;
+use App\Domain\AI\Commerce\AiCommercialActivationService;
 use App\Domain\Network\Tenancy\Models\{Tenant, TenantDomain};
 use App\Models\{Empresa, User};
 use Illuminate\Support\Facades\{DB, Hash, Schema};
@@ -24,6 +25,7 @@ final class SaasTenantProvisioningService
         private OnboardingSubdomainService $subdomains,
         private LegacyEmpresaAdapter $legacyCompanies,
         private OwnerActivationService $ownerActivations,
+        private AiCommercialActivationService $aiProducts,
     ) {}
 
     public function provision(SaasOnboardingApplication|int $application): SaasOnboardingApplication
@@ -112,6 +114,9 @@ final class SaasTenantProvisioningService
                 $order = $this->commercialOrder($onboarding, $tenant, $owner, $snapshot);
                 $subscription = $this->subscription($onboarding, $tenant, $plan, $snapshot);
                 $this->entitlements($onboarding, $tenant, $subscription, $snapshot, $order);
+                if (($snapshot['ai_product'] ?? false) === true) {
+                    $this->aiProducts->apply($order, $subscription);
+                }
                 $this->allowance($onboarding, $tenant, $subscription, $snapshot, $order);
                 $domain = $this->domain($onboarding, $tenant);
 

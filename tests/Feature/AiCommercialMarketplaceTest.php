@@ -141,6 +141,24 @@ final class AiCommercialMarketplaceTest extends TestCase
         $this->assertSame(0, PlatformPaymentEvent::count());
     }
 
+    public function test_public_ai_routes_render_the_catalog_offer_without_internal_branding(): void
+    {
+        $module = Module::create(['code' => 'AI_CORE', 'name' => 'AI Core', 'type' => 'core', 'is_active' => true, 'sort_order' => 2]);
+        $product = NetworkCommercialProduct::create([
+            'code' => 'PUBLIC-AI-BASE', 'name' => 'Agentes IA', 'description' => 'Atención automatizada',
+            'type' => 'ADDON', 'billing_type' => 'MONTHLY', 'price' => '299.00', 'currency' => 'MXN',
+            'module_id' => $module->id, 'is_active' => true, 'metadata' => [
+                'ai_product' => true, 'ai_kind' => 'base', 'ai_capacities' => [AiCapacityService::MAX_AGENTS => 1],
+            ],
+        ]);
+        config(['zigo_surfaces.corporate.host' => 'zigo.local']);
+        $server = ['HTTP_HOST' => 'zigo.local'];
+
+        $this->call('GET', '/agentes-ia', [], [], [], $server)->assertOk()->assertSee('Agentes IA')->assertDontSee('INNOTECH');
+        $this->call('GET', '/agentes-ia/precios', [], [], [], $server)->assertOk()->assertSee($product->name)->assertSee('299.00');
+        $this->call('GET', '/agentes-ia/comenzar', [], [], [], $server)->assertOk()->assertSee('Comienza con Agentes IA');
+    }
+
     private function tenantWithLogistics(): array
     {
         $tenant = Tenant::create(['uuid' => (string) \Illuminate\Support\Str::uuid(), 'name' => 'Tenant', 'slug' => 'tenant', 'status' => 'active']);

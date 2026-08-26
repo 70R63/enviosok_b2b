@@ -29,7 +29,11 @@ final class OnboardingCommercialSnapshotService
 
         $billingType = $billingPeriod === 'annual' ? 'ANNUAL' : 'MONTHLY';
         $planOffer = $planOfferUuid ? NetworkCommercialProduct::query()
-            ->where('uuid', $planOfferUuid)->where('type', 'PLAN')->where('plan_id', $plan->id)
+            ->where('uuid', $planOfferUuid)->where('plan_id', $plan->id)
+            ->where(fn ($query) => $query->where('type', 'PLAN')->orWhere(fn ($ai) => $ai
+                ->where('type', 'ADDON')
+                ->whereJsonContains('metadata->ai_product', true)
+                ->whereJsonContains('metadata->ai_kind', 'base')))
             ->where('billing_type', $billingType)->where('is_active', true)->first() : null;
         if ($planOfferUuid && !$planOffer) {
             throw ValidationException::withMessages(['selected_plan_id' => 'La oferta del plan ya no está disponible.']);
@@ -64,6 +68,8 @@ final class OnboardingCommercialSnapshotService
         return [
             'version' => self::VERSION,
             'generated_at' => now()->toIso8601String(),
+            'ai_product' => (bool) data_get($planOffer?->metadata, 'ai_product', false),
+            'metadata' => (array) ($planOffer?->metadata ?? []),
             'plan' => [
                 'id' => $plan->id,
                 'code' => $plan->code,

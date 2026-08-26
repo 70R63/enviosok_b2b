@@ -1,0 +1,3 @@
+@extends('layouts.ai-public')
+@section('title','Confirmar · Agentes IA')
+@section('content')<section class="card"><h1>Confirma Agentes IA</h1><p>Empresa: <strong>{{ $application->company_name }}</strong></p><p>Correo: {{ $application->contact_email }}</p><p>Periodicidad: {{ $application->billing_period === 'annual' ? 'Anual' : 'Mensual' }}</p><p>Total: <strong>${{ number_format((float)$application->total,2) }} {{ $application->currency }}</strong></p><form method="post" action="{{ route('agentes-ia.onboarding.checkout',$application->public_token) }}">@csrf<button class="btn" type="submit">Pagar con Mercado Pago</button></form></section>@endsection

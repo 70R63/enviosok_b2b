@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Domain\AI\Usage\AiCapacityService;
 use App\Domain\Network\Catalog\Models\{Module, Plan};
 use App\Domain\Network\Commerce\Models\{
     NetworkCommercialProduct, PlatformPaymentAttempt, PlatformPaymentEvent,
@@ -338,6 +339,73 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
         $this->assertStringNotContainsString('rapidgo', strtolower($events));
     }
 
+    public function test_ai_public_onboarding_uses_existing_application_and_provisions_ai_only(): void
+    {
+        Queue::fake();
+        $module = Module::create(['code' => 'AI_CORE', 'name' => 'AI Core', 'type' => 'core', 'is_active' => true, 'sort_order' => 5]);
+        $plan = Plan::create(['code' => 'AI_AGENTS', 'name' => 'Agentes IA', 'status' => 'active', 'monthly_price' => '299.00', 'currency' => 'MXN']);
+        $plan->modules()->attach($module, ['is_included' => true, 'limit_value' => null]);
+        $product = NetworkCommercialProduct::create([
+            'code' => 'PUBLIC-AI-ONBOARDING', 'name' => 'Agentes IA', 'description' => 'AI only',
+            'type' => 'ADDON', 'billing_type' => 'MONTHLY', 'price' => '299.00', 'currency' => 'MXN',
+            'module_id' => $module->id, 'plan_id' => $plan->id, 'is_active' => true,
+            'metadata' => ['ai_product' => true, 'ai_kind' => 'base', 'ai_capacities' => [
+                AiCapacityService::MAX_AGENTS => 1, AiCapacityService::MAX_WEBCHAT_CHANNELS => 1,
+                AiCapacityService::MAX_WHATSAPP_CHANNELS => 0, AiCapacityService::MONTHLY_RUNTIME_UNITS => 1000,
+                AiCapacityService::MONTHLY_ACTION_RUNS => 100, AiCapacityService::MONTHLY_CONVERSATIONS => 250,
+            ]],
+        ]);
+
+        $application = app(OnboardingApplicationService::class)->createOrRecover([
+            'contact_name' => 'AI Owner', 'contact_last_name' => 'Test', 'contact_email' => 'ai-only@example.test',
+            'contact_phone' => '5551234567', 'company_name' => 'AI Company', 'company_legal_name' => 'AI Company SA',
+            'selected_plan_id' => $plan->id, 'billing_period' => 'monthly',
+        ], 'ai-public-purchase');
+        $application = app(OnboardingApplicationService::class)->updateDraft($application, [
+            'selected_plan_id' => $plan->id, 'billing_period' => 'monthly',
+            'selected_modules_json' => ['plan_offer_uuid' => $product->uuid, 'module_ids' => []],
+        ], 'AI_PRODUCT_SELECTED');
+        $application = app(OnboardingSubdomainService::class)->reserve($application, 'ai-only');
+        $application = app(OnboardingApplicationService::class)->freezeCommercialSnapshot($application, [], null, '0.00', $product->uuid);
+        $application = app(OnboardingStateService::class)->transition($application, 'PENDING_PAYMENT', 'AI_READY_FOR_CHECKOUT', 'public_session');
+        $attempt = PlatformPaymentAttempt::create([
+            'onboarding_application_id' => $application->id, 'provider' => 'MERCADO_PAGO', 'status' => 'PENDING',
+            'provider_preference_id' => 'pref-ai', 'external_reference' => 'ai-public-ref', 'amount' => '299.00', 'currency' => 'MXN',
+        ]);
+        $this->artisan('zigo:stage-platform-payment-approve', ['attempt' => $attempt->uuid, '--confirm-stage' => true])->assertExitCode(0);
+        $active = app(SaasTenantProvisioningService::class)->provision($application->fresh());
+
+        $this->assertSame('ACTIVE', $active->status);
+        $this->assertSame(1, DB::table('network_tenants')->count());
+        $this->assertSame(1, DB::table('network_subscriptions')->count());
+        $this->assertSame(1, DB::table('network_entitlements')->where('code', 'AI_CORE')->count());
+        $this->assertSame(1, DB::table('network_entitlement_capacities')->where('capability_code', AiCapacityService::MAX_AGENTS)->value('quantity'));
+        $this->assertSame(1, DB::table('network_tenants')->where('id', $active->tenant_id)->count());
+        $this->assertSame('ACTIVE', app(SaasTenantProvisioningService::class)->provision($active->fresh())->status);
+        $this->assertSame(1, DB::table('network_tenants')->count());
+    }
+
+    public function test_public_ai_start_route_creates_pending_application_without_logistics_fields(): void
+    {
+        $module = Module::create(['code' => 'AI_CORE', 'name' => 'AI Core', 'type' => 'core', 'is_active' => true, 'sort_order' => 5]);
+        $product = NetworkCommercialProduct::create([
+            'code' => 'PUBLIC-AI-START', 'name' => 'Agentes IA', 'description' => 'AI only',
+            'type' => 'ADDON', 'billing_type' => 'MONTHLY', 'price' => '299.00', 'currency' => 'MXN',
+            'module_id' => $module->id, 'is_active' => true,
+            'metadata' => ['ai_product' => true, 'ai_kind' => 'base', 'ai_capacities' => [AiCapacityService::MAX_AGENTS => 1]],
+        ]);
+        config(['zigo_surfaces.corporate.host' => 'zigo.local']);
+        $response = $this->withServerVariables(['HTTP_HOST' => 'zigo.local'])->post('/agentes-ia/comenzar', [
+            'contact_name' => 'Public', 'contact_last_name' => 'Owner', 'contact_email' => 'public-start@example.test',
+            'company_name' => 'AI Only Company', 'requested_subdomain' => 'ai-start', 'offer' => $product->uuid,
+        ]);
+        $response->assertRedirect();
+        $application = SaasOnboardingApplication::where('contact_email', 'public-start@example.test')->firstOrFail();
+        $this->assertSame('PENDING_PAYMENT', $application->status);
+        $this->assertSame($product->uuid, data_get($application->commercial_snapshot_json, 'plan.commercial_product_uuid'));
+        $this->assertSame(0, DB::table('network_modules')->where('code', 'SHIPPING')->count());
+    }
+
     protected function pending(string $key, bool $withExtras = false, ?string $email = null, bool $withB2c = false): array
     {
         [$plan, $planOffer, $apiOffer, $opsOffer] = $this->catalog($key, $withB2c);
@@ -437,7 +505,7 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
 
     protected function schema(): void
     {
-        foreach (['tenant_api_quota_policies','tenant_operation_allowances','platform_payment_events','platform_payment_attempts','tenant_saas_orders','saas_onboarding_events','saas_onboarding_applications','network_subscription_events','network_entitlements','network_subscriptions','network_tenant_memberships','network_tenant_brandings','network_tenant_domains','network_commercial_products','network_plan_modules','network_tenants','network_plans','network_modules','users','empresas'] as $table) Schema::dropIfExists($table);
+        foreach (['tenant_api_quota_policies','tenant_operation_allowances','platform_payment_events','platform_payment_attempts','tenant_saas_orders','saas_onboarding_events','saas_onboarding_applications','network_entitlement_capacities','network_subscription_events','network_entitlements','network_subscriptions','network_tenant_memberships','network_tenant_brandings','network_tenant_domains','network_commercial_products','network_plan_modules','network_tenants','network_plans','network_modules','users','empresas'] as $table) Schema::dropIfExists($table);
         Schema::create('empresas',function(Blueprint$t){$t->id();$t->timestamps();$t->boolean('estatus')->default(1);$t->string('contacto',50);$t->string('nombre',50);$t->string('email')->nullable()->unique();$t->string('telefono',10);});
         Schema::create('users',function(Blueprint$t){$t->id();$t->string('name');$t->string('apellido_paterno')->nullable();$t->string('apellido_materno')->nullable();$t->string('rfc')->nullable();$t->string('email')->unique();$t->timestamp('email_verified_at')->nullable();$t->string('password');$t->unsignedBigInteger('empresa_id');$t->rememberToken();$t->timestamps();});
         Schema::create('network_modules',function(Blueprint$t){$t->id();$t->string('code')->unique();$t->string('name');$t->text('description')->nullable();$t->string('type');$t->boolean('is_active');$t->unsignedSmallInteger('sort_order');$t->timestamps();});
@@ -449,6 +517,7 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
         Schema::create('network_tenant_memberships',function(Blueprint$t){$t->id();$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('user_id');$t->string('role');$t->string('status');$t->timestamps();$t->unique(['tenant_id','user_id']);});
         Schema::create('network_subscriptions',function(Blueprint$t){$t->id();$t->uuid('uuid')->unique();$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('plan_id');$t->string('status');$t->unsignedInteger('operations_limit')->nullable();foreach(['started_at','current_period_start','current_period_end','trial_ends_at','grace_ends_at','canceled_at','ended_at']as$c)$t->timestamp($c)->nullable();$t->timestamps();});
         Schema::create('network_entitlements',function(Blueprint$t){$t->id();$t->unsignedBigInteger('subscription_id');$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('module_id');$t->string('code');$t->boolean('is_enabled');$t->unsignedInteger('limit_value')->nullable();$t->string('source');$t->timestamps();$t->unique(['subscription_id','module_id']);$t->unique(['subscription_id','code']);});
+        Schema::create('network_entitlement_capacities',function(Blueprint$t){$t->id();$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('subscription_id');$t->unsignedBigInteger('entitlement_id');$t->string('capability_code');$t->unsignedInteger('quantity');$t->string('source');$t->string('source_key');$t->boolean('is_enabled')->default(true);$t->timestamps();$t->unique(['entitlement_id','capability_code','source','source_key']);});
         Schema::create('network_subscription_events',function(Blueprint$t){$t->id();$t->unsignedBigInteger('subscription_id');$t->unsignedBigInteger('tenant_id');$t->unsignedBigInteger('actor_user_id')->nullable();$t->string('event');$t->string('from_status')->nullable();$t->string('to_status')->nullable();$t->json('metadata')->nullable();$t->timestamp('created_at')->nullable();});
         Schema::create('network_commercial_products',function(Blueprint$t){$t->id();$t->uuid('uuid')->unique();$t->string('code')->unique();$t->string('name');$t->text('description')->nullable();$t->string('type');$t->string('billing_type');$t->decimal('price',12,2);$t->char('currency',3);$t->unsignedBigInteger('module_id')->nullable();$t->unsignedBigInteger('plan_id')->nullable();$t->unsignedInteger('included_operations')->nullable();$t->boolean('is_active');$t->unsignedInteger('sort_order')->default(0);$t->json('metadata')->nullable();$t->timestamps();});
         (require database_path('migrations/2026_08_19_100000_create_saas_onboarding_applications.php'))->up();

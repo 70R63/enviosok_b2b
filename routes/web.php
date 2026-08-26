@@ -35,6 +35,7 @@ use App\Http\Controllers\DevOps\DevOpsAuthController;
 use App\Http\Controllers\DevOps\XpertaIntegrationController;
 use App\Models\B2cCotizacion;
 use App\Http\Controllers\Onboarding\ZigoPlatformController;
+use App\Http\Controllers\Onboarding\AiPublicOnboardingController;
 use App\Http\Controllers\Webchat\HostedWebchatController;
 
 Route::get('/ai/webchat/widget.js', [HostedWebchatController::class,'widget'])->name('ai.webchat.widget');
@@ -63,6 +64,16 @@ Route::middleware('zigo.corporate.host')->prefix('zigo-platform')->name('zigo-pl
     Route::get('/solicitud/{token}/resumen', [ZigoPlatformController::class, 'summary'])->name('onboarding.summary');
     Route::post('/solicitud/{token}/checkout', [ZigoPlatformController::class, 'checkout'])->middleware('throttle:onboarding-checkout')->name('onboarding.checkout');
     Route::get('/solicitud/{token}/retorno/{result}', [ZigoPlatformController::class, 'returned'])->middleware('throttle:20,1')->name('onboarding.return');
+});
+
+Route::middleware('zigo.corporate.host')->prefix('agentes-ia')->name('agentes-ia.')->group(function (): void {
+    Route::get('/', [AiPublicOnboardingController::class, 'landing'])->name('landing');
+    Route::get('/precios', [AiPublicOnboardingController::class, 'pricing'])->name('pricing');
+    Route::get('/comenzar', [AiPublicOnboardingController::class, 'start'])->name('start');
+    Route::post('/comenzar', [AiPublicOnboardingController::class, 'storeStart'])->middleware('throttle:8,1')->name('start.store');
+    Route::get('/solicitud/{token}/resumen', [AiPublicOnboardingController::class, 'summary'])->name('onboarding.summary');
+    Route::post('/solicitud/{token}/checkout', [AiPublicOnboardingController::class, 'checkout'])->middleware('throttle:onboarding-checkout')->name('onboarding.checkout');
+    Route::get('/solicitud/{token}/retorno/{result}', [AiPublicOnboardingController::class, 'returned'])->middleware('throttle:20,1')->name('onboarding.return');
 });
 
 
