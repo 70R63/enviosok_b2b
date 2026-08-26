@@ -25,3 +25,16 @@ Trial sin tarjeta, expiración y reconciliación recurrente quedan sujetos al
 pipeline existente de onboarding/pagos; no se crean tenants, subscriptions ni
 Motores de cobro paralelos. IA-15 no implementa checkout nuevo, facturación CFDI,
 Marketing ni una landing logística.
+
+## Recurring subscriptions (Block B)
+
+`RecurringSubscriptionService` utiliza el adapter `MercadoPagoRecurringSubscriptionProvider`
+para representar las ofertas Network con `preapproval_plan` y `preapproval`.
+La mensualidad usa frecuencia 1 mes y la anual 12 meses; el identificador del
+plan remoto se conserva en metadata del producto y el de la suscripción en la
+suscripción local. El retorno del navegador no activa nada: sólo un webhook o
+una reconciliación server-side (`GET /preapproval/{id}`) puede actualizar el
+estado local. Los eventos recurrentes se deduplican mediante
+`PlatformPaymentEvent` (provider + event key). Estados `authorized/approved`,
+`paused` y `canceled` se mapean explícitamente a `active`, `past_due` y
+`canceled`; estados pendientes conservan el estado local hasta nueva evidencia.
