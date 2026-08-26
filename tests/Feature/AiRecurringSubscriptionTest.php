@@ -70,7 +70,7 @@ final class AiRecurringSubscriptionTest extends TestCase
             'currency' => 'MXN', 'plan_id' => $growthPlan->id,
             'is_active' => true, 'is_public' => true,
             'metadata' => [
-                'ai_product' => true, 'ai_kind' => 'base', 'trial' => false,
+                'ai_product' => true, 'ai_kind' => 'base', 'trial' => false, 'ai_tier_rank' => 20,
                 'provider_plan_id_monthly' => 'mp-plan-growth',
             ],
         ]);
@@ -322,6 +322,41 @@ final class AiRecurringSubscriptionTest extends TestCase
         $this->assertSame('2026-09-01 00:00:00', $result->current_period_end->format('Y-m-d H:i:s'));
     }
 
+    public function test_upgrade_keeps_old_capacities_until_provider_authorized(): void
+    {
+        NetworkCommercialProduct::create(['uuid' => '55555555-5555-4555-8555-555555555555', 'code' => 'AI_TRIAL_LEGACY', 'name' => 'Inicial', 'type' => 'PLAN', 'billing_type' => 'MONTHLY', 'price' => 599, 'currency' => 'MXN', 'plan_id' => $this->subscription->plan_id, 'is_active' => true, 'is_public' => true, 'metadata' => ['ai_product' => true, 'ai_tier_rank' => 10]]);
+        $this->subscription->update(['status' => 'active', 'provider_subscription_id' => null, 'plan_id' => $this->subscription->plan_id]);
+        Http::fake([
+            'https://api.mercadopago.com/preapproval/mp-upgrade' => Http::response([
+                'id' => 'mp-upgrade', 'status' => 'authorized', 'external_reference' => 'ai-sub:'.$this->subscription->uuid,
+                'preapproval_plan_id' => 'mp-plan-growth', 'auto_recurring' => ['transaction_amount' => '1299.00', 'currency_id' => 'MXN'],
+            ]),
+            'https://api.mercadopago.com/preapproval' => Http::response(['id' => 'mp-upgrade', 'status' => 'pending']),
+        ]);
+        app(RecurringSubscriptionService::class)->requestUpgrade($this->subscription, $this->growth, 'MONTHLY', 'owner@example.test');
+        $this->assertSame(1, app(AiCapacityService::class)->limit($this->tenant, 'MAX_AGENTS', $this->subscription));
+        app(RecurringSubscriptionService::class)->reconcile($this->subscription->fresh());
+        $this->assertSame(2, app(AiCapacityService::class)->limit($this->tenant, 'MAX_AGENTS', $this->subscription->fresh()));
+    }
+
+    public function test_downgrade_is_applied_at_period_end_and_preserves_schedule_on_provider_failure(): void
+    {
+        $initial = Plan::create(['code' => 'AI_INICIAL', 'name' => 'Inicial', 'status' => 'active', 'monthly_price' => 599, 'currency' => 'MXN']);
+        $module = Module::where('code', 'AI_CORE')->first();
+        $initial->modules()->attach($module->id, ['is_included' => true]);
+        foreach ([['MAX_AGENTS', 1], ['MAX_WEBCHAT_CHANNELS', 1], ['MAX_WHATSAPP_CHANNELS', 0], ['MONTHLY_CONVERSATIONS', 150]] as [$code, $quantity]) DB::table('network_plan_module_capacities')->insert(['plan_id' => $initial->id, 'module_id' => $module->id, 'capability_code' => $code, 'quantity' => $quantity, 'created_at' => now(), 'updated_at' => now()]);
+        $initialProduct = NetworkCommercialProduct::create(['uuid' => '44444444-4444-4444-8444-444444444444', 'code' => 'AI_INICIAL_MONTHLY', 'name' => 'Inicial', 'type' => 'PLAN', 'billing_type' => 'MONTHLY', 'price' => 599, 'currency' => 'MXN', 'plan_id' => $initial->id, 'is_active' => true, 'is_public' => true, 'metadata' => ['ai_product' => true, 'ai_tier_rank' => 10, 'provider_plan_id_monthly' => 'mp-plan-initial']]);
+        $this->subscription->update(['status' => 'active', 'provider_subscription_id' => 'mp-sub-downgrade', 'current_period_end' => now()->subSecond()]);
+        app(RecurringSubscriptionService::class)->scheduleDowngrade($this->subscription, $initialProduct->plan_id);
+        Http::fake(['https://api.mercadopago.com/preapproval/mp-sub-downgrade' => Http::response(['id' => 'mp-sub-downgrade', 'status' => 'authorized'])]);
+        $this->artisan('ai:process-billing-lifecycle')->assertSuccessful();
+        $fresh = $this->subscription->fresh();
+        $this->assertSame($initial->id, $fresh->plan_id);
+        $this->assertNull($fresh->pending_plan_id);
+        $fresh->update(['current_period_end' => now()->addDay()]);
+        $this->assertSame(1, app(AiCapacityService::class)->limit($this->tenant, 'MAX_AGENTS', $fresh));
+    }
+
     private function signatureHeaders(string $id, string $requestId): array
     {
         $ts = '1720000000';
@@ -353,7 +388,7 @@ final class AiRecurringSubscriptionTest extends TestCase
             $table->id(); $table->uuid('uuid'); $table->string('code'); $table->string('name'); $table->string('type'); $table->string('billing_type'); $table->decimal('price', 12, 2); $table->char('currency', 3); $table->unsignedBigInteger('plan_id')->nullable(); $table->boolean('is_active'); $table->boolean('is_public'); $table->json('metadata')->nullable(); $table->timestamps();
         });
         Schema::create('network_subscriptions', function (Blueprint $table): void {
-            $table->id(); $table->uuid('uuid'); $table->unsignedBigInteger('tenant_id'); $table->unsignedBigInteger('plan_id'); $table->string('status'); $table->timestamp('started_at')->nullable(); $table->timestamp('current_period_start')->nullable(); $table->timestamp('current_period_end')->nullable(); $table->timestamp('trial_ends_at')->nullable(); $table->timestamp('grace_ends_at')->nullable(); $table->timestamp('canceled_at')->nullable(); $table->timestamp('ended_at')->nullable(); $table->string('billing_frequency')->nullable(); $table->string('provider_subscription_id')->nullable(); $table->string('provider_plan_id')->nullable(); $table->string('provider_status')->nullable(); $table->timestamp('next_payment_date')->nullable(); $table->boolean('cancel_at_period_end')->default(false); $table->timestamps();
+            $table->id(); $table->uuid('uuid'); $table->unsignedBigInteger('tenant_id'); $table->unsignedBigInteger('plan_id'); $table->string('status'); $table->timestamp('started_at')->nullable(); $table->timestamp('current_period_start')->nullable(); $table->timestamp('current_period_end')->nullable(); $table->timestamp('trial_ends_at')->nullable(); $table->timestamp('grace_ends_at')->nullable(); $table->timestamp('canceled_at')->nullable(); $table->timestamp('ended_at')->nullable(); $table->string('billing_frequency')->nullable(); $table->string('provider_subscription_id')->nullable(); $table->string('provider_plan_id')->nullable(); $table->string('provider_status')->nullable(); $table->timestamp('next_payment_date')->nullable(); $table->boolean('cancel_at_period_end')->default(false); $table->unsignedBigInteger('pending_plan_id')->nullable(); $table->timestamp('pending_effective_at')->nullable(); $table->timestamps();
         });
         Schema::create('network_entitlements', function (Blueprint $table): void {
             $table->id(); $table->unsignedBigInteger('subscription_id'); $table->unsignedBigInteger('tenant_id'); $table->unsignedBigInteger('module_id'); $table->string('code'); $table->boolean('is_enabled'); $table->string('source'); $table->timestamps(); $table->unique(['subscription_id', 'module_id']);

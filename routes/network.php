@@ -287,6 +287,7 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
             Route::post('/plan/recurring', [\App\Http\Controllers\Tenant\TenantRecurringSubscriptionController::class, 'subscribe'])->middleware('throttle:6,1')->name('plan.recurring.subscribe');
             Route::post('/plan/recurring/reconcile', [\App\Http\Controllers\Tenant\TenantRecurringSubscriptionController::class, 'reconcile'])->middleware('throttle:10,1')->name('plan.recurring.reconcile');
             Route::post('/plan/recurring/cancel', [\App\Http\Controllers\Tenant\TenantRecurringSubscriptionController::class, 'cancel'])->middleware('throttle:6,1')->name('plan.recurring.cancel');
+            Route::post('/plan/change', [\App\Http\Controllers\Tenant\TenantRecurringSubscriptionController::class, 'change'])->middleware('throttle:6,1')->name('plan.change');
             Route::middleware('tenant.entitlement:AI_CORE')->group(function (): void {
                 Route::get('/ai-agents', [AiAgentController::class, 'index'])->name('ai-agents.index');
                 Route::get('/ai-conversations', [AiConversationController::class, 'index'])->name('ai-conversations.index');
