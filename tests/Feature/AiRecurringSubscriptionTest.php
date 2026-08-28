@@ -357,6 +357,21 @@ final class AiRecurringSubscriptionTest extends TestCase
         $this->assertSame(1, app(AiCapacityService::class)->limit($this->tenant, 'MAX_AGENTS', $fresh));
     }
 
+    public function test_pending_plan_must_be_active_different_and_have_effective_date(): void
+    {
+        $service = app(RecurringSubscriptionService::class);
+        try {
+            $service->scheduleDowngrade($this->subscription, $this->subscription->plan_id);
+            $this->fail('The current plan cannot be scheduled as pending.');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('PENDING_PLAN_INVALID', $e->getMessage());
+        }
+
+        $inactive = Plan::create(['code' => 'AI_INACTIVE', 'name' => 'Inactive', 'status' => 'inactive', 'monthly_price' => 1, 'currency' => 'MXN']);
+        $this->expectExceptionMessage('PENDING_PLAN_INVALID');
+        $service->scheduleDowngrade($this->subscription, $inactive->id);
+    }
+
     private function signatureHeaders(string $id, string $requestId): array
     {
         $ts = '1720000000';

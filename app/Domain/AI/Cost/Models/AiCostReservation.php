@@ -1,4 +1,4 @@
 <?php
 namespace App\Domain\AI\Cost\Models;
 use Illuminate\Database\Eloquent\Model;
-final class AiCostReservation extends Model {protected $table='ai_cost_reservations';protected $guarded=[];protected $casts=['rate_snapshot'=>'array','reserved_microusd'=>'integer','actual_cost_microusd'=>'integer','released_microusd'=>'integer'];}
+final class AiCostReservation extends Model {protected $table='ai_cost_reservations';protected $guarded=[];protected $casts=['rate_snapshot'=>'array','reserved_microusd'=>'integer','actual_cost_microusd'=>'integer','released_microusd'=>'integer'];protected static function booted():void{static::saving(function(self$m):void{foreach(['reserved_microusd','actual_cost_microusd','released_microusd']as$c)if($m->{$c}!==null&&(int)$m->{$c}<0)throw new \RuntimeException('AI_COST_VALUE_INVALID');if($m->runtime_run_id&&\Illuminate\Support\Facades\Schema::hasTable('ai_runtime_runs')&&\Illuminate\Support\Facades\DB::table('ai_runtime_runs')->where('id',$m->runtime_run_id)->where('tenant_id',$m->tenant_id)->doesntExist())throw new \RuntimeException('AI_RUNTIME_TENANT_MISMATCH');});}}

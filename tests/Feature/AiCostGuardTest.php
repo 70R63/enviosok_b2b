@@ -30,7 +30,7 @@ final class AiCostGuardTest extends TestCase
         AiProviderRate::create(['provider' => 'openai', 'model' => 'test-model', 'input_microusd_per_million' => 900000, 'cached_input_microusd_per_million' => 0, 'output_microusd_per_million' => 900000, 'effective_from' => now()->addDay(), 'enabled' => true]);
         $tenant = Tenant::create(['uuid' => '11111111-1111-4111-8111-111111111111', 'name' => 'Cost', 'slug' => 'cost', 'status' => 'active']);
         AiCostBudget::create(['tenant_id' => $tenant->id, 'period' => now()->format('Y-m'), 'budget_microusd' => 1000000]);
-        $run = $this->runtime(1);
+        $run = $this->runtime(1, $tenant->id);
         app(AiCostGuard::class)->reserve($tenant, $run);
         $ledger = app(AiCostGuard::class)->record($tenant, $run, ['input_tokens' => 100, 'cached_input_tokens' => 20, 'output_tokens' => 10, 'total_tokens' => 110]);
         $this->assertSame(31, $ledger->actual_cost_microusd);
@@ -45,7 +45,7 @@ final class AiCostGuardTest extends TestCase
         AiCostBudget::create(['tenant_id' => $tenant->id, 'period' => now()->format('Y-m'), 'budget_microusd' => 100]);
         AiCostBudget::create(['tenant_id' => null, 'period' => now()->format('Y-m'), 'budget_microusd' => 1000000]);
         $this->expectExceptionMessage('AI_COST_BUDGET_EXCEEDED');
-        app(AiCostGuard::class)->reserve($tenant, $this->runtime(2));
+        app(AiCostGuard::class)->reserve($tenant, $this->runtime(2, $tenant->id));
         $this->assertSame(0, AiCostReservation::count());
     }
 
@@ -55,13 +55,33 @@ final class AiCostGuardTest extends TestCase
         AiCostBudget::create(['tenant_id' => $tenant->id, 'period' => now()->format('Y-m'), 'budget_microusd' => 1000000]);
         AiCostBudget::create(['tenant_id' => null, 'period' => now()->format('Y-m'), 'budget_microusd' => 10]);
         $this->expectExceptionMessage('AI_GLOBAL_COST_BUDGET_EXCEEDED');
-        app(AiCostGuard::class)->reserve($tenant, $this->runtime(3));
+        app(AiCostGuard::class)->reserve($tenant, $this->runtime(3, $tenant->id));
     }
 
-    private function runtime(int $id): RuntimeRun
+    public function test_negative_usage_is_rejected_before_sql(): void
+    {
+        $tenant = Tenant::create(['uuid' => '44444444-4444-4444-8444-444444444444', 'name' => 'Cost', 'slug' => 'cost4', 'status' => 'active']);
+        $this->expectExceptionMessage('AI_USAGE_INVALID');
+        app(AiCostGuard::class)->record($tenant, $this->runtime(4, $tenant->id), ['input_tokens' => -1]);
+    }
+
+    public function test_runtime_from_another_tenant_is_rejected_before_sql(): void
+    {
+        $tenant = Tenant::create(['uuid' => '55555555-5555-4555-8555-555555555555', 'name' => 'Cost', 'slug' => 'cost5', 'status' => 'active']);
+        $this->expectExceptionMessage('AI_RUNTIME_TENANT_MISMATCH');
+        app(AiCostGuard::class)->record($tenant, $this->runtime(5, $tenant->id + 1), []);
+    }
+
+    public function test_negative_rate_is_rejected_by_application_before_sql(): void
+    {
+        $this->expectExceptionMessage('AI_COST_VALUE_INVALID');
+        AiProviderRate::create(['provider' => 'openai', 'model' => 'bad-model', 'input_microusd_per_million' => -1, 'cached_input_microusd_per_million' => 0, 'output_microusd_per_million' => 0, 'effective_from' => now(), 'enabled' => true]);
+    }
+
+    private function runtime(int $id, int $tenantId): RuntimeRun
     {
         $run = new RuntimeRun;
-        $run->id = $id; $run->execution_mode = AiExecutionMode::Live; $run->provider_code = 'openai'; $run->model_code = 'test-model'; $run->agent_id = null; $run->created_at = now();
+        $run->id = $id; $run->tenant_id = $tenantId; $run->execution_mode = AiExecutionMode::Live; $run->provider_code = 'openai'; $run->model_code = 'test-model'; $run->agent_id = null; $run->created_at = now();
         return $run;
     }
 }

@@ -14,6 +14,7 @@ final class AiCostGuard
     public function reserve(Tenant $tenant, RuntimeRun $run): void
     {
         if ($run->execution_mode?->value !== 'live' || ! Schema::hasTable('ai_cost_reservations')) return;
+        $this->assertRunTenant($tenant, $run);
         DB::transaction(function () use ($tenant, $run): void {
             $period = now()->format('Y-m');
             $rate = $this->rate($run->provider_code, $run->model_code, now());
@@ -39,6 +40,10 @@ final class AiCostGuard
 
     public function record(Tenant $tenant, RuntimeRun $run, array $usage): AiCostLedger
     {
+        $this->assertRunTenant($tenant, $run);
+        foreach (['input_tokens', 'cached_input_tokens', 'output_tokens', 'total_tokens'] as $field) {
+            if (! is_int($usage[$field] ?? 0) || ($usage[$field] ?? 0) < 0) throw new RuntimeException('AI_USAGE_INVALID');
+        }
         return DB::transaction(function () use ($tenant, $run, $usage): AiCostLedger {
             $key = 'runtime_run:'.$run->id;
             if ($existing = AiCostLedger::where('tenant_id',$tenant->id)->where('idempotency_key',$key)->first()) return $existing;
@@ -59,5 +64,18 @@ final class AiCostGuard
     private function rate(?string $provider, ?string $model, $at): ?array
     { $r=AiProviderRate::where('provider',$provider)->where('model',$model)->where('enabled',true)->where('effective_from','<=',$at)->latest('effective_from')->first();if(!$r)return null;return ['input'=>(int)$r->input_microusd_per_million,'cached_input'=>(int)$r->cached_input_microusd_per_million,'output'=>(int)$r->output_microusd_per_million]; }
     private function estimate(array $rate): int { return $this->cost(1000,0,600,$rate); }
-    private function cost(int $input,int $cached,int $output,array $rate): int { $uncached=max(0,$input-$cached);$n=$uncached*$rate['input']+$cached*$rate['cached_input']+$output*$rate['output'];return intdiv($n+999999,1000000); }
+    private function cost(int $input,int $cached,int $output,array $rate): int
+    {
+        foreach ([$input, $cached, $output, ...array_values($rate)] as $value) if ($value < 0) throw new RuntimeException('AI_COST_VALUE_INVALID');
+        if ($cached > $input) throw new RuntimeException('AI_USAGE_INVALID');
+        $parts = [($input - $cached) * $rate['input'], $cached * $rate['cached_input'], $output * $rate['output']];
+        foreach ($parts as $part) if (! is_int($part) || $part < 0) throw new RuntimeException('AI_COST_OVERFLOW');
+        $sum = array_sum($parts); if (! is_int($sum) || $sum > PHP_INT_MAX - 999999) throw new RuntimeException('AI_COST_OVERFLOW');
+        return intdiv($sum + 999999, 1000000);
+    }
+
+    private function assertRunTenant(Tenant $tenant, RuntimeRun $run): void
+    {
+        if ((int) $run->tenant_id !== (int) $tenant->id) throw new RuntimeException('AI_RUNTIME_TENANT_MISMATCH');
+    }
 }
