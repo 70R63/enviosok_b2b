@@ -14,6 +14,7 @@ final class TenantConfigurationController extends Controller
     {
         $tenant = $context->tenant()->load(['branding', 'domains']);
         $domain = $tenant->domains->firstWhere('is_primary', true);
+        $workspace = $workspaces->resolveForPresentation($tenant);
 
         return view('tenant.admin.configuration', [
             'tenant' => $tenant,
@@ -21,7 +22,8 @@ final class TenantConfigurationController extends Controller
             'domain' => $domain,
             'canEdit' => $access->hasRole(['owner', 'admin'], auth()->user()),
             'previewUrl' => $domain && $domain->status === 'verified' ? 'https://'.$domain->domain.'/white-label' : null,
-            'isAiWorkspace' => $workspaces->resolveForPresentation($tenant)->value === 'zigo_ai',
+            'workspace' => $workspace,
+            'isAiWorkspace' => $workspace->value === 'zigo_ai',
         ]);
     }
 

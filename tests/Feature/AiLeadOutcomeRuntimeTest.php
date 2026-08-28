@@ -52,8 +52,10 @@ final class AiLeadOutcomeRuntimeTest extends TestCase
         parent::setUp();
         config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:', 'ai.enabled' => true, 'ai.default_provider' => 'openai', 'ai.providers.openai.api_key' => 'synthetic-test-key', 'ai.providers.openai.model' => 'gpt-5.6-luna', 'app.key' => 'base64:'.base64_encode(str_repeat('l', 32))]);
         $this->schema();
+        Schema::table('ai_runtime_runs', fn (Blueprint $table) => $table->string('execution_mode', 20)->default('live'));
         (require base_path('database/migrations/2026_08_27_110000_add_provider_observability_to_ai_runtime_runs.php'))->up();
         (require base_path('database/migrations/2026_08_28_100000_create_ai_conversations.php'))->up();
+        (require base_path('database/migrations/2026_09_03_100000_harden_ai_conversation_turn_integrity.php'))->up();
         (require base_path('database/migrations/2026_08_29_100000_create_ai_leads_and_outcome_events.php'))->up();
         app(TenantContext::class)->clear();
         Http::preventStrayRequests();
@@ -167,6 +169,14 @@ final class AiLeadOutcomeRuntimeTest extends TestCase
         $this->assertDatabaseCount('ai_leads', 0);
         $this->assertDatabaseCount('ai_outcome_events', 0);
         DB::table('ai_conversation_messages')->where('id', $pending->id)->update(['created_at' => now()->subSeconds(121), 'updated_at' => now()->subSeconds(121)]);
+        DB::table('ai_conversations')->where('id', $conversation->id)->update(['active_turn_heartbeat_at' => now()->subSeconds(121), 'active_turn_expires_at' => now()->subSecond()]);
+        try {
+            app(SendInternalConversationMessageService::class)->send($owner, $conversation->fresh(), SendConversationMessageData::from('Recuperar sin ejecutar'));
+            $this->fail('Recovery must not execute a replacement model call.');
+        } catch (\App\Domain\AI\Conversations\Exceptions\ConversationTurnBusyException) {
+            $this->addToAssertionCount(1);
+        }
+        $this->assertCount(0, Http::recorded());
         $turn = app(SendInternalConversationMessageService::class)->send($owner, $conversation->fresh(), SendConversationMessageData::from('Información recuperada'));
         $this->assertSame('failed', $pending->fresh()->status->value);
         $this->assertSame('abandoned_turn', $pending->fresh()->safe_error_code);
@@ -391,9 +401,11 @@ final class AiLeadOutcomeRuntimeTest extends TestCase
         return DB::transaction(function () use ($owner, $conversation) {
             $auth = app(AiLifecycleAuthorization::class)->authorize($owner);
             $c = Conversation::query()->lockForUpdate()->findOrFail($conversation->id);
-            [$u,$a] = $c->reserveTurn($auth);
+            $token = hash('sha256', random_bytes(32));
+            [$u,$a] = $c->reserveTurn($auth, $token, now(), now()->addMinutes(2));
             $user = new ConversationMessage;
             $user->conversation_id = $c->id;
+            $user->turn_token_hash = $token;
             $user->sequence = $u;
             $user->role = 'user';
             $user->status = 'completed';
@@ -402,11 +414,13 @@ final class AiLeadOutcomeRuntimeTest extends TestCase
             $user->save();
             $assistant = new ConversationMessage;
             $assistant->conversation_id = $c->id;
+            $assistant->turn_token_hash = $token;
             $assistant->sequence = $a;
             $assistant->role = 'assistant';
             $assistant->status = 'pending';
             $assistant->needs_handoff = false;
             $assistant->save();
+            $c->bindActiveTurnAssistant($auth, $assistant, $token);
 
             return $assistant;
         });

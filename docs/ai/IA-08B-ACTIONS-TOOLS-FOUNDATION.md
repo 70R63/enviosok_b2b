@@ -39,3 +39,19 @@ Las rutas están bajo tenant resolution, autenticación, suscripción, Tenant Ad
 `AiActionFoundationTest` cubre Registry, Definition, migración up/down/up, FKs, cifrado, idempotencia, ejecución fuera de TX, READ y confirmación WRITE. `AiActionRuntimeTest` cubre structured request strict, una sola Action, rechazo de auto-confirmación y la frontera result-as-data. La regresión conserva Runtime, Conversations, Leads/Outcomes y Human Handoff.
 
 Fuera de IA-08B: Actions ZIGO reales, cotización, tracking, creación de guía, URLs arbitrarias, código de tenant, marketplace, action chaining, parallel actions, canales externos, WhatsApp, Webchat público, CRM, Usage, Credits, Billing, background jobs y auto-retry de WRITE.
+
+## Fencing, deadline y reconciliación
+
+Actions comparte el ownership durable de Conversation Core. Conversación, assistant pending, Runtime Run de síntesis y ActionRun conservan el mismo hash de turno; el token opaco nunca se persiste ni se muestra. Cada transición mutable revalida tenant, Agent, Agent Version, propósito, modo, estado, token y deadline bajo lock.
+
+Los handlers registrados se consideran no cancelables: un timeout de I/O no termina duramente el proceso PHP. Si el deadline vence o el resultado del handler queda incierto, ActionRun pasa a `reconciliation_required`, el callback tardío no persiste output ni libera ownership y la conversación solicita revisión humana. No se afirma éxito o fallo, no se compensa automáticamente y no se abre un inbox paralelo.
+
+La idempotency key local impide una segunda ejecución por confirmación duplicada. Sólo se entregaría a un adapter que documentara soporte explícito; no se asume idempotencia externa. No existen retries automáticos ni promesa de exactly-once externo.
+
+Política por handler instalado:
+
+- `zigo.quote_shipment`: lectura comercial con escrituras locales de snapshots/operación; Google Routes, cuando aplica, impone su timeout HTTP. El proceso PHP no es cancelable, por lo que un resultado posterior al deadline se descarta y se reconcilia; nunca se reintenta desde Actions.
+- `zigo.track_shipment`: lectura DB local, sin HTTP ni efecto externo. Conserva fencing y descarte tardío aunque normalmente termina muy por debajo del lease.
+- `zigo.create_shipment_guide`: efecto local persistente. `TenantOperationService` hace Usage idempotente y `LocalShipmentService` deduplica por operación, pero eso no se presenta como garantía externa. Cualquier excepción o vencimiento se clasifica `reconciliation_required`, crea una solicitud en Human Handoff y bloquea automatización hasta revisión manual.
+
+`failed` significa que el motor conoce un fallo previo a un resultado aceptable. `reconciliation_required` significa que el efecto puede haber ocurrido y su outcome es desconocido. En este último caso, un callback tardío es no-op: no guarda output, no crea Outcome, no cambia handoff, no libera la conversación y no compensa ni reintenta.

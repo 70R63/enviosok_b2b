@@ -7,8 +7,11 @@ use App\Domain\AI\Agents\Enums\AgentVersionStatus;
 use App\Domain\AI\Agents\Models\Agent;
 use App\Domain\AI\Agents\Models\AgentVersion;
 use App\Domain\AI\Conversations\Enums\ConversationChannel;
+use App\Domain\AI\Conversations\Enums\ConversationMessageRole;
+use App\Domain\AI\Conversations\Enums\ConversationMessageStatus;
 use App\Domain\AI\Conversations\Enums\ConversationStatus;
 use App\Domain\AI\Conversations\Exceptions\ConversationTurnBusyException;
+use App\Domain\AI\Conversations\Exceptions\ConversationTurnSupersededException;
 use App\Domain\AI\Handoff\Models\HumanHandoff;
 use App\Domain\AI\Leads\Models\Lead;
 use App\Domain\AI\Leads\Models\OutcomeEvent;
@@ -31,11 +34,11 @@ final class Conversation extends AiTenantModel
 
     protected $guarded = ['*'];
 
-    protected $casts = ['channel' => ConversationChannel::class, 'status' => ConversationStatus::class, 'turn_in_progress' => 'boolean', 'next_sequence' => 'integer', 'closed_at' => 'datetime'];
+    protected $casts = ['channel' => ConversationChannel::class, 'status' => ConversationStatus::class, 'turn_in_progress' => 'boolean', 'next_sequence' => 'integer', 'active_turn_started_at' => 'datetime', 'active_turn_heartbeat_at' => 'datetime', 'active_turn_expires_at' => 'datetime', 'closed_at' => 'datetime'];
 
     protected function immutableIdentityAttributes(): array
     {
-        return ['uuid', 'agent_id', 'agent_version_id', 'channel', 'created_by_user_id', 'status', 'turn_in_progress', 'active_handoff_id', 'next_sequence', 'closed_at', 'closed_by_user_id'];
+        return ['uuid', 'agent_id', 'agent_version_id', 'channel', 'created_by_user_id', 'status', 'turn_in_progress', 'active_turn_token_hash', 'active_turn_assistant_message_id', 'active_turn_started_at', 'active_turn_heartbeat_at', 'active_turn_expires_at', 'active_handoff_id', 'next_sequence', 'closed_at', 'closed_by_user_id'];
     }
 
     protected static function booted(): void
@@ -100,21 +103,54 @@ final class Conversation extends AiTenantModel
         return $this->belongsTo(HumanHandoff::class, 'active_handoff_id');
     }
 
-    public function reserveTurn(AuthorizedAiLifecycleActor $a): array
+    public function reserveTurn(AuthorizedAiLifecycleActor $a, string $tokenHash, \DateTimeInterface $startedAt, \DateTimeInterface $expiresAt): array
     {
         $this->assertLifecycleActor($a);
         if ($this->originalAiStatus() !== ConversationStatus::Open->value) {
             throw new \DomainException('Only an open AI conversation accepts AI turns.');
-        }if ($this->turn_in_progress) {
+        }if ($this->turn_in_progress || $this->active_turn_token_hash !== null) {
             throw new ConversationTurnBusyException('A conversation turn is already in progress.');
+        }if (! preg_match('/^[a-f0-9]{64}$/D', $tokenHash) || $expiresAt <= $startedAt) {
+            throw new \LogicException('Invalid conversation turn ownership.');
         }$user = $this->next_sequence;
         $assistant = $user + 1;
-        $this->persistNamedLifecycle(['turn_in_progress', 'next_sequence'], function () use ($assistant) {
+        $this->persistNamedLifecycle(['turn_in_progress', 'active_turn_token_hash', 'active_turn_started_at', 'active_turn_heartbeat_at', 'active_turn_expires_at', 'next_sequence'], function () use ($assistant, $tokenHash, $startedAt, $expiresAt) {
             $this->turn_in_progress = true;
+            $this->active_turn_token_hash = $tokenHash;
+            $this->active_turn_started_at = $startedAt;
+            $this->active_turn_heartbeat_at = $startedAt;
+            $this->active_turn_expires_at = $expiresAt;
             $this->next_sequence = $assistant + 1;
         });
 
         return [$user, $assistant];
+    }
+
+    public function bindActiveTurnAssistant(AuthorizedAiLifecycleActor $a, ConversationMessage $assistant, string $tokenHash): void
+    {
+        $this->assertLifecycleActor($a);
+        $this->assertActiveTurn($tokenHash);
+        if ($assistant->conversation_id !== $this->id || $assistant->role !== ConversationMessageRole::Assistant || $assistant->status !== ConversationMessageStatus::Pending || ! hash_equals((string) $assistant->turn_token_hash, $tokenHash)) {
+            throw new \LogicException('Invalid active turn assistant.');
+        }
+        $this->persistNamedLifecycle(['active_turn_assistant_message_id'], fn () => $this->active_turn_assistant_message_id = $assistant->id);
+    }
+
+    public function heartbeatTurn(AuthorizedAiLifecycleActor $a, string $tokenHash, \DateTimeInterface $expiresAt): void
+    {
+        $this->assertLifecycleActor($a);
+        $this->assertActiveTurn($tokenHash);
+        $this->persistNamedLifecycle(['active_turn_heartbeat_at', 'active_turn_expires_at'], function () use ($expiresAt): void {
+            $this->active_turn_heartbeat_at = now();
+            $this->active_turn_expires_at = $expiresAt;
+        });
+    }
+
+    public function assertActiveTurn(string $tokenHash, ?int $assistantId = null): void
+    {
+        if (! $this->turn_in_progress || ! is_string($this->active_turn_token_hash) || ! hash_equals($this->active_turn_token_hash, $tokenHash) || ($assistantId !== null && (int) $this->active_turn_assistant_message_id !== $assistantId)) {
+            throw new ConversationTurnSupersededException;
+        }
     }
 
     public function requestHuman(AuthorizedAiLifecycleActor $a, int $handoffId): void
@@ -167,22 +203,29 @@ final class Conversation extends AiTenantModel
         return $sequence;
     }
 
-    public function reserveActionCompletion(AuthorizedAiLifecycleActor $a): int
+    public function reserveActionCompletion(AuthorizedAiLifecycleActor $a, string $tokenHash, \DateTimeInterface $startedAt, \DateTimeInterface $expiresAt): int
     {
         $this->assertLifecycleActor($a);
-        if ($this->status !== ConversationStatus::Open || $this->turn_in_progress) throw new \DomainException('Conversation is not available for Action completion.');
+        if ($this->status !== ConversationStatus::Open || $this->turn_in_progress || $this->active_turn_token_hash !== null || !preg_match('/^[a-f0-9]{64}$/D',$tokenHash) || $expiresAt <= $startedAt) throw new \DomainException('Conversation is not available for Action completion.');
         $sequence=$this->next_sequence;
-        $this->persistNamedLifecycle(['turn_in_progress','next_sequence'],function()use($sequence){$this->turn_in_progress=true;$this->next_sequence=$sequence+1;});
+        $this->persistNamedLifecycle(['turn_in_progress','active_turn_token_hash','active_turn_started_at','active_turn_heartbeat_at','active_turn_expires_at','next_sequence'],function()use($sequence,$tokenHash,$startedAt,$expiresAt){$this->turn_in_progress=true;$this->active_turn_token_hash=$tokenHash;$this->active_turn_started_at=$startedAt;$this->active_turn_heartbeat_at=$startedAt;$this->active_turn_expires_at=$expiresAt;$this->next_sequence=$sequence+1;});
         return $sequence;
     }
 
-    public function finishTurn(AuthorizedAiLifecycleActor $a, bool $handoff): void
+    public function finishTurn(AuthorizedAiLifecycleActor $a, bool $handoff, string $tokenHash, ?int $assistantId = null): void
     {
         $this->assertLifecycleActor($a);
         if (! $this->turn_in_progress) {
             throw new \DomainException('No conversation turn is in progress.');
-        }$this->persistNamedLifecycle(['turn_in_progress', 'status'], function () use ($handoff) {
+        }
+        $this->assertActiveTurn($tokenHash, $assistantId);
+        $this->persistNamedLifecycle(['turn_in_progress', 'active_turn_token_hash', 'active_turn_assistant_message_id', 'active_turn_started_at', 'active_turn_heartbeat_at', 'active_turn_expires_at', 'status'], function () use ($handoff) {
             $this->turn_in_progress = false;
+            $this->active_turn_token_hash = null;
+            $this->active_turn_assistant_message_id = null;
+            $this->active_turn_started_at = null;
+            $this->active_turn_heartbeat_at = null;
+            $this->active_turn_expires_at = null;
             if ($handoff) {
                 $this->status = ConversationStatus::HandoffRequested;
             }

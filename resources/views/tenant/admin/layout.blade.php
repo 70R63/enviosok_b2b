@@ -6,7 +6,7 @@
 @php($designSystemPath=public_path('css/zigo-design-system.css'))
 @php($designSystemVersion=is_file($designSystemPath) ? filemtime($designSystemPath) : '1')
 @php($canUseAi=in_array($membership?->role??null,['owner','admin'],true)&&app(\App\Domain\Network\Billing\EntitlementService::class)->has($tenant,'AI_CORE'))
-@php($workspace=app(\App\Domain\Network\ProductShell\TenantWorkspaceResolver::class)->resolveForPresentation($tenant))
+@php($workspace=$workspace??app(\App\Domain\Network\ProductShell\TenantWorkspaceResolver::class)->resolveForPresentation($tenant))
 @php($isAiWorkspace=$workspace===\App\Domain\Network\ProductShell\TenantWorkspace::ZigoAi)
 @php($productName=$isAiWorkspace?'Agentes IA':'ZIGO')
 <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>@yield('title','Administración') · {{ $branding?->brand_name??$tenant->name }}</title>

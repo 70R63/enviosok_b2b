@@ -60,7 +60,8 @@ return [
     'data_retention_days' => (int) env('AI_DATA_RETENTION_DAYS', 90),
     'conversation_history_max_messages' => 6,
     'conversation_history_max_characters' => 6000,
-    'conversation_stale_turn_seconds' => (int) env('AI_CONVERSATION_STALE_TURN_SECONDS', 120),
+    'conversation_turn_lease_seconds' => (int) env('AI_CONVERSATION_TURN_LEASE_SECONDS', 120),
+    'conversation_turn_finalization_margin_seconds' => (int) env('AI_CONVERSATION_TURN_FINALIZATION_MARGIN_SECONDS', 15),
     'actions' => [
         'max_input_bytes' => (int) env('AI_ACTION_MAX_INPUT_BYTES', 16384),
         'max_output_bytes' => (int) env('AI_ACTION_MAX_OUTPUT_BYTES', 32768),

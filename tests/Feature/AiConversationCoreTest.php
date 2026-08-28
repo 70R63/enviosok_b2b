@@ -85,6 +85,7 @@ final class AiConversationCoreTest extends TestCase
         $this->migration()->up();
         $this->handoffMigration()->up();
         $this->actionMigration()->up();
+        $this->integrityMigration()->up();
         (require base_path('database/migrations/2026_08_29_100000_create_ai_leads_and_outcome_events.php'))->up();
         (require base_path('database/migrations/2026_09_01_100000_create_ai_webchat.php'))->up();
         (require base_path('database/migrations/2026_09_02_100000_create_ai_whatsapp_channel.php'))->up();
@@ -98,6 +99,8 @@ final class AiConversationCoreTest extends TestCase
         $this->assertSame(1, (int) DB::selectOne('PRAGMA foreign_keys')->foreign_keys);
         $this->assertNotEmpty(DB::select("PRAGMA foreign_key_list('ai_conversation_message_citations')"));
         $this->assertContains('ai_msg_conversation_sequence_uq', collect(DB::select("PRAGMA index_list('ai_conversation_messages')"))->pluck('name'));
+        $this->assertSame(4,DB::table('sqlite_master')->where('type','trigger')->whereIn('name',['ai_msg_turn_insert_guard','ai_msg_turn_update_guard','ai_action_turn_insert_guard','ai_action_turn_update_guard'])->count());
+        $this->integrityMigration()->down();
         $this->actionMigration()->down();
         $this->handoffMigration()->down();
         $m->down();
@@ -105,6 +108,7 @@ final class AiConversationCoreTest extends TestCase
         $m->up();
         $this->handoffMigration()->up();
         $this->actionMigration()->up();
+        $this->integrityMigration()->up();
         $this->assertTrue(Schema::hasTable('ai_conversations'));
     }
 
@@ -119,7 +123,8 @@ final class AiConversationCoreTest extends TestCase
         DB::transaction(function () use ($owner, $conversation, $raw) {
             $auth = app(AiLifecycleAuthorization::class)->authorize($owner);
             $c = Conversation::query()->lockForUpdate()->findOrFail($conversation->id);
-            [$seq] = $c->reserveTurn($auth);
+            $token = hash('sha256', random_bytes(32));
+            [$seq] = $c->reserveTurn($auth, $token, now(), now()->addMinutes(2));
             $m = new ConversationMessage;
             $m->conversation_id = $c->id;
             $m->sequence = $seq;
@@ -128,11 +133,30 @@ final class AiConversationCoreTest extends TestCase
             $m->content = $raw;
             $m->completed_at = now();
             $m->save();
-            $c->finishTurn($auth, false);
+            $c->finishTurn($auth, false, $token);
+        });
+        DB::transaction(function () use ($owner, $conversation, $raw) {
+            $auth = app(AiLifecycleAuthorization::class)->authorize($owner);
+            $c = Conversation::query()->lockForUpdate()->findOrFail($conversation->id);
+            $token = hash('sha256', random_bytes(32));
+            [$sequence] = $c->reserveTurn($auth, $token, now(), now()->addMinutes(2));
+            $m = new ConversationMessage;
+            $m->conversation_id = $c->id;
+            $m->turn_token_hash = $token;
+            $m->sequence = $sequence;
+            $m->role = 'user';
+            $m->status = 'completed';
+            $m->content = $raw;
+            $m->completed_at = now();
+            $m->save();
+            $c->finishTurn($auth, false, $token);
         });
         $message = ConversationMessage::firstOrFail();
         $this->assertSame($raw, $message->content);
         $this->assertStringNotContainsString($raw, (string) DB::table('ai_conversation_messages')->value('content'));
+        $ciphertexts = DB::table('ai_conversation_messages')->orderBy('id')->pluck('content');
+        $this->assertCount(2, $ciphertexts);
+        $this->assertNotSame($ciphertexts[0], $ciphertexts[1]);
         foreach ([fn () => tap($message, fn ($model) => $model->content = 'otro')->save(), fn () => ConversationMessage::query()->update(['safe_error_code' => 'x']), fn () => ConversationMessage::query()->delete(), fn () => ConversationMessage::query()->insert([['tenant_id' => $tenant->id]])] as $write) {
             try {
                 $write();
@@ -157,6 +181,9 @@ final class AiConversationCoreTest extends TestCase
             $calls++;
             $this->assertSame(0, DB::transactionLevel());
             $payload = $request->data();
+            $activeTokenHash = DB::table('ai_conversations')->value('active_turn_token_hash');
+            $this->assertIsString($activeTokenHash);
+            $this->assertStringNotContainsString($activeTokenHash, json_encode($payload, JSON_THROW_ON_ERROR));
             $input = json_decode($payload['input'][0]['content'][0]['text'], true);
             if ($calls === 1) {
                 $this->assertArrayNotHasKey('history', $input);
@@ -176,6 +203,7 @@ final class AiConversationCoreTest extends TestCase
         $this->assertSame(1, ConversationMessageCitation::count());
         $this->assertSame(KnowledgeChunk::first()->id, ConversationMessageCitation::first()->knowledge_chunk_id);
         $this->assertSame('completed', RuntimeRun::first()->status->value);
+        try{DB::table('ai_conversation_messages')->where('id',$first->assistantMessage->id)->update(['turn_token_hash'=>null]);$this->fail('A Runtime-linked message must retain turn ownership.');}catch(\Illuminate\Database\QueryException){$this->addToAssertionCount(1);}
         $this->assertDatabaseCount('ai_human_handoffs', 0);
         app(SendInternalConversationMessageService::class)->send($owner, $conversation->fresh(), SendConversationMessageData::from('Otra pregunta de horario'));
         $this->assertSame(2, $calls);
@@ -222,6 +250,67 @@ final class AiConversationCoreTest extends TestCase
         $this->assertSame([1, 2], ConversationMessage::pluck('sequence')->all());
     }
 
+    public function test_old_created_at_alone_does_not_recover_a_live_turn(): void
+    {
+        [$tenant,$owner] = $this->authorized('created-at-is-not-liveness');
+        [$agent] = $this->agent($owner);
+        $conversation = app(StartInternalTestConversationService::class)->start($owner, $agent);
+        $pending = $this->pendingTurn($owner, $conversation);
+        DB::table('ai_conversation_messages')->where('conversation_id', $conversation->id)->update(['created_at' => now()->subDay(), 'updated_at' => now()->subDay()]);
+        Http::fake();
+
+        try {
+            app(SendInternalConversationMessageService::class)->send($owner, $conversation->fresh(), SendConversationMessageData::from('No debe iniciar otro turno'));
+            $this->fail('created_at must not fence a live owner.');
+        } catch (\App\Domain\AI\Conversations\Exceptions\ConversationTurnBusyException) {
+            $this->addToAssertionCount(1);
+        }
+
+        $this->assertSame(ConversationMessageStatus::Pending, $pending->fresh()->status);
+        $this->assertTrue($conversation->fresh()->turn_in_progress);
+        $this->assertCount(0, Http::recorded());
+        $this->assertDatabaseCount('ai_conversation_messages', 2);
+    }
+
+    public function test_expired_lease_with_current_heartbeat_does_not_recover(): void
+    {
+        [$tenant,$owner] = $this->authorized('heartbeat-live');
+        [$agent] = $this->agent($owner);
+        $conversation = app(StartInternalTestConversationService::class)->start($owner, $agent);
+        $pending = $this->pendingTurn($owner, $conversation);
+        DB::table('ai_conversations')->where('id', $conversation->id)->update(['active_turn_expires_at' => now()->subSecond(), 'active_turn_heartbeat_at' => now()]);
+        Http::fake();
+
+        $this->expectException(\App\Domain\AI\Conversations\Exceptions\ConversationTurnBusyException::class);
+        try {
+            app(SendInternalConversationMessageService::class)->send($owner, $conversation->fresh(), SendConversationMessageData::from('Sigue vivo'));
+        } finally {
+            $this->assertSame(ConversationMessageStatus::Pending, $pending->fresh()->status);
+            $this->assertCount(0, Http::recorded());
+            $this->assertDatabaseCount('ai_conversation_messages', 2);
+        }
+    }
+
+    public function test_unsafe_timeout_margin_and_lease_fail_before_reservation_or_http(): void
+    {
+        [$tenant,$owner] = $this->authorized('unsafe-lease');
+        [$agent] = $this->agent($owner);
+        $conversation = app(StartInternalTestConversationService::class)->start($owner, $agent);
+        config(['ai.providers.openai.timeout' => 30, 'ai.conversation_turn_lease_seconds' => 60, 'ai.conversation_turn_finalization_margin_seconds' => 30]);
+        Http::fake();
+
+        try {
+            app(SendInternalConversationMessageService::class)->send($owner, $conversation, SendConversationMessageData::from('No debe reservar'));
+            $this->fail('Unsafe lease configuration must fail closed.');
+        } catch (\LogicException $e) {
+            $this->assertSame('Conversation turn timing is configured unsafely.', $e->getMessage());
+        }
+
+        $this->assertDatabaseCount('ai_conversation_messages', 0);
+        $this->assertCount(0, Http::recorded());
+        $this->assertFalse($conversation->fresh()->turn_in_progress);
+    }
+
     public function test_stale_pending_turn_is_failed_once_and_conversation_is_reused_outside_transaction(): void
     {
         [$tenant,$owner] = $this->authorized('stale-turn');
@@ -229,6 +318,7 @@ final class AiConversationCoreTest extends TestCase
         $this->ready($owner, $agent, 'Horario disponible de lunes a viernes.');
         $conversation = app(StartInternalTestConversationService::class)->start($owner, $agent);
         $abandoned = $this->pendingTurn($owner, $conversation, 121);
+        $abandonedToken = $abandoned->turn_token_hash;
         $calls = 0;
         Http::fake(function () use (&$calls) {
             $calls++;
@@ -236,6 +326,13 @@ final class AiConversationCoreTest extends TestCase
 
             return Http::response($this->response(['answer' => 'Atendemos de lunes a viernes.', 'citation_ids' => ['K1'], 'confidence' => 'high', 'needs_handoff' => false, 'handoff_reason' => 'none']), 200);
         });
+        try {
+            app(SendInternalConversationMessageService::class)->send($owner, $conversation->fresh(), SendConversationMessageData::from('¿Cuál es el horario?'));
+            $this->fail('Recovery must finish without starting a replacement turn.');
+        } catch (\App\Domain\AI\Conversations\Exceptions\ConversationTurnBusyException) {
+            $this->addToAssertionCount(1);
+        }
+        $this->assertSame(0, $calls);
         $turn = app(SendInternalConversationMessageService::class)->send($owner, $conversation->fresh(), SendConversationMessageData::from('¿Cuál es el horario?'));
         $this->assertSame(1, $calls);
         $this->assertSame(ConversationMessageStatus::Failed, $abandoned->fresh()->status);
@@ -244,6 +341,64 @@ final class AiConversationCoreTest extends TestCase
         $this->assertSame([1, 2, 3, 4], ConversationMessage::orderBy('sequence')->pluck('sequence')->all());
         $this->assertSame(1, ConversationMessage::where('safe_error_code', 'abandoned_turn')->count());
         $this->assertSame(ConversationMessageStatus::Completed, $turn->assistantMessage->status);
+        $this->assertNotSame($abandonedToken, $turn->assistantMessage->turn_token_hash);
+    }
+
+    public function test_late_owner_cannot_release_or_mutate_a_new_turn(): void
+    {
+        [$tenant,$owner] = $this->authorized('late-owner');
+        [$agent] = $this->agent($owner);
+        $conversation = app(StartInternalTestConversationService::class)->start($owner, $agent);
+        $oldAssistant = $this->pendingTurn($owner, $conversation, 121);
+        $oldToken = $oldAssistant->turn_token_hash;
+        Http::fake();
+        try {
+            app(SendInternalConversationMessageService::class)->send($owner, $conversation->fresh(), SendConversationMessageData::from('Recuperar'));
+        } catch (\App\Domain\AI\Conversations\Exceptions\ConversationTurnBusyException) {
+            $this->addToAssertionCount(1);
+        }
+        $newAssistant = $this->pendingTurn($owner, $conversation->fresh());
+        $newToken = $newAssistant->turn_token_hash;
+        $authorized = app(AiLifecycleAuthorization::class)->authorize($owner);
+
+        try {
+            DB::transaction(fn () => $conversation->fresh()->finishTurn($authorized, true, $oldToken, $oldAssistant->id));
+            $this->fail('A fenced owner must not finish a newer turn.');
+        } catch (\App\Domain\AI\Conversations\Exceptions\ConversationTurnSupersededException) {
+            $this->addToAssertionCount(1);
+        }
+
+        $fresh = $conversation->fresh();
+        $this->assertTrue($fresh->turn_in_progress);
+        $this->assertSame($newAssistant->id, $fresh->active_turn_assistant_message_id);
+        $this->assertSame($newToken, $fresh->active_turn_token_hash);
+        $this->assertSame(ConversationStatus::Open, $fresh->status);
+        $this->assertSame(ConversationMessageStatus::Pending, $newAssistant->fresh()->status);
+        $this->assertSame(ConversationMessageStatus::Failed, $oldAssistant->fresh()->status);
+        $this->assertDatabaseCount('ai_conversation_message_citations', 0);
+        $this->assertDatabaseCount('ai_human_handoffs', 0);
+        $this->assertCount(0, Http::recorded());
+    }
+
+    public function test_runtime_run_from_another_agent_is_rejected_without_partial_completion(): void
+    {
+        $this->assertForgedRuntimeRejected(function (RuntimeRun $run, Agent $otherAgent, AgentVersion $otherVersion): void {
+            DB::table('ai_runtime_runs')->where('id', $run->id)->update(['agent_id' => $otherAgent->id, 'agent_version_id' => $otherVersion->id]);
+        });
+    }
+
+    public function test_runtime_run_from_another_version_is_rejected_without_partial_completion(): void
+    {
+        $this->assertForgedRuntimeRejected(function (RuntimeRun $run, Agent $otherAgent, AgentVersion $otherVersion): void {
+            DB::table('ai_runtime_runs')->where('id', $run->id)->update(['agent_version_id' => $otherVersion->id]);
+        }, true);
+    }
+
+    public function test_failed_runtime_run_is_rejected_without_partial_completion(): void
+    {
+        $this->assertForgedRuntimeRejected(function (RuntimeRun $run): void {
+            DB::table('ai_runtime_runs')->where('id', $run->id)->update(['status' => 'failed', 'completed_at' => null, 'failed_at' => now(), 'safe_error_code' => 'response_unavailable']);
+        });
     }
 
     public function test_other_tenant_cannot_recover_stale_turn(): void
@@ -502,7 +657,7 @@ final class AiConversationCoreTest extends TestCase
         $handler=new class implements ActionHandler{public int$calls=0;public int$transactionLevel=-1;public function execute(ActionExecutionContext$context,array$arguments):ActionResultData{$this->calls++;$this->transactionLevel=DB::transactionLevel();return new ActionResultData(['status'=>'updated']);}};
         app(ActionRegistry::class)->register(new ActionDefinition('update_record','Actualizar registro','Mutación de prueba',['type'=>'object','additionalProperties'=>false,'required'=>['reference'],'properties'=>['reference'=>['type'=>'string']]],['type'=>'object','additionalProperties'=>false,'required'=>['status'],'properties'=>['status'=>['type'=>'string']]],ActionEffect::Write,ActionConfirmationPolicy::Required,$handler));
         Http::fake(['api.openai.com/*'=>Http::sequence()->push($this->response(['answer'=>'La acción requiere confirmación.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false,'action_request'=>['action_key'=>'update_record','arguments'=>['reference'=>'R1']]]),200)->push($this->response(['answer'=>'La actualización fue completada.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false]),200)]);
-        $conversation=app(StartInternalTestConversationService::class)->start($owner,$agent);app(SendInternalConversationMessageService::class)->send($owner,$conversation,SendConversationMessageData::from('Actualización'));$action=ActionRun::firstOrFail();$this->assertSame('awaiting_confirmation',$action->status->value);$this->assertSame(0,$handler->calls);$base='http://action-write.test/admin';$this->actingAs($owner)->get($base.'/ai-actions/'.$action->uuid)->assertOk()->assertSee('Confirmar acción');[$other,$otherOwner]=$this->httpTenant('action-other','owner');$this->actingAs($otherOwner)->get('http://action-other.test/admin/ai-actions/'.$action->uuid)->assertNotFound();app(TenantContext::class)->set($tenant);$this->actingAs($owner)->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertRedirect();$this->assertSame(1,$handler->calls);$this->assertSame(0,$handler->transactionLevel);$this->assertSame('succeeded',$action->fresh()->status->value);$this->assertSame(2,ConversationMessage::where('role','assistant')->where('status','completed')->count());$this->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertSessionHasErrors('action');$this->assertSame(1,$handler->calls);$this->assertSame(2,count(Http::recorded()));
+        $conversation=app(StartInternalTestConversationService::class)->start($owner,$agent);app(SendInternalConversationMessageService::class)->send($owner,$conversation,SendConversationMessageData::from('Actualización'));$action=ActionRun::firstOrFail();$this->assertSame('awaiting_confirmation',$action->status->value);$this->assertSame(0,$handler->calls);$base='http://action-write.test/admin';$this->actingAs($owner)->get($base.'/ai-actions/'.$action->uuid)->assertOk()->assertSee('Confirmar acción');[$other,$otherOwner]=$this->httpTenant('action-other','owner');$this->actingAs($otherOwner)->get('http://action-other.test/admin/ai-actions/'.$action->uuid)->assertNotFound();app(TenantContext::class)->set($tenant);$this->actingAs($owner)->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertRedirect();$this->assertSame(1,$handler->calls);$this->assertSame(0,$handler->transactionLevel);$action=$action->fresh();$this->assertSame('succeeded',$action->status->value);$completion=ConversationMessage::where('role','assistant')->where('status','completed')->latest('sequence')->firstOrFail();$postRun=RuntimeRun::findOrFail($completion->runtime_run_id);$this->assertNotNull($action->conversation_turn_token_hash);$this->assertSame($action->conversation_turn_token_hash,$completion->turn_token_hash);$this->assertSame($completion->turn_token_hash,$postRun->conversation_turn_token_hash);$this->assertSame(2,ConversationMessage::where('role','assistant')->where('status','completed')->count());$this->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertSessionHasErrors('action');$this->assertSame(1,$handler->calls);$this->assertSame(2,count(Http::recorded()));
     }
 
     public function test_zigo_quote_action_uses_real_service_and_pass_two(): void
@@ -549,7 +704,138 @@ final class AiConversationCoreTest extends TestCase
     {
         [$tenant,$owner]=$this->httpTenant('zigo-guide-ambiguous','owner');$this->logisticsEntitlement($tenant,'SHIPPING');[$agent,$version]=$this->agent($owner);$version->contractVersion->allowed_actions=['zigo.create_shipment_guide'];$version->contractVersion->save();$this->ready($owner,$agent,'Crear guía con revisión humana si el resultado es ambiguo.');[$operation,$snapshot]=$this->authoritativeQuote($tenant);$arguments=['quote_reference'=>$operation->uuid,'option_reference'=>$snapshot->uuid,'sender'=>$this->guidePerson('A','8111111111','64000'),'recipient'=>$this->guidePerson('B','3311111111','44100'),'customer_reference'=>'ambiguous'];$calls=0;LocalShipment::creating(function()use(&$calls){$calls++;throw new \RuntimeException('Connection lost after create request.');});
         Http::fake(['api.openai.com/*'=>Http::sequence()->push($this->response(['answer'=>'Requiere confirmación.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false,'action_request'=>['action_key'=>'zigo.create_shipment_guide','arguments'=>$arguments]]),200)->push($this->response(['answer'=>'No pude confirmar el resultado; una persona debe revisarlo.','citation_ids'=>['K1'],'confidence'=>'low','needs_handoff'=>true,'handoff_reason'=>'policy_restriction','lead_candidate'=>null,'resolved_candidate'=>false]),200)]);
-        $conversation=app(StartInternalTestConversationService::class)->start($owner,$agent);app(SendInternalConversationMessageService::class)->send($owner,$conversation,SendConversationMessageData::from('Crear guía con revisión humana si el resultado es ambiguo.'));$action=ActionRun::firstOrFail();$base='http://zigo-guide-ambiguous.test/admin';$this->actingAs($owner)->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertRedirect();$this->assertSame('failed',$action->fresh()->status->value);$this->assertSame('action_failed',$action->fresh()->safe_error_code);$this->assertSame(1,$calls);$this->assertSame(0,LocalShipment::count());$this->assertSame(ConversationStatus::Open,$conversation->fresh()->status);$this->assertSame(1,count(Http::recorded()));$this->assertSame('failed',RuntimeRun::where('purpose','post_action_synthesis')->firstOrFail()->status->value);$this->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertSessionHasErrors('action');$this->assertSame(1,$calls);
+        $conversation=app(StartInternalTestConversationService::class)->start($owner,$agent);app(SendInternalConversationMessageService::class)->send($owner,$conversation,SendConversationMessageData::from('Crear guía con revisión humana si el resultado es ambiguo.'));$action=ActionRun::firstOrFail();$base='http://zigo-guide-ambiguous.test/admin';$this->actingAs($owner)->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertRedirect();$this->assertSame('reconciliation_required',$action->fresh()->status->value);$this->assertSame('action_outcome_unknown',$action->fresh()->safe_error_code);$this->assertSame(1,$calls);$this->assertSame(0,LocalShipment::count());$this->assertSame(ConversationStatus::HandoffRequested,$conversation->fresh()->status);$this->assertSame(1,count(Http::recorded()));$this->assertSame('failed',RuntimeRun::where('purpose','post_action_synthesis')->firstOrFail()->status->value);$this->post($base.'/ai-actions/'.$action->uuid.'/confirm')->assertSessionHasErrors('action');$this->assertSame(1,$calls);
+    }
+
+    public function test_late_action_handler_callback_is_fenced_through_the_full_confirmation_flow(): void
+    {
+        Http::preventStrayRequests();
+        [$tenant,$owner]=$this->authorized('late-action-callback');
+        [$agent,$version]=$this->agent($owner);
+        $version->contractVersion->allowed_actions=['late.write'];
+        $version->contractVersion->save();
+        $this->ready($owner,$agent,'Ejecuta una acción confirmada.');
+        $conversation=app(StartInternalTestConversationService::class)->start($owner,$agent);
+        $handler=new class($owner,$conversation) implements ActionHandler {
+            public int $calls=0;
+            public int $transactionLevel=-1;
+            public function __construct(private User $owner,private Conversation $conversation) {}
+            public function execute(ActionExecutionContext $context,array $arguments):ActionResultData
+            {
+                $this->calls++;
+                $this->transactionLevel=DB::transactionLevel();
+                \Illuminate\Support\Carbon::setTestNow(now()->addMinutes(3));
+                try {
+                    app(SendInternalConversationMessageService::class)->send($this->owner,$this->conversation->fresh(),SendConversationMessageData::from('No iniciar otro turno'));
+                } catch (\App\Domain\AI\Conversations\Exceptions\ConversationTurnBusyException) {
+                    // The production recovery path fences the expired Action turn.
+                }
+                return new ActionResultData(['status'=>'late-success']);
+            }
+        };
+        app(ActionRegistry::class)->register(new ActionDefinition('late.write','Acción tardía','Prueba de callback tardío',['type'=>'object','additionalProperties'=>false,'required'=>['reference'],'properties'=>['reference'=>['type'=>'string']]],['type'=>'object','additionalProperties'=>false,'required'=>['status'],'properties'=>['status'=>['type'=>'string']]],ActionEffect::Write,ActionConfirmationPolicy::Required,$handler));
+        Http::fake(['api.openai.com/*'=>Http::response($this->response(['answer'=>'Confirma la acción.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false,'action_request'=>['action_key'=>'late.write','arguments'=>['reference'=>'R1']]]),200)]);
+        app(SendInternalConversationMessageService::class)->send($owner,$conversation,SendConversationMessageData::from('Solicita la acción'));
+        $action=ActionRun::firstOrFail();
+        $citationsBeforeConfirmation=ConversationMessageCitation::count();
+        try {
+            app(ConfirmActionRunService::class)->confirm($owner,$action);
+            $this->fail('A late Action callback must remain fenced.');
+        } catch (\App\Domain\AI\Conversations\Exceptions\ConversationTurnSupersededException|\DomainException) {
+            $this->addToAssertionCount(1);
+        } finally {
+            \Illuminate\Support\Carbon::setTestNow();
+        }
+        $action=$action->fresh();
+        $assistant=ConversationMessage::where('conversation_id',$conversation->id)->where('role','assistant')->latest('sequence')->firstOrFail();
+        $this->assertSame(1,$handler->calls);
+        $this->assertSame(0,$handler->transactionLevel);
+        $this->assertSame('reconciliation_required',$action->status->value);
+        $this->assertSame('action_outcome_unknown',$action->safe_error_code);
+        $this->assertNull($action->output);
+        $this->assertSame('failed',$assistant->status->value);
+        $this->assertNull($assistant->runtime_run_id);
+        $this->assertDatabaseCount('ai_outcome_events',0);
+        $this->assertSame($citationsBeforeConfirmation,ConversationMessageCitation::count());
+        $this->assertDatabaseHas('ai_human_handoffs',['conversation_id'=>$conversation->id,'status'=>'requested']);
+        $handoff=HumanHandoff::firstOrFail();
+        $this->assertNull($handoff->assigned_user_id);
+        $this->assertSame('action_outcome_unknown',$handoff->reason_code);
+        $this->assertSame('El resultado de la acción está pendiente de verificación; todavía no existe asignación humana.',$handoff->safe_reason);
+        $this->assertSame(ConversationStatus::HandoffRequested,$conversation->fresh()->status);
+        $this->assertFalse($conversation->fresh()->turn_in_progress);
+        try {
+            app(SendInternalConversationMessageService::class)->send($owner,$conversation->fresh(),SendConversationMessageData::from('No duplicar conciliación'));
+            $this->fail('A conversation awaiting reconciliation must remain blocked.');
+        } catch (\DomainException|\App\Domain\AI\Conversations\Exceptions\ConversationTurnBusyException) {
+            $this->addToAssertionCount(1);
+        }
+        $this->assertDatabaseCount('ai_human_handoffs',1);
+        $this->assertSame(1,$handler->calls);
+        $this->assertSame(1,count(Http::recorded()));
+    }
+
+    public function test_action_reconciliation_rolls_back_when_handoff_creation_fails(): void
+    {
+        Http::preventStrayRequests();
+        [$tenant,$owner]=$this->authorized('action-reconciliation-rollback');
+        [$agent,$version]=$this->agent($owner);
+        $version->contractVersion->allowed_actions=['late.write'];
+        $version->contractVersion->save();
+        $this->ready($owner,$agent,'Ejecuta una acción confirmada.');
+        $conversation=app(StartInternalTestConversationService::class)->start($owner,$agent);
+        $handler=new class($owner,$conversation) implements ActionHandler {
+            public array $snapshot=[];
+            public int $calls=0;
+            public function __construct(private User $owner,private Conversation $conversation) {}
+            public function execute(ActionExecutionContext $context,array $arguments):ActionResultData
+            {
+                $this->calls++;
+                $failOnce=true;
+                HumanHandoff::creating(function () use (&$failOnce): void {
+                    if ($failOnce) { $failOnce=false; throw new \RuntimeException('controlled_handoff_failure'); }
+                });
+                \Illuminate\Support\Carbon::setTestNow(now()->addMinutes(3));
+                try {
+                    app(SendInternalConversationMessageService::class)->send($this->owner,$this->conversation->fresh(),SendConversationMessageData::from('Provocar recovery'));
+                } catch (\RuntimeException $e) {
+                    if ($e->getMessage() !== 'controlled_handoff_failure') throw $e;
+                }
+                $action=ActionRun::where('conversation_id',$this->conversation->id)->firstOrFail();
+                $assistant=ConversationMessage::where('conversation_id',$this->conversation->id)->where('role','assistant')->latest('sequence')->firstOrFail();
+                $fresh=$this->conversation->fresh();
+                $this->snapshot=[$action->status->value,$assistant->status->value,$fresh->turn_in_progress,$fresh->active_handoff_id,HumanHandoff::count()];
+                throw new \RuntimeException('handler_stopped_after_rollback_probe');
+            }
+        };
+        app(ActionRegistry::class)->register(new ActionDefinition('late.write','Acción tardía','Prueba de atomicidad',['type'=>'object','additionalProperties'=>false,'required'=>['reference'],'properties'=>['reference'=>['type'=>'string']]],['type'=>'object','additionalProperties'=>false,'required'=>['status'],'properties'=>['status'=>['type'=>'string']]],ActionEffect::Write,ActionConfirmationPolicy::Required,$handler));
+        Http::fake(['api.openai.com/*'=>Http::response($this->response(['answer'=>'Confirma la acción.','citation_ids'=>['K1'],'confidence'=>'high','needs_handoff'=>false,'handoff_reason'=>'none','lead_candidate'=>null,'resolved_candidate'=>false,'action_request'=>['action_key'=>'late.write','arguments'=>['reference'=>'R1']]]),200)]);
+        app(SendInternalConversationMessageService::class)->send($owner,$conversation,SendConversationMessageData::from('Ejecuta una acción confirmada.'));
+        try {
+            app(ConfirmActionRunService::class)->confirm($owner,ActionRun::firstOrFail());
+        } catch (\DomainException) {
+            $this->addToAssertionCount(1);
+        } finally {
+            \Illuminate\Support\Carbon::setTestNow();
+        }
+        $this->assertSame(1,$handler->calls);
+        $this->assertSame(['executing','pending',true,null,0],$handler->snapshot);
+        $this->assertDatabaseCount('ai_human_handoffs',1);
+    }
+
+    public function test_conversation_runtime_run_with_null_turn_token_is_rejected_by_nominal_finalization(): void
+    {
+        $this->assertForgedRuntimeRejected(function (RuntimeRun $run): void {
+            DB::table('ai_runtime_runs')->where('id',$run->id)->update(['conversation_turn_token_hash'=>null]);
+        },false,null);
+    }
+
+    public function test_conversation_runtime_run_with_different_turn_token_is_rejected_by_nominal_finalization(): void
+    {
+        $different=hash('sha256','different-conversation-turn');
+        $this->assertForgedRuntimeRejected(function (RuntimeRun $run) use ($different): void {
+            DB::table('ai_runtime_runs')->where('id',$run->id)->update(['conversation_turn_token_hash'=>$different]);
+        },false,$different);
     }
 
     public function test_zigo_tracking_action_passes_through_runtime_and_can_handoff(): void
@@ -768,9 +1054,11 @@ $evil=$this->withHeaders(['Origin'=>'https://evil.test'])->postJson("/api/ai/web
         });
         $this->processWhatsApp($channel, 'wamid.contention.a', '5218555555555', 'Atención ordenada de mensajes concurrentes');
         $conversation = Conversation::where('channel', 'whatsapp')->firstOrFail();
-        DB::table('ai_conversations')->where('id', $conversation->id)->update(['turn_in_progress' => true, 'next_sequence' => 5]);
+        $contentionToken=hash('sha256',random_bytes(32));
+        DB::table('ai_conversations')->where('id', $conversation->id)->update(['turn_in_progress' => true,'active_turn_token_hash'=>$contentionToken,'active_turn_started_at'=>now(),'active_turn_heartbeat_at'=>now(),'active_turn_expires_at'=>now()->addMinutes(2), 'next_sequence' => 5]);
         $activeUser = new ConversationMessage;
         $activeUser->conversation_id = $conversation->id;
+        $activeUser->turn_token_hash=$contentionToken;
         $activeUser->sequence = 3;
         $activeUser->role = ConversationMessageRole::User;
         $activeUser->status = ConversationMessageStatus::Completed;
@@ -779,12 +1067,14 @@ $evil=$this->withHeaders(['Origin'=>'https://evil.test'])->postJson("/api/ai/web
         $activeUser->save();
         $activeAssistant = new ConversationMessage;
         $activeAssistant->conversation_id = $conversation->id;
+        $activeAssistant->turn_token_hash=$contentionToken;
         $activeAssistant->sequence = 4;
         $activeAssistant->role = ConversationMessageRole::Assistant;
         $activeAssistant->status = ConversationMessageStatus::Pending;
         $activeAssistant->content = null;
         $activeAssistant->needs_handoff = false;
         $activeAssistant->save();
+        DB::table('ai_conversations')->where('id',$conversation->id)->update(['active_turn_assistant_message_id'=>$activeAssistant->id]);
         $receipt = $this->whatsappReceipt($channel, 'wamid.contention.b', '5218555555555', 'Atención ordenada de mensajes concurrentes');
         app(ProcessWhatsAppInboundService::class)->process($receipt->id);
         $this->assertSame('received', $receipt->fresh()->status);
@@ -793,8 +1083,9 @@ $evil=$this->withHeaders(['Origin'=>'https://evil.test'])->postJson("/api/ai/web
         Queue::assertPushed(\App\Domain\AI\Channels\WhatsApp\Jobs\ProcessWhatsAppInboundJob::class, 1);
         $authorized = app(AiLifecycleAuthorization::class)->authorize($owner);
         DB::transaction(function () use ($activeAssistant, $conversation, $authorized) {
-            $activeAssistant->fresh()->fail($authorized, 'test_turn_released');
-            $conversation->fresh()->finishTurn($authorized, false);
+            $token=$activeAssistant->fresh()->turn_token_hash;
+            $activeAssistant->fresh()->fail($authorized, 'test_turn_released',$token);
+            $conversation->fresh()->finishTurn($authorized, false,$token,$activeAssistant->id);
         });
         app(ProcessWhatsAppInboundService::class)->process($receipt->id);
         $this->assertSame('succeeded', $receipt->fresh()->status);
@@ -821,9 +1112,11 @@ $evil=$this->withHeaders(['Origin'=>'https://evil.test'])->postJson("/api/ai/web
         $pending = DB::transaction(function () use ($owner, $conversation) {
             $authorized = app(AiLifecycleAuthorization::class)->authorize($owner);
             $locked = Conversation::query()->lockForUpdate()->findOrFail($conversation->id);
-            [$userSequence,$assistantSequence] = $locked->reserveTurn($authorized);
+            $token = hash('sha256', random_bytes(32));
+            [$userSequence,$assistantSequence] = $locked->reserveTurn($authorized, $token, now(), now()->addMinutes(2));
             $user = new ConversationMessage;
             $user->conversation_id = $locked->id;
+            $user->turn_token_hash = $token;
             $user->sequence = $userSequence;
             $user->role = 'user';
             $user->status = 'completed';
@@ -832,16 +1125,19 @@ $evil=$this->withHeaders(['Origin'=>'https://evil.test'])->postJson("/api/ai/web
             $user->save();
             $assistant = new ConversationMessage;
             $assistant->conversation_id = $locked->id;
+            $assistant->turn_token_hash = $token;
             $assistant->sequence = $assistantSequence;
             $assistant->role = 'assistant';
             $assistant->status = 'pending';
             $assistant->needs_handoff = false;
             $assistant->save();
+            $locked->bindActiveTurnAssistant($authorized, $assistant, $token);
 
             return $assistant;
         });
         if ($ageSeconds > 0) {
             DB::table('ai_conversation_messages')->where('id', $pending->id)->update(['created_at' => now()->subSeconds($ageSeconds), 'updated_at' => now()->subSeconds($ageSeconds)]);
+            DB::table('ai_conversations')->where('id', $pending->conversation_id)->update(['active_turn_heartbeat_at' => now()->subSeconds($ageSeconds), 'active_turn_expires_at' => now()->subSecond()]);
         }
 
         return $pending;
@@ -886,6 +1182,69 @@ $evil=$this->withHeaders(['Origin'=>'https://evil.test'])->postJson("/api/ai/web
         app(TenantContext::class)->set($t);
 
         return [$t, $u];
+    }
+
+    private function assertForgedRuntimeRejected(callable $mutate, bool $sameAgentDifferentVersion = false, ?string $forgedToken = 'not-a-token-test'): void
+    {
+        [$tenant,$owner] = $this->authorized('runtime-integrity-'.uniqid());
+        [$agent,$version] = $this->agent($owner);
+        $this->ready($owner, $agent, 'Información verificada para responder.');
+        $conversation = app(StartInternalTestConversationService::class)->start($owner, $agent);
+        if ($sameAgentDifferentVersion) {
+            $otherAgent = $agent;
+            $otherVersion = new AgentVersion;
+            $otherVersion->agent_id = $agent->id;
+            $otherVersion->agent_contract_version_id = $version->agent_contract_version_id;
+            $otherVersion->version_number = 2;
+            $otherVersion->status = AgentVersionStatus::Draft;
+            $otherVersion->schema_version = '1.0';
+            $otherVersion->configuration = $version->configuration;
+            $otherVersion->created_by_user_id = $owner->id;
+            $otherVersion->save();
+        } else {
+            [$otherAgent,$otherVersion] = $this->agent($owner);
+        }
+        $armed = false;
+        RuntimeRun::updated(function (RuntimeRun $run) use (&$armed, $mutate, $otherAgent, $otherVersion): void {
+            if ($armed || ! in_array($run->status->value, ['completed', 'skipped_no_knowledge'], true)) return;
+            $armed = true;
+            $mutate($run, $otherAgent, $otherVersion);
+        });
+        $httpCalls = 0;
+        Http::fake(function () use (&$httpCalls) {
+            $httpCalls++;
+
+            return Http::response($this->response(['answer' => 'No debe persistirse.', 'citation_ids' => ['K1'], 'confidence' => 'high', 'needs_handoff' => true, 'handoff_reason' => 'human_requested']), 200);
+        });
+
+        try {
+            app(SendInternalConversationMessageService::class)->send($owner, $conversation, SendConversationMessageData::from('Valida la identidad del run'));
+            $this->fail('An incompatible Runtime Run must fail nominally.');
+        } catch (\DomainException $e) {
+            $this->assertContains($e->getMessage(), ['Runtime Run is incompatible with the conversation turn.', 'Lead outcome aggregate references are inconsistent.']);
+        }
+
+        $assistant = ConversationMessage::where('role', 'assistant')->firstOrFail();
+        $this->assertSame(ConversationMessageStatus::Failed, $assistant->status);
+        $this->assertSame('response_unavailable', $assistant->safe_error_code);
+        $this->assertNull($assistant->runtime_run_id);
+        $this->assertNull($assistant->content);
+        $this->assertDatabaseCount('ai_conversation_message_citations', 0);
+        $this->assertDatabaseCount('ai_human_handoffs', 0);
+        $this->assertSame(ConversationStatus::Open, $conversation->fresh()->status);
+        $this->assertFalse($conversation->fresh()->turn_in_progress);
+        $this->assertLessThanOrEqual(1, $httpCalls);
+        if ($forgedToken !== 'not-a-token-test') {
+            $run=RuntimeRun::firstOrFail();
+            if ($forgedToken === null) $this->assertNull($run->conversation_turn_token_hash); else $this->assertSame($forgedToken,$run->conversation_turn_token_hash);
+            try {
+                DB::table('ai_conversation_messages')->where('id',$assistant->id)->update(['runtime_run_id'=>$run->id]);
+                $this->fail('Physical conversation/run integrity must reject the forged token association.');
+            } catch (\Illuminate\Database\QueryException) {
+                $this->addToAssertionCount(1);
+            }
+            $this->assertNull(DB::table('ai_conversation_messages')->where('id',$assistant->id)->value('runtime_run_id'));
+        }
     }
 
     private function httpTenant(string $s, string $role): array
@@ -1077,5 +1436,10 @@ $evil=$this->withHeaders(['Origin'=>'https://evil.test'])->postJson("/api/ai/web
     private function actionMigration(): object
     {
         return require base_path('database/migrations/2026_08_31_100000_create_ai_action_runs.php');
+    }
+
+    private function integrityMigration(): object
+    {
+        return require base_path('database/migrations/2026_09_03_100000_harden_ai_conversation_turn_integrity.php');
     }
 }

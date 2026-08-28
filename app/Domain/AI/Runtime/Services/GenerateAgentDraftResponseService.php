@@ -39,7 +39,7 @@ final class GenerateAgentDraftResponseService
 {
     public function __construct(private AiLifecycleAuthorization $auth, private AiTenantBoundary $tenants, private KnowledgeRetriever $retriever, private ProviderRegistry $providers, private AgentRuntimePolicyCompiler $policy, private ActionRegistry $actions, private MeteredRuntimeRunService $runs, private ?AiCostGuard $costGuard = null) {}
 
-    public function generate(User $actor, Agent $agent, RuntimeQuestionData $q, ?AgentVersion $pinnedVersion = null, array $history = [], AiExecutionMode $mode = AiExecutionMode::Live): AgentRuntimeResponseData
+    public function generate(User $actor, Agent $agent, RuntimeQuestionData $q, ?AgentVersion $pinnedVersion = null, array $history = [], AiExecutionMode $mode = AiExecutionMode::Live, ?string $conversationTurnTokenHash = null): AgentRuntimeResponseData
     {
         $authorized = $this->auth->authorize($actor);
         $this->tenants->assertResourceBelongsToCurrentTenant($agent);
@@ -59,9 +59,9 @@ final class GenerateAgentDraftResponseService
 return [$a, $v];
         });
         $matches = $this->limit($this->retriever->retrieve($version, KnowledgeSearchQuery::from($q->value, 6)));
-        $run = $this->start($authorized, $agent, $version, $mode);
+        $run = $this->start($authorized, $agent, $version, $mode, $conversationTurnTokenHash);
         if ($matches === []) {
-            DB::transaction(fn () => $run->fresh()->skip($this->auth->authorize($actor)));
+            DB::transaction(fn () => $run->fresh()->skip($this->auth->authorize($actor), $conversationTurnTokenHash));
 
             return new AgentRuntimeResponseData('No encontramos información suficiente para responder.', [], 'low', true, 'insufficient_knowledge', [], $run->id);
         }$ids = [];
@@ -91,7 +91,7 @@ return [$a, $v];
                 if (is_array($snapshot)) $pricing = $snapshot;
             }
             if (! is_array($pricing)) throw new InvalidModelResponseException('Pricing snapshot is not configured.');
-            DB::transaction(fn () => $run->fresh()->complete($this->auth->authorize($actor), $model, $result, $pricing));
+            DB::transaction(fn () => $run->fresh()->complete($this->auth->authorize($actor), $model, $result, $pricing, $conversationTurnTokenHash));
 
             return $result;
         } catch (\Throwable$e) {
@@ -99,7 +99,7 @@ return [$a, $v];
                 $e instanceof ModelProviderNotConfiguredException => 'provider_not_configured',$e instanceof ModelProviderAuthenticationException => 'provider_authentication',$e instanceof ModelProviderRateLimitException => 'provider_rate_limit',$e instanceof ModelProviderTimeoutException => 'provider_timeout',$e instanceof ModelProviderUnavailableException => 'provider_unavailable',$e instanceof InvalidModelResponseException => 'invalid_model_response',default => 'runtime_failed'
             };
             $this->costGuard?->release($run);
-            DB::transaction(fn () => $run->fresh()->fail($this->auth->authorize($actor), $code, $e instanceof ModelProviderException ? $e->failure : null));
+            DB::transaction(fn () => $run->fresh()->fail($this->auth->authorize($actor), $code, $e instanceof ModelProviderException ? $e->failure : null, $conversationTurnTokenHash));
             throw $e;
         }
     }
@@ -127,12 +127,13 @@ return [$a, $v];
 return $out;
     }
 
-    private function start($actor, Agent $a, AgentVersion $v, AiExecutionMode $mode): RuntimeRun
+    private function start($actor, Agent $a, AgentVersion $v, AiExecutionMode $mode, ?string $conversationTurnTokenHash): RuntimeRun
     {
-        $tenant=Tenant::query()->findOrFail($actor->tenantId);return $this->runs->start($tenant,$mode,function () use ($actor, $a, $v, $mode) {
+        $tenant=Tenant::query()->findOrFail($actor->tenantId);return $this->runs->start($tenant,$mode,function () use ($actor, $a, $v, $mode, $conversationTurnTokenHash) {
             $r = new RuntimeRun;
             $r->agent_id = $a->id;
             $r->agent_version_id = $v->id;
+            if (Schema::hasColumn('ai_runtime_runs', 'conversation_turn_token_hash')) $r->conversation_turn_token_hash = $conversationTurnTokenHash;
             $r->purpose = $mode===AiExecutionMode::Live&&in_array($v->status,[AgentVersionStatus::Published,AgentVersionStatus::Retired],true)?'public_webchat':'agent_draft_simulation';
             if (Schema::hasColumn('ai_runtime_runs', 'execution_mode')) {
                 $r->execution_mode = $mode->value;

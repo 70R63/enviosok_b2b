@@ -28,9 +28,11 @@ final class TenantSetupController extends Controller
         }
         $tenant = $context->tenant()->load(['branding', 'domains', 'currentPlan']);
         $subscription = $tenant->subscriptions()->where('status', 'active')->with('entitlements.module')->first();
+        $workspace = $workspaces->resolveForPresentation($tenant);
         return view('tenant.admin.setup', [
             'tenant' => $tenant, 'application' => $application->fresh(), 'subscription' => $subscription,
-            'isAiWorkspace' => $workspaces->resolveForPresentation($tenant) === TenantWorkspace::ZigoAi,
+            'workspace' => $workspace,
+            'isAiWorkspace' => $workspace === TenantWorkspace::ZigoAi,
             'aiCapacity' => $capacities->summary($tenant),
             'connection' => TenantPaymentConnection::where('tenant_id', $tenant->id)
                 ->where('provider', 'MERCADO_PAGO')->first(),

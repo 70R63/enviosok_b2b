@@ -223,10 +223,54 @@ final class ZigoAiProductShellTest extends TestCase
     {
         $middleware = file_get_contents(app_path('Http/Middleware/EnsureTenantOperationalWorkspace.php'));
         $routes = file_get_contents(base_path('routes/network.php'));
-        $controllers = collect(glob(app_path('Http/Controllers/**/*.php')))->map(fn ($file) => file_get_contents($file))->implode("\n");
         $this->assertStringNotContainsString('resolveForPresentation', $middleware);
         $this->assertStringNotContainsString('resolveForPresentation', $routes);
-        $this->assertSame(1, substr_count($controllers, 'resolveForPresentation('));
+
+        $authorizedMethods = [
+            [\App\Http\Controllers\Tenant\TenantAdminController::class, 'dashboard'],
+            [\App\Http\Controllers\Tenant\TenantConfigurationController::class, 'edit'],
+            [\App\Http\Controllers\Tenant\TenantSetupController::class, 'show'],
+            [\App\Http\Requests\Tenant\UpdateTenantConfigurationRequest::class, 'rules'],
+        ];
+        foreach ($authorizedMethods as [$class, $method]) {
+            $source = $this->methodSource($class, $method);
+            $this->assertSame(1, substr_count($source, 'resolveForPresentation('), $class.'::'.$method);
+            $this->assertDoesNotMatchRegularExpression('/\b(?:foreach|for|while)\s*\([^)]*\)[\s\S]*resolveForPresentation\(/', $source, $class.'::'.$method);
+        }
+
+        $authorizedFiles = collect($authorizedMethods)->map(fn ($entry) => (new \ReflectionClass($entry[0]))->getFileName())->push(resource_path('views/tenant/admin/layout.blade.php'))->map(fn ($path) => realpath($path))->sort()->values()->all();
+        $searchFiles = collect([app_path(), resource_path('views')])->flatMap(function (string $root): array {
+            $files = [];
+            foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS)) as $file) {
+                if ($file->isFile() && (str_ends_with($file->getFilename(), '.php') || str_ends_with($file->getFilename(), '.blade.php'))) $files[] = $file->getPathname();
+            }
+
+            return $files;
+        });
+        $actualFiles = $searchFiles
+            ->filter(fn ($file) => preg_match('/->resolveForPresentation\(/', (string) file_get_contents($file)) === 1)
+            ->map(fn ($path) => realpath($path))->unique()->sort()->values()->all();
+        $this->assertSame($authorizedFiles, $actualFiles, 'Every presentation resolver callsite must be explicitly authorized.');
+
+        $layout = file_get_contents(resource_path('views/tenant/admin/layout.blade.php'));
+        $this->assertSame(1, substr_count($layout, 'resolveForPresentation('));
+        $this->assertStringContainsString('$workspace=$workspace??app(', $layout);
+        foreach ([
+            \App\Http\Controllers\Tenant\TenantAdminController::class.'::dashboard',
+            \App\Http\Controllers\Tenant\TenantConfigurationController::class.'::edit',
+            \App\Http\Controllers\Tenant\TenantSetupController::class.'::show',
+        ] as $controllerMethod) {
+            [$class, $method] = explode('::', $controllerMethod);
+            $this->assertStringContainsString("'workspace'", $this->methodSource($class, $method), $controllerMethod.' must reuse its typed result in the layout.');
+        }
+    }
+
+    private function methodSource(string $class, string $method): string
+    {
+        $reflection = new \ReflectionMethod($class, $method);
+        $lines = file($reflection->getFileName());
+
+        return implode('', array_slice($lines, $reflection->getStartLine() - 1, $reflection->getEndLine() - $reflection->getStartLine() + 1));
     }
 
     private function assertWorkspaceRejected(Tenant $tenant): void

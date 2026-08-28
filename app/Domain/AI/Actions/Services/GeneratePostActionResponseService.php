@@ -25,18 +25,18 @@ final class GeneratePostActionResponseService
 {
     public function __construct(private AiLifecycleAuthorization $auth, private ProviderRegistry $providers, private MeteredRuntimeRunService $runs) {}
 
-    public function reserve(User $actor, Agent $agent, AgentVersion $version, ActionRun $action, AiExecutionMode $mode): RuntimeRun
+    public function reserve(User $actor, Agent $agent, AgentVersion $version, ActionRun $action, AiExecutionMode $mode, string $conversationTurnTokenHash): RuntimeRun
     {
         $authorized = $this->auth->authorize($actor);
         $tenant = Tenant::query()->findOrFail($authorized->tenantId);
-        $create = fn (): RuntimeRun => $this->createRun($authorized, $agent, $version, $mode);
+        $create = fn (): RuntimeRun => $this->createRun($authorized, $agent, $version, $mode, $conversationTurnTokenHash);
 
         return $mode === AiExecutionMode::Live
             ? $this->runs->reservePostAction($tenant, $action, $create)
             : $this->runs->start($tenant, $mode, $create);
     }
 
-    public function generateReserved(User $actor, Agent $agent, AgentVersion $version, ActionRun $action, RuntimeRun $run): AgentRuntimeResponseData
+    public function generateReserved(User $actor, Agent $agent, AgentVersion $version, ActionRun $action, RuntimeRun $run, string $turnTokenHash): AgentRuntimeResponseData
     {
         $authorized = $this->auth->authorize($actor);
         if ($run->status !== RuntimeRunStatus::Started || $run->purpose !== 'post_action_synthesis') {
@@ -60,35 +60,36 @@ final class GeneratePostActionResponseService
             if (! is_array($pricing)) {
                 throw new InvalidModelResponseException('Pricing snapshot is not configured.');
             }
-            DB::transaction(fn () => $run->fresh()->complete($this->auth->authorize($actor), $model, $result, $pricing));
+            DB::transaction(fn () => $run->fresh()->complete($this->auth->authorize($actor), $model, $result, $pricing, $turnTokenHash));
 
             return $result;
         } catch (\Throwable $e) {
-            DB::transaction(function () use ($run, $actor): void {
+            DB::transaction(function () use ($run, $actor, $turnTokenHash): void {
                 $fresh = $run->fresh();
                 if ($fresh->status === RuntimeRunStatus::Started) {
-                    $fresh->fail($this->auth->authorize($actor), 'runtime_failed');
+                    $fresh->fail($this->auth->authorize($actor), 'runtime_failed', null, $turnTokenHash);
                 }
             });
             throw $e;
         }
     }
 
-    public function failReserved(User $actor, RuntimeRun $run, string $code = 'runtime_failed'): void
+    public function failReserved(User $actor, RuntimeRun $run, string $turnTokenHash, string $code = 'runtime_failed'): void
     {
-        DB::transaction(function () use ($actor, $run, $code): void {
+        DB::transaction(function () use ($actor, $run, $code, $turnTokenHash): void {
             $fresh = $run->fresh();
             if ($fresh->status === RuntimeRunStatus::Started) {
-                $fresh->fail($this->auth->authorize($actor), $code);
+                $fresh->fail($this->auth->authorize($actor), $code, null, $turnTokenHash);
             }
         });
     }
 
-    private function createRun(AuthorizedAiLifecycleActor $authorized, Agent $agent, AgentVersion $version, AiExecutionMode $mode): RuntimeRun
+    private function createRun(AuthorizedAiLifecycleActor $authorized, Agent $agent, AgentVersion $version, AiExecutionMode $mode, string $conversationTurnTokenHash): RuntimeRun
     {
             $run = new RuntimeRun;
             $run->agent_id = $agent->id;
             $run->agent_version_id = $version->id;
+            if (Schema::hasColumn('ai_runtime_runs', 'conversation_turn_token_hash')) $run->conversation_turn_token_hash = $conversationTurnTokenHash;
             $run->purpose = 'post_action_synthesis';
             if (Schema::hasColumn('ai_runtime_runs', 'execution_mode')) {
                 $run->execution_mode = $mode->value;
