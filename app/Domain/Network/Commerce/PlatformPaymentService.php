@@ -78,8 +78,18 @@ final class PlatformPaymentService
 
     public function webhook(Request $request): void
     {
-        $paymentId = (string) $request->query('data.id', $request->input('data.id', ''));
-        abort_unless($paymentId !== '' && $this->provider->validateWebhook($request, $paymentId), 401);
+        $paymentId = $this->webhookPaymentId($request);
+        if ($paymentId === '') {
+            Log::warning('ZIGO_PLATFORM_WEBHOOK_REJECT reason='.PlatformWebhookValidationResult::PAYMENT_ID_MISSING);
+            abort(401);
+        }
+
+        $validation = $this->provider->webhookValidationResult($request, $paymentId);
+        if ($validation !== PlatformWebhookValidationResult::VALID_SIGNATURE) {
+            Log::warning('ZIGO_PLATFORM_WEBHOOK_REJECT reason='.$validation);
+            abort(401);
+        }
+        Log::info('ZIGO_PLATFORM_WEBHOOK_SIGNATURE_VALID');
 
         $hintUuid = (string) ($request->query('onboarding_attempt') ?: $request->query('saas_attempt'));
         $hint = $hintUuid !== ''
@@ -123,6 +133,17 @@ final class PlatformPaymentService
                 'reason' => $errorCode,
             ]);
         }
+    }
+
+    private function webhookPaymentId(Request $request): string
+    {
+        foreach ([$request->input('data.id'), $request->query('data_id'), $request->query('data.id')] as $candidate) {
+            if (is_scalar($candidate) && (string) $candidate !== '') {
+                return (string) $candidate;
+            }
+        }
+
+        return '';
     }
 
     /**

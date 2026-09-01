@@ -120,22 +120,49 @@ final class MercadoPagoPlatformPaymentProvider implements PlatformPaymentProvide
 
     public function validateWebhook(Request $request, string $id): bool
     {
+        return $this->webhookValidationResult($request, $id) === PlatformWebhookValidationResult::VALID_SIGNATURE;
+    }
+
+    public function webhookValidationResult(Request $request, string $id): string
+    {
+        if ($id === '') {
+            return PlatformWebhookValidationResult::PAYMENT_ID_MISSING;
+        }
+
         $secret = (string) $this->cfg('platform.webhook_secret');
         $signature = (string) $request->header('x-signature');
         $requestId = (string) $request->header('x-request-id');
+        if ($secret === '') {
+            return PlatformWebhookValidationResult::SECRET_MISSING;
+        }
+        if ($signature === '') {
+            return PlatformWebhookValidationResult::SIGNATURE_HEADER_MISSING;
+        }
+        if ($requestId === '') {
+            return PlatformWebhookValidationResult::REQUEST_ID_MISSING;
+        }
+
         preg_match('/(?:^|,)\s*ts=([^,]+)/', $signature, $timestampMatch);
         preg_match('/(?:^|,)\s*v1=([^,]+)/', $signature, $signatureMatch);
-        if (!$secret || !$requestId || !isset($timestampMatch[1], $signatureMatch[1]) || !ctype_digit($timestampMatch[1])) {
-            return false;
+        if (!isset($timestampMatch[1])) {
+            return PlatformWebhookValidationResult::TIMESTAMP_MISSING;
+        }
+        if (!isset($signatureMatch[1])) {
+            return PlatformWebhookValidationResult::V1_MISSING;
+        }
+        if (!ctype_digit($timestampMatch[1])) {
+            return PlatformWebhookValidationResult::TIMESTAMP_INVALID;
         }
         $issued = (int) $timestampMatch[1];
         if ($issued > 99999999999) {
             $issued = (int) floor($issued / 1000);
         }
         if (abs(time() - $issued) > (int) $this->cfg('providers.mercado_pago.webhook_tolerance_seconds', 300)) {
-            return false;
+            return PlatformWebhookValidationResult::WEBHOOK_STALE;
         }
         $manifest = 'id:'.strtolower(trim($id)).';request-id:'.$requestId.';ts:'.$timestampMatch[1].';';
-        return hash_equals(hash_hmac('sha256', $manifest, $secret), trim($signatureMatch[1]));
+        return hash_equals(hash_hmac('sha256', $manifest, $secret), trim($signatureMatch[1]))
+            ? PlatformWebhookValidationResult::VALID_SIGNATURE
+            : PlatformWebhookValidationResult::HMAC_MISMATCH;
     }
 }
