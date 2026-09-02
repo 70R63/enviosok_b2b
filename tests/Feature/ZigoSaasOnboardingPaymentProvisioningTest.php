@@ -360,6 +360,25 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
         Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
     }
 
+    public function test_stale_rejected_return_cannot_downgrade_an_approved_webhook(): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        [$application, $attempt] = $this->pending('webhook-before-stale-rejected');
+        $approved = $this->payment($attempt, 'stable-webhook-payment', 'approved');
+        $rejected = $this->payment($attempt, 'stable-webhook-payment', 'rejected');
+        Http::fakeSequence()->push($approved)->push($rejected);
+
+        $this->signedPost($attempt, 'stable-webhook-payment', 'approved-webhook')->assertOk();
+        app(\App\Domain\Network\Commerce\PlatformPaymentService::class)
+            ->reconcileOnboardingReturn($application, 'stable-webhook-payment');
+
+        $this->assertSame('APPROVED', $attempt->fresh()->status);
+        $this->assertSame(SaasOnboardingApplication::PAID, $application->fresh()->status);
+        $this->assertSame(1, $application->events()->where('event', 'PAYMENT_VERIFIED')->count());
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+    }
+
     public function test_approved_attempt_rejects_a_different_payment_id(): void
     {
         Queue::fake();
@@ -414,12 +433,18 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
         )]);
         config(['zigo_surfaces.corporate.host' => 'zigo.local']);
 
-        $this->get('http://zigo.local/'.$surface.'/solicitud/'.$application->public_token
+        $response = $this->get('http://zigo.local/'.$surface.'/solicitud/'.$application->public_token
             .'/retorno/failure?payment_id='.$paymentId.'&status=rejected&collection_status=rejected')
             ->assertOk();
 
         $this->assertSame('APPROVED', $attempt->fresh()->status);
         $this->assertSame(SaasOnboardingApplication::PAID, $application->fresh()->status);
+        if ($surface === 'zigo-platform') {
+            $response->assertSee('Pago recibido y estamos preparando tu plataforma')
+                ->assertDontSee('Estamos verificando tu pago');
+        } else {
+            $response->assertSee('Estado:')->assertSee('PAID')->assertDontSee('PENDING_PAYMENT');
+        }
         Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
     }
 
@@ -446,6 +471,74 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
 
         Log::shouldHaveReceived('warning')->once()
             ->with('ZIGO_PLATFORM_RETURN_RECONCILIATION_REJECT reason=REFERENCE_MISMATCH');
+    }
+
+    public function test_temporary_provider_failure_can_retry_same_return_event(): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        Log::spy();
+        [$application, $attempt] = $this->pending('return-provider-retry');
+        Http::fakeSequence()
+            ->pushStatus(500)
+            ->push($this->payment($attempt, 'retry-return-payment', 'approved'));
+        $service = app(\App\Domain\Network\Commerce\PlatformPaymentService::class);
+
+        $first = $service->reconcileOnboardingReturn($application, 'retry-return-payment');
+        $this->assertSame('INCONSISTENT', $first?->status);
+        $this->assertSame('PAYMENT_VERIFICATION_ERROR', $first?->error_code);
+        $this->assertSame('PENDING', $attempt->fresh()->status);
+
+        $second = $service->reconcileOnboardingReturn($application, 'retry-return-payment');
+        $this->assertSame($first?->id, $second?->id);
+        $this->assertSame('PROCESSED', $second?->status);
+        $this->assertSame('APPROVED', $attempt->fresh()->status);
+        $this->assertSame(SaasOnboardingApplication::PAID, $application->fresh()->status);
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+        Log::shouldHaveReceived('warning')->once()
+            ->with('ZIGO_PLATFORM_RETURN_RECONCILIATION_REJECT reason=PAYMENT_VERIFICATION_ERROR');
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('providerHttpFailureProvider')]
+    public function test_provider_http_failure_keeps_public_return_safe(int $status): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        [$application, $attempt] = $this->pending('return-http-failure-'.$status);
+        Http::fake(['https://api.mercadopago.com/v1/payments/*' => Http::response([], $status)]);
+        config(['zigo_surfaces.corporate.host' => 'zigo.local']);
+
+        $this->get('http://zigo.local/zigo-platform/solicitud/'.$application->public_token
+            .'/retorno/success?payment_id=http-failure-'.$status)
+            ->assertOk()->assertSee('Estamos verificando tu pago');
+
+        $this->assertSame('PENDING', $attempt->fresh()->status);
+        $this->assertSame(SaasOnboardingApplication::PENDING_PAYMENT, $application->fresh()->status);
+        $this->assertSame('INCONSISTENT', PlatformPaymentEvent::firstOrFail()->status);
+        Queue::assertNothingPushed();
+    }
+
+    public static function providerHttpFailureProvider(): array
+    {
+        return ['not found' => [404], 'server error' => [500]];
+    }
+
+    public function test_provider_timeout_keeps_public_return_safe(): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        [$application, $attempt] = $this->pending('return-timeout');
+        Http::fake(['https://api.mercadopago.com/v1/payments/*' => Http::failedConnection()]);
+        config(['zigo_surfaces.corporate.host' => 'zigo.local']);
+
+        $this->get('http://zigo.local/zigo-platform/solicitud/'.$application->public_token
+            .'/retorno/success?payment_id=timeout-payment')
+            ->assertOk()->assertSee('Estamos verificando tu pago');
+
+        $this->assertSame('PENDING', $attempt->fresh()->status);
+        $this->assertSame(SaasOnboardingApplication::PENDING_PAYMENT, $application->fresh()->status);
+        $this->assertSame('INCONSISTENT', PlatformPaymentEvent::firstOrFail()->status);
+        Queue::assertNothingPushed();
     }
 
     public function test_inconsistent_event_can_be_reprocessed_and_late_expired_payment_becomes_paid(): void
