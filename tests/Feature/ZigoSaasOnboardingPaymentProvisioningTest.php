@@ -194,6 +194,260 @@ class ZigoSaasOnboardingPaymentProvisioningTest extends TestCase
             ->with('ZIGO_PLATFORM_WEBHOOK_REJECT reason=HMAC_MISMATCH');
     }
 
+    public function test_approved_return_is_verified_server_side_and_dispatches_once(): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        [$application, $attempt] = $this->pending('return-approved');
+        $payment = $this->payment($attempt, 'return-approved-payment', 'approved');
+        Http::fake(['https://api.mercadopago.com/v1/payments/*' => Http::response($payment)]);
+
+        $event = app(\App\Domain\Network\Commerce\PlatformPaymentService::class)
+            ->reconcileOnboardingReturn($application, 'return-approved-payment');
+
+        $this->assertSame('PROCESSED', $event?->status);
+        $this->assertSame('APPROVED', $attempt->fresh()->status);
+        $this->assertSame('return-approved-payment', $attempt->fresh()->provider_payment_id);
+        $this->assertSame('PAID', $application->fresh()->status);
+        $this->assertSame(1, $application->events()->where('event', 'PAYMENT_VERIFIED')->count());
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+        Http::assertSentCount(1);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('nonApprovedReturnProvider')]
+    public function test_browser_success_never_overrides_provider_status(string $providerStatus, string $attemptStatus): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        [$application, $attempt] = $this->pending('return-'.$providerStatus);
+        Http::fake(['https://api.mercadopago.com/v1/payments/*' => Http::response(
+            $this->payment($attempt, 'return-'.$providerStatus.'-payment', $providerStatus),
+        )]);
+
+        app(\App\Domain\Network\Commerce\PlatformPaymentService::class)
+            ->reconcileOnboardingReturn($application, 'return-'.$providerStatus.'-payment');
+
+        $this->assertSame($attemptStatus, $attempt->fresh()->status);
+        $this->assertSame(SaasOnboardingApplication::PENDING_PAYMENT, $application->fresh()->status);
+        Queue::assertNothingPushed();
+    }
+
+    public static function nonApprovedReturnProvider(): array
+    {
+        return [
+            'pending' => ['pending', 'PENDING'],
+            'rejected' => ['rejected', 'REJECTED'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('invalidVerifiedReturnProvider')]
+    public function test_invalid_verified_return_is_inconsistent(
+        string $error,
+        array $overrides,
+    ): void {
+        Queue::fake();
+        Http::preventStrayRequests();
+        [$application, $attempt] = $this->pending('retinv-'.substr(md5($error), 0, 12));
+        $payment = array_replace(
+            $this->payment($attempt, 'return-invalid-payment-'.$error, 'approved'),
+            $overrides,
+        );
+        Http::fake(['https://api.mercadopago.com/v1/payments/*' => Http::response($payment)]);
+
+        $event = app(\App\Domain\Network\Commerce\PlatformPaymentService::class)
+            ->reconcileOnboardingReturn($application, (string) $payment['id']);
+
+        $this->assertSame('INCONSISTENT', $event?->status);
+        $this->assertSame($error, $event?->error_code);
+        $this->assertSame('PENDING', $attempt->fresh()->status);
+        $this->assertSame(SaasOnboardingApplication::PENDING_PAYMENT, $application->fresh()->status);
+        Queue::assertNothingPushed();
+    }
+
+    public static function invalidVerifiedReturnProvider(): array
+    {
+        return [
+            'reference' => ['REFERENCE_MISMATCH', ['external_reference' => 'wrong-reference']],
+            'amount' => ['AMOUNT_MISMATCH', ['transaction_amount' => '999.99']],
+            'currency' => ['CURRENCY_MISMATCH', ['currency_id' => 'USD']],
+            'collector' => ['PLATFORM_ACCOUNT_MISMATCH', ['collector_id' => 'wrong-account']],
+        ];
+    }
+
+    public function test_return_without_payment_hint_makes_no_provider_request_or_state_change(): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        [$application, $attempt] = $this->pending('return-without-hint');
+        config(['zigo_surfaces.corporate.host' => 'zigo.local']);
+
+        $this->get('http://zigo.local/zigo-platform/solicitud/'.$application->public_token.'/retorno/success?status=approved')
+            ->assertOk();
+
+        Http::assertNothingSent();
+        $this->assertSame('PENDING', $attempt->fresh()->status);
+        $this->assertSame(SaasOnboardingApplication::PENDING_PAYMENT, $application->fresh()->status);
+        $this->assertSame(0, PlatformPaymentEvent::count());
+        Queue::assertNothingPushed();
+    }
+
+    public function test_duplicate_return_is_idempotent(): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        [$application, $attempt] = $this->pending('return-duplicate');
+        Http::fake(['https://api.mercadopago.com/v1/payments/*' => Http::response(
+            $this->payment($attempt, 'return-duplicate-payment', 'approved'),
+        )]);
+        $service = app(\App\Domain\Network\Commerce\PlatformPaymentService::class);
+
+        $service->reconcileOnboardingReturn($application, 'return-duplicate-payment');
+        $service->reconcileOnboardingReturn($application, 'return-duplicate-payment');
+
+        $this->assertSame(1, PlatformPaymentEvent::count());
+        $this->assertSame(1, $application->events()->where('event', 'PAYMENT_VERIFIED')->count());
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+    }
+
+    public function test_webhook_then_return_is_idempotent(): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        [$application, $attempt] = $this->pending('webhook-then-return');
+        $payment = $this->payment($attempt, 'webhook-then-return-payment', 'approved');
+        Http::fake(['https://api.mercadopago.com/v1/payments/*' => Http::response($payment)]);
+
+        $this->signedPost($attempt, (string) $payment['id'], 'webhook-first')->assertOk();
+        app(\App\Domain\Network\Commerce\PlatformPaymentService::class)
+            ->reconcileOnboardingReturn($application, (string) $payment['id']);
+
+        $this->assertSame(1, $application->events()->where('event', 'PAYMENT_VERIFIED')->count());
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+    }
+
+    public function test_return_then_webhook_is_idempotent(): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        [$application, $attempt] = $this->pending('return-then-webhook');
+        $payment = $this->payment($attempt, 'return-then-webhook-payment', 'approved');
+        Http::fake(['https://api.mercadopago.com/v1/payments/*' => Http::response($payment)]);
+
+        app(\App\Domain\Network\Commerce\PlatformPaymentService::class)
+            ->reconcileOnboardingReturn($application, (string) $payment['id']);
+        $this->signedPost($attempt, (string) $payment['id'], 'webhook-second')->assertOk();
+
+        $this->assertSame(1, $application->events()->where('event', 'PAYMENT_VERIFIED')->count());
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+    }
+
+    public function test_stale_pending_webhook_cannot_downgrade_an_approved_return(): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        [$application, $attempt] = $this->pending('return-before-stale-pending');
+        $approved = $this->payment($attempt, 'stable-approved-payment', 'approved');
+        $pending = $this->payment($attempt, 'stable-approved-payment', 'pending');
+        Http::fakeSequence()->push($approved)->push($pending);
+
+        app(\App\Domain\Network\Commerce\PlatformPaymentService::class)
+            ->reconcileOnboardingReturn($application, 'stable-approved-payment');
+        $this->signedPost($attempt, 'stable-approved-payment', 'stale-pending')->assertOk();
+
+        $this->assertSame('APPROVED', $attempt->fresh()->status);
+        $this->assertSame(SaasOnboardingApplication::PAID, $application->fresh()->status);
+        $this->assertSame(1, $application->events()->where('event', 'PAYMENT_VERIFIED')->count());
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+    }
+
+    public function test_approved_attempt_rejects_a_different_payment_id(): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        [$application, $attempt] = $this->pending('approved-different-payment');
+        Http::fakeSequence()
+            ->push($this->payment($attempt, 'original-payment', 'approved'))
+            ->push($this->payment($attempt, 'different-payment', 'approved'));
+        $service = app(\App\Domain\Network\Commerce\PlatformPaymentService::class);
+
+        $service->reconcileOnboardingReturn($application, 'original-payment');
+        $event = $service->reconcileOnboardingReturn($application, 'different-payment');
+
+        $this->assertSame('INCONSISTENT', $event?->status);
+        $this->assertSame('PAYMENT_ID_CONFLICT', $event?->error_code);
+        $this->assertSame('original-payment', $attempt->fresh()->provider_payment_id);
+        $this->assertSame('APPROVED', $attempt->fresh()->status);
+        $this->assertSame(1, $application->events()->where('event', 'PAYMENT_VERIFIED')->count());
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+    }
+
+    public function test_payment_id_owned_by_another_attempt_is_rejected_without_corruption(): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        [$firstApplication, $firstAttempt] = $this->pending('payment-owner-first');
+        [$secondApplication, $secondAttempt] = $this->pending('payment-owner-second');
+        $service = app(\App\Domain\Network\Commerce\PlatformPaymentService::class);
+        Http::fakeSequence()
+            ->push($this->payment($firstAttempt, 'shared-provider-payment', 'approved'))
+            ->push($this->payment($secondAttempt, 'shared-provider-payment', 'approved'));
+
+        $service->reconcileOnboardingReturn($firstApplication, 'shared-provider-payment');
+        $event = $service->reconcileOnboardingReturn($secondApplication, 'shared-provider-payment');
+
+        $this->assertSame('INCONSISTENT', $event?->status);
+        $this->assertSame('PAYMENT_ID_CONFLICT', $event?->error_code);
+        $this->assertSame('PENDING', $secondAttempt->fresh()->status);
+        $this->assertSame(SaasOnboardingApplication::PENDING_PAYMENT, $secondApplication->fresh()->status);
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('publicReturnSurfaceProvider')]
+    public function test_public_returns_share_server_side_reconciliation(string $surface): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        [$application, $attempt] = $this->pending('http-return-'.$surface);
+        $paymentId = 'http-return-payment-'.$surface;
+        Http::fake(['https://api.mercadopago.com/v1/payments/*' => Http::response(
+            $this->payment($attempt, $paymentId, 'approved'),
+        )]);
+        config(['zigo_surfaces.corporate.host' => 'zigo.local']);
+
+        $this->get('http://zigo.local/'.$surface.'/solicitud/'.$application->public_token
+            .'/retorno/failure?payment_id='.$paymentId.'&status=rejected&collection_status=rejected')
+            ->assertOk();
+
+        $this->assertSame('APPROVED', $attempt->fresh()->status);
+        $this->assertSame(SaasOnboardingApplication::PAID, $application->fresh()->status);
+        Queue::assertPushed(ProvisionSaasOnboardingJob::class, 1);
+    }
+
+    public static function publicReturnSurfaceProvider(): array
+    {
+        return [
+            'ZIGO Platform' => ['zigo-platform'],
+            'Agentes IA' => ['agentes-ia'],
+        ];
+    }
+
+    public function test_reconciliation_log_contains_only_sanitized_error_code(): void
+    {
+        Queue::fake();
+        Http::preventStrayRequests();
+        Log::spy();
+        [$application, $attempt] = $this->pending('return-safe-log');
+        $payment = $this->payment($attempt, 'provider-id-not-logged', 'approved');
+        $payment['external_reference'] = 'provider-payload-not-logged';
+        Http::fake(['https://api.mercadopago.com/v1/payments/*' => Http::response($payment)]);
+
+        app(\App\Domain\Network\Commerce\PlatformPaymentService::class)
+            ->reconcileOnboardingReturn($application, 'provider-id-not-logged');
+
+        Log::shouldHaveReceived('warning')->once()
+            ->with('ZIGO_PLATFORM_RETURN_RECONCILIATION_REJECT reason=REFERENCE_MISMATCH');
+    }
+
     public function test_inconsistent_event_can_be_reprocessed_and_late_expired_payment_becomes_paid(): void
     {
         Queue::fake();

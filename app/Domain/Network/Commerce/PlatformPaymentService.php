@@ -135,6 +135,59 @@ final class PlatformPaymentService
         }
     }
 
+    public function reconcileOnboardingReturn(
+        SaasOnboardingApplication $application,
+        string $providerPaymentId,
+    ): ?PlatformPaymentEvent {
+        $providerPaymentId = trim($providerPaymentId);
+        if ($providerPaymentId === '' || strlen($providerPaymentId) > 128
+            || !preg_match('/^[A-Za-z0-9._-]+$/D', $providerPaymentId)) {
+            return null;
+        }
+
+        $attempt = PlatformPaymentAttempt::query()
+            ->where('onboarding_application_id', $application->id)
+            ->where('provider', 'MERCADO_PAGO')
+            ->whereIn('status', ['CREATED', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELED'])
+            ->latest('id')
+            ->first();
+        if (!$attempt) {
+            Log::warning('ZIGO_PLATFORM_RETURN_RECONCILIATION_REJECT reason=ATTEMPT_NOT_FOUND');
+            return null;
+        }
+
+        $event = PlatformPaymentEvent::firstOrCreate(
+            [
+                'provider' => 'MERCADO_PAGO',
+                'event_key' => 'return:'.$attempt->uuid.':'.$providerPaymentId,
+            ],
+            [
+                'platform_payment_attempt_id' => $attempt->id,
+                'provider_payment_id' => $providerPaymentId,
+                'status' => 'RECEIVED',
+                'received_at' => now(),
+            ],
+        );
+        if ($event->status === 'PROCESSED') {
+            return $event;
+        }
+
+        try {
+            $payment = $this->provider->retrievePayment($providerPaymentId);
+            $this->processVerifiedPayment($attempt, $payment, $event);
+        } catch (Throwable $exception) {
+            $errorCode = $this->safePaymentErrorCode($exception);
+            $event->update([
+                'status' => 'INCONSISTENT',
+                'error_code' => $errorCode,
+                'processed_at' => now(),
+            ]);
+            Log::warning('ZIGO_PLATFORM_RETURN_RECONCILIATION_REJECT reason='.$errorCode);
+        }
+
+        return $event->fresh();
+    }
+
     private function webhookPaymentId(Request $request): string
     {
         foreach ([$request->input('data.id'), $request->query('data_id'), $request->query('data.id')] as $candidate) {
@@ -179,6 +232,16 @@ final class PlatformPaymentService
             $providerPaymentId = (string) $payment['id'];
             $this->assertPaymentIdAvailable($locked, $providerPaymentId);
 
+            if ($locked->status === 'APPROVED'
+                && $locked->provider_payment_id === $providerPaymentId) {
+                $lockedEvent->update([
+                    'status' => 'PROCESSED',
+                    'processed_at' => now(),
+                    'error_code' => null,
+                ]);
+                return;
+            }
+
             if ($status === 'approved') {
                 $locked->update([
                     'provider_payment_id' => $providerPaymentId,
@@ -199,11 +262,6 @@ final class PlatformPaymentService
                         paymentEventId: $lockedEvent->id,
                         metadata: ['provider' => 'MERCADO_PAGO'],
                     );
-                }
-                if (in_array($onboarding->status, [
-                    SaasOnboardingApplication::PAID,
-                    SaasOnboardingApplication::FAILED,
-                ], true)) {
                     $dispatchId = $onboarding->id;
                 }
             } elseif (in_array($status, ['rejected', 'cancelled', 'canceled'], true)) {
@@ -263,7 +321,9 @@ final class PlatformPaymentService
 
     private function assertPaymentIdAvailable(PlatformPaymentAttempt $attempt, string $providerPaymentId): void
     {
-        if ($providerPaymentId === '' || PlatformPaymentAttempt::where('provider_payment_id', $providerPaymentId)
+        if ($providerPaymentId === ''
+            || ($attempt->provider_payment_id !== null && $attempt->provider_payment_id !== $providerPaymentId)
+            || PlatformPaymentAttempt::where('provider_payment_id', $providerPaymentId)
             ->whereKeyNot($attempt->id)->exists()) {
             throw new RuntimeException('PAYMENT_ID_CONFLICT');
         }

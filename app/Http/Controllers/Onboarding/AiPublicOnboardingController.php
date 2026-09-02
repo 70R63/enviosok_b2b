@@ -132,10 +132,37 @@ final class AiPublicOnboardingController extends Controller
         return redirect()->away($url);
     }
 
-    public function returned(string $token, string $result)
+    public function returned(
+        Request $request,
+        string $token,
+        string $result,
+        PlatformPaymentService $payments,
+    )
     {
         abort_unless(in_array($result, ['success', 'pending', 'failure'], true), 404);
-        return view('agentes-ia.return', ['application' => $this->application($token)]);
+        $application = $this->application($token);
+        $paymentId = $this->providerPaymentHint($request);
+        if ($paymentId !== null) {
+            try {
+                $payments->reconcileOnboardingReturn($application, $paymentId);
+            } catch (Throwable) {
+                Log::warning('ZIGO_PLATFORM_RETURN_RECONCILIATION_REJECT reason=RECOVERY_ERROR');
+            }
+        }
+
+        return view('agentes-ia.return', ['application' => $application->fresh()]);
+    }
+
+    private function providerPaymentHint(Request $request): ?string
+    {
+        $candidate = $request->query('payment_id');
+        if (!is_scalar($candidate) || trim((string) $candidate) === '') {
+            $candidate = $request->query('collection_id');
+        }
+        if (!is_scalar($candidate)) return null;
+        $candidate = trim((string) $candidate);
+        return $candidate !== '' && strlen($candidate) <= 128
+            && preg_match('/^[A-Za-z0-9._-]+$/D', $candidate) ? $candidate : null;
     }
 
     private function baseProduct(): NetworkCommercialProduct
