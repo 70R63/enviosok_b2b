@@ -78,15 +78,20 @@ final class PlatformPaymentService
 
     public function webhook(Request $request): void
     {
-        $paymentId = $this->webhookPaymentId($request);
-        if ($paymentId === '') {
-            Log::warning('ZIGO_PLATFORM_WEBHOOK_REJECT reason='.PlatformWebhookValidationResult::PAYMENT_ID_MISSING);
+        $signatureDataId = $this->webhookSignatureDataId($request);
+        $validation = $this->provider->webhookValidationResult($request, $signatureDataId);
+        if ($validation !== PlatformWebhookValidationResult::VALID_SIGNATURE) {
+            Log::warning('ZIGO_PLATFORM_WEBHOOK_REJECT reason='.$validation);
             abort(401);
         }
 
-        $validation = $this->provider->webhookValidationResult($request, $paymentId);
-        if ($validation !== PlatformWebhookValidationResult::VALID_SIGNATURE) {
-            Log::warning('ZIGO_PLATFORM_WEBHOOK_REJECT reason='.$validation);
+        [$paymentId, $paymentIdMismatch] = $this->webhookPaymentId($request, $signatureDataId);
+        if ($paymentIdMismatch) {
+            Log::warning('ZIGO_PLATFORM_WEBHOOK_REJECT reason='.PlatformWebhookValidationResult::PAYMENT_ID_MISMATCH);
+            abort(401);
+        }
+        if ($paymentId === '') {
+            Log::warning('ZIGO_PLATFORM_WEBHOOK_REJECT reason='.PlatformWebhookValidationResult::PAYMENT_ID_MISSING);
             abort(401);
         }
         Log::info('ZIGO_PLATFORM_WEBHOOK_SIGNATURE_VALID');
@@ -188,15 +193,44 @@ final class PlatformPaymentService
         return $event->fresh();
     }
 
-    private function webhookPaymentId(Request $request): string
+    private function webhookSignatureDataId(Request $request): string
     {
-        foreach ([$request->input('data.id'), $request->query('data_id'), $request->query('data.id')] as $candidate) {
-            if (is_scalar($candidate) && (string) $candidate !== '') {
-                return (string) $candidate;
+        foreach ([$request->query('data_id'), $request->query('data.id')] as $candidate) {
+            $id = $this->validWebhookPaymentId($candidate);
+            if ($id !== '') {
+                return $id;
             }
         }
 
         return '';
+    }
+
+    /** @return array{0: string, 1: bool} */
+    private function webhookPaymentId(Request $request, string $signatureDataId): array
+    {
+        $bodyPaymentId = $this->validWebhookPaymentId(
+            data_get($request->json()->all(), 'data.id')
+                ?? data_get($request->request->all(), 'data.id'),
+        );
+
+        if ($signatureDataId !== '' && $bodyPaymentId !== '' && $signatureDataId !== $bodyPaymentId) {
+            return ['', true];
+        }
+
+        return [$signatureDataId !== '' ? $signatureDataId : $bodyPaymentId, false];
+    }
+
+    private function validWebhookPaymentId(mixed $candidate): string
+    {
+        if (!is_scalar($candidate)) {
+            return '';
+        }
+
+        $id = trim((string) $candidate);
+
+        return $id !== '' && strlen($id) <= 128 && preg_match('/^[A-Za-z0-9._-]+$/D', $id)
+            ? $id
+            : '';
     }
 
     /**

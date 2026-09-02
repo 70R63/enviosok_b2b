@@ -22,9 +22,11 @@ final class PlatformWebhookSignatureDiagnosticsTest extends TestCase
         $this->provider = new MercadoPagoPlatformPaymentProvider();
     }
 
-    public function test_payment_id_missing_is_classified(): void
+    public function test_body_only_webhook_is_signed_without_id_component(): void
     {
-        $this->assertSame(Result::PAYMENT_ID_MISSING, $this->provider->webhookValidationResult(new Request(), ''));
+        $request = $this->signedRequest('', 'request-body-only', (string) time());
+
+        $this->assertSame(Result::VALID_SIGNATURE, $this->provider->webhookValidationResult($request, ''));
     }
 
     public function test_secret_missing_is_classified(): void
@@ -74,5 +76,45 @@ final class PlatformWebhookSignatureDiagnosticsTest extends TestCase
 
         $this->assertSame(Result::VALID_SIGNATURE, $this->provider->webhookValidationResult($request, $paymentId));
         $this->assertTrue($this->provider->validateWebhook($request, $paymentId));
+    }
+
+    public function test_signature_data_id_is_lowercased_in_official_manifest(): void
+    {
+        $request = $this->signedRequest('Payment-ABC', 'Request-Preserved', (string) time());
+
+        $this->assertSame(Result::VALID_SIGNATURE, $this->provider->webhookValidationResult($request, 'Payment-ABC'));
+    }
+
+    public function test_millisecond_timestamp_uses_original_value_in_manifest_and_seconds_for_freshness(): void
+    {
+        $timestamp = (string) (time() * 1000);
+        $request = $this->signedRequest('123456', 'request-ms', $timestamp);
+
+        $this->assertSame(Result::VALID_SIGNATURE, $this->provider->webhookValidationResult($request, '123456'));
+    }
+
+    public function test_body_only_signature_incorrectly_including_id_is_rejected(): void
+    {
+        $timestamp = (string) time();
+        $manifest = "id:body-payment;request-id:request-body;ts:{$timestamp};";
+        $signature = hash_hmac('sha256', $manifest, 'test-platform-secret');
+        $request = Request::create('/webhook', 'POST', [], [], [], [
+            'HTTP_X_SIGNATURE' => "ts={$timestamp},v1={$signature}",
+            'HTTP_X_REQUEST_ID' => 'request-body',
+        ]);
+
+        $this->assertSame(Result::HMAC_MISMATCH, $this->provider->webhookValidationResult($request, ''));
+    }
+
+    private function signedRequest(string $signatureDataId, string $requestId, string $timestamp): Request
+    {
+        $manifest = $signatureDataId !== '' ? 'id:'.strtolower($signatureDataId).';' : '';
+        $manifest .= "request-id:{$requestId};ts:{$timestamp};";
+        $signature = hash_hmac('sha256', $manifest, 'test-platform-secret');
+
+        return Request::create('/webhook', 'POST', [], [], [], [
+            'HTTP_X_SIGNATURE' => "ts={$timestamp},v1={$signature}",
+            'HTTP_X_REQUEST_ID' => $requestId,
+        ]);
     }
 }

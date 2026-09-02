@@ -118,17 +118,13 @@ final class MercadoPagoPlatformPaymentProvider implements PlatformPaymentProvide
         return $response->json();
     }
 
-    public function validateWebhook(Request $request, string $id): bool
+    public function validateWebhook(Request $request, string $signatureDataId): bool
     {
-        return $this->webhookValidationResult($request, $id) === PlatformWebhookValidationResult::VALID_SIGNATURE;
+        return $this->webhookValidationResult($request, $signatureDataId) === PlatformWebhookValidationResult::VALID_SIGNATURE;
     }
 
-    public function webhookValidationResult(Request $request, string $id): string
+    public function webhookValidationResult(Request $request, string $signatureDataId): string
     {
-        if ($id === '') {
-            return PlatformWebhookValidationResult::PAYMENT_ID_MISSING;
-        }
-
         $secret = (string) $this->cfg('platform.webhook_secret');
         $signature = (string) $request->header('x-signature');
         $requestId = (string) $request->header('x-request-id');
@@ -160,7 +156,8 @@ final class MercadoPagoPlatformPaymentProvider implements PlatformPaymentProvide
         if (abs(time() - $issued) > (int) $this->cfg('providers.mercado_pago.webhook_tolerance_seconds', 300)) {
             return PlatformWebhookValidationResult::WEBHOOK_STALE;
         }
-        $manifest = 'id:'.strtolower(trim($id)).';request-id:'.$requestId.';ts:'.$timestampMatch[1].';';
+        $manifest = $signatureDataId !== '' ? 'id:'.strtolower($signatureDataId).';' : '';
+        $manifest .= 'request-id:'.$requestId.';ts:'.$timestampMatch[1].';';
         return hash_equals(hash_hmac('sha256', $manifest, $secret), trim($signatureMatch[1]))
             ? PlatformWebhookValidationResult::VALID_SIGNATURE
             : PlatformWebhookValidationResult::HMAC_MISMATCH;

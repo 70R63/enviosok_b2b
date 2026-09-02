@@ -5,6 +5,7 @@ namespace App\Domain\Network\Commerce;
 final class PlatformWebhookValidationResult
 {
     public const PAYMENT_ID_MISSING = 'PAYMENT_ID_MISSING';
+    public const PAYMENT_ID_MISMATCH = 'PAYMENT_ID_MISMATCH';
     public const SECRET_MISSING = 'SECRET_MISSING';
     public const SIGNATURE_HEADER_MISSING = 'SIGNATURE_HEADER_MISSING';
     public const REQUEST_ID_MISSING = 'REQUEST_ID_MISSING';
