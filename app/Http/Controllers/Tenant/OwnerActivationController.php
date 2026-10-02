@@ -17,8 +17,10 @@ final class OwnerActivationController extends Controller
     public function create(string $applicationToken, string $token, TenantContext $context)
     {
         $application = $this->application($applicationToken, $context);
-        abort_unless($application->owner_is_new && !$application->owner_activation_completed_at, 410);
-        abort_unless(Password::broker()->tokenExists($application->owner, $token), 410);
+        if (!$application->owner_is_new || $application->owner_activation_completed_at ||
+            !$application->owner || !Password::broker('owner_activations')->tokenExists($application->owner, $token)) {
+            return $this->unavailable($context);
+        }
         return view('tenant.admin.auth.activate', [
             'tenant' => $context->tenant()->load('branding'),
             'applicationToken' => $applicationToken, 'token' => $token,
@@ -28,27 +30,34 @@ final class OwnerActivationController extends Controller
     public function store(Request $request, string $applicationToken, TenantContext $context)
     {
         $application = $this->application($applicationToken, $context);
-        abort_unless($application->owner_is_new && !$application->owner_activation_completed_at, 410);
+        if (!$application->owner_is_new || $application->owner_activation_completed_at || !$application->owner ||
+            !Password::broker('owner_activations')->tokenExists($application->owner, (string) $request->input('token'))) {
+            return $this->unavailable($context);
+        }
         $data = $request->validate([
             'token' => ['required', 'string'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
         $owner = $application->owner;
-        $status = Password::broker()->reset(
-            ['email' => $owner->email, 'password' => $data['password'],
-                'password_confirmation' => $request->input('password_confirmation'), 'token' => $data['token']],
-            function ($user, string $password) use ($owner): void {
-                abort_unless((int) $user->id === (int) $owner->id, 403);
-                $user->forceFill(['password' => Hash::make($password), 'remember_token' => Str::random(60)])->save();
-                event(new PasswordReset($user));
-            },
-        );
-        if ($status !== Password::PASSWORD_RESET) {
-            return back()->withErrors(['password' => __($status)]);
-        }
-
-        $application = DB::transaction(function () use ($application, $owner): SaasOnboardingApplication {
+        $application = DB::transaction(function () use ($application, $owner, $data, $request): ?SaasOnboardingApplication {
             $locked = SaasOnboardingApplication::whereKey($application->id)->lockForUpdate()->firstOrFail();
+            if (!$locked->owner_is_new || $locked->owner_activation_completed_at ||
+                $locked->status !== SaasOnboardingApplication::ACTIVE ||
+                (int) $locked->owner_user_id !== (int) $owner->id) {
+                return null;
+            }
+            $status = Password::broker('owner_activations')->reset(
+                ['email' => $owner->email, 'password' => $data['password'],
+                    'password_confirmation' => $request->input('password_confirmation'), 'token' => $data['token']],
+                function ($user, string $password) use ($owner): void {
+                    abort_unless((int) $user->id === (int) $owner->id, 403);
+                    $user->forceFill(['password' => Hash::make($password), 'remember_token' => Str::random(60)])->save();
+                    event(new PasswordReset($user));
+                },
+            );
+            if ($status !== Password::PASSWORD_RESET) {
+                return null;
+            }
             if (!$locked->owner_activation_completed_at) {
                 $locked->update(['owner_activation_completed_at' => now()]);
                 $locked->events()->create([
@@ -60,6 +69,9 @@ final class OwnerActivationController extends Controller
             }
             return $locked;
         });
+        if (!$application) {
+            return $this->unavailable($context);
+        }
         Auth::login($owner);
         $request->session()->regenerate();
         return redirect()->route($application->setup_completed_at ? 'tenant.admin.dashboard' : 'tenant.admin.setup');
@@ -70,5 +82,15 @@ final class OwnerActivationController extends Controller
         return SaasOnboardingApplication::with('owner')->where('public_token', $token)
             ->where('tenant_id', $context->id())->where('status', SaasOnboardingApplication::ACTIVE)
             ->firstOrFail();
+    }
+
+    private function unavailable(TenantContext $context)
+    {
+        return response()->view('tenant.admin.auth.activation-unavailable', [
+            'adminUrl' => route('tenant.admin.dashboard'),
+            'validity' => \App\Notifications\SaasOwnerWelcomeNotification::formatDuration(
+                (int) config('auth.passwords.owner_activations.expire'),
+            ),
+        ], 410)->header('Cache-Control', 'no-store')->header('Referrer-Policy', 'no-referrer');
     }
 }

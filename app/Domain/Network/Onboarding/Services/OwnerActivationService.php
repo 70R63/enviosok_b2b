@@ -17,7 +17,7 @@ final class OwnerActivationService
         $application = $application instanceof SaasOnboardingApplication
             ? $application->fresh() : SaasOnboardingApplication::find($application);
         if (!$application || $application->status !== SaasOnboardingApplication::ACTIVE) return;
-        if ($application->owner_is_new && !Schema::hasTable((string) config('auth.passwords.users.table'))) return;
+        if ($application->owner_is_new && !Schema::hasTable((string) config('auth.passwords.owner_activations.table'))) return;
 
         $owner = $application->owner;
         $domain = $application->tenant?->domains()->where('is_primary', true)
@@ -47,9 +47,9 @@ final class OwnerActivationService
             $scheme = (string) config('zigo_onboarding.tenant_admin_scheme', 'https');
             $adminUrl = $scheme.'://'.$domain->domain.'/admin';
             $actionUrl = $adminUrl.'/login';
-            $expires = (int) config('auth.passwords.users.expire', 60);
+            $expires = (int) config('auth.passwords.owner_activations.expire');
             if ($application->owner_is_new) {
-                $token = Password::broker()->createToken($owner);
+                $token = Password::broker('owner_activations')->createToken($owner);
                 $actionUrl = $adminUrl.'/activate/'.$application->public_token.'/'.$token;
             }
             $owner->notify(new SaasOwnerWelcomeNotification(

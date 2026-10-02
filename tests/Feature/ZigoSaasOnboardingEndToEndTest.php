@@ -16,13 +16,13 @@ final class ZigoSaasOnboardingEndToEndTest extends ZigoSaasOnboardingPaymentProv
     {
         parent::setUp();
         Schema::table('saas_onboarding_applications', function (Blueprint $table): void {
-            $table->boolean('owner_is_new')->nullable();
             $table->timestamp('owner_activation_sent_at')->nullable();
             $table->timestamp('owner_activation_completed_at')->nullable();
             $table->timestamp('setup_started_at')->nullable();
             $table->timestamp('setup_completed_at')->nullable();
         });
         Schema::create('password_resets',fn(Blueprint$t)=>[$t->string('email')->index(),$t->string('token'),$t->timestamp('created_at')->nullable()]);
+        (require database_path('migrations/2026_10_02_000000_create_owner_activation_tokens_table.php'))->up();
         Schema::create('zigo_notification_deliveries',fn(Blueprint$t)=>[$t->id(),$t->string('event_key')->unique(),$t->string('event_type'),$t->string('notifiable_type'),$t->unsignedBigInteger('notifiable_id'),$t->json('recipients')->nullable(),$t->string('status')->default('PENDING'),$t->unsignedSmallInteger('attempts')->default(0),$t->timestamp('sent_at')->nullable(),$t->timestamp('failed_at')->nullable(),$t->string('last_error')->nullable(),$t->timestamps()]);
         Schema::create('roles',fn(Blueprint$t)=>[$t->id(),$t->string('name'),$t->string('slug')->unique(),$t->timestamps()]);
         Schema::create('users_roles',fn(Blueprint$t)=>[$t->unsignedBigInteger('user_id'),$t->unsignedBigInteger('roles_id')]);

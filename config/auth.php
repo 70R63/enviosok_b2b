@@ -88,6 +88,12 @@ return [
     */
 
     'passwords' => [
+        'owner_activations' => [
+            'provider' => 'users',
+            'table' => 'owner_activation_tokens',
+            'expire' => 1440,
+            'throttle' => 60,
+        ],
         'users' => [
             'provider' => 'users',
             'table' => 'password_resets',

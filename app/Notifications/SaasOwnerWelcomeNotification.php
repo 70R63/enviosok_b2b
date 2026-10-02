@@ -32,9 +32,9 @@ final class SaasOwnerWelcomeNotification extends Notification
             ->line('URL administrativa: '.$this->adminUrl);
 
         if ($this->requiresActivation) {
-            $mail->line('Establece una contraseña para activar tu acceso administrativo.')
-                ->action('ACTIVAR MI CUENTA', $this->actionUrl)
-                ->line('Este enlace es válido durante '.$this->expiresInMinutes.' minutos y sólo puede utilizarse una vez.');
+            $mail->line('Para comenzar, activa tu cuenta y establece una contraseña. Al finalizar te guiaremos automáticamente por la configuración inicial de tu plataforma.')
+                ->action('ACTIVAR Y CONFIGURAR MI CUENTA', $this->actionUrl)
+                ->line('Este enlace es válido durante '.self::formatDuration($this->expiresInMinutes).' y sólo puede utilizarse una vez.');
         } else {
             $mail->line('Puedes ingresar con tu cuenta ZIGO existente.')
                 ->action('IR A MI PLATAFORMA', $this->actionUrl)
@@ -43,5 +43,15 @@ final class SaasOwnerWelcomeNotification extends Notification
 
         return $mail
             ->salutation('Equipo ZIGO');
+    }
+
+    public static function formatDuration(int $minutes): string
+    {
+        if ($minutes > 0 && $minutes % 60 === 0) {
+            $hours = intdiv($minutes, 60);
+            return $hours.' '.($hours === 1 ? 'hora' : 'horas');
+        }
+
+        return $minutes.' '.($minutes === 1 ? 'minuto' : 'minutos');
     }
 }

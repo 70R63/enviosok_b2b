@@ -32,7 +32,8 @@ final class ZigoSaasOnboardingOwnerActivationTest extends TestCase
 
         Notification::assertSentToTimes($owner, SaasOwnerWelcomeNotification::class, 1);
         $this->assertNotNull($application->fresh()->owner_activation_sent_at);
-        $this->assertDatabaseCount('password_resets', 1);
+        $this->assertDatabaseCount('owner_activation_tokens', 1);
+        $this->assertDatabaseCount('password_resets', 0);
         $this->assertDatabaseCount('zigo_notification_deliveries', 1);
         $this->assertSame(1, $application->events()->where('event', 'OWNER_ACTIVATION_SENT')->count());
         $serialized = $application->events()->pluck('metadata_json')->implode(' ');
@@ -50,7 +51,7 @@ final class ZigoSaasOnboardingOwnerActivationTest extends TestCase
     public function test_activation_token_is_single_use_host_bound_and_redirects_to_setup(): void
     {
         [$application, $owner] = $this->activeApplication('secure');
-        $token = Password::broker()->createToken($owner);
+        $token = Password::broker('owner_activations')->createToken($owner);
         $url = 'http://secure.zigo-envios.com/admin/activate/'.$application->public_token.'/'.$token;
         $this->get($url)->assertOk()->assertSee('Activa tu cuenta');
         $this->get('http://otro.zigo-envios.com/admin/activate/'.$application->public_token.'/'.$token)->assertNotFound();
@@ -72,7 +73,7 @@ final class ZigoSaasOnboardingOwnerActivationTest extends TestCase
         Notification::fake();
         [$first, $owner] = $this->activeApplication('first');
         [$second, $other] = $this->activeApplication('second', false);
-        $token = Password::broker()->createToken($owner);
+        $token = Password::broker('owner_activations')->createToken($owner);
         $this->post('http://second.zigo-envios.com/admin/activate/'.$second->public_token, [
             'token' => $token, 'password' => 'Nueva-clave-123', 'password_confirmation' => 'Nueva-clave-123',
         ])->assertStatus(410);
@@ -80,7 +81,9 @@ final class ZigoSaasOnboardingOwnerActivationTest extends TestCase
 
         app(OwnerActivationService::class)->sendIfNeeded($second);
         Notification::assertSentTo($other, SaasOwnerWelcomeNotification::class, fn ($notification) =>
-            str_contains($notification->toMail($other)->actionUrl, 'second.zigo-envios.com/admin/login'));
+            str_contains($notification->toMail($other)->actionUrl, 'second.zigo-envios.com/admin/login') &&
+            $notification->toMail($other)->actionText === 'IR A MI PLATAFORMA');
+        $this->assertDatabaseCount('owner_activation_tokens', 1);
         $this->assertDatabaseCount('users', 2);
     }
 
@@ -156,14 +159,171 @@ final class ZigoSaasOnboardingOwnerActivationTest extends TestCase
     public function test_expired_token_and_user_without_membership_cannot_enter_tenant(): void
     {
         [$application, $owner] = $this->activeApplication('expired');
-        $token = Password::broker()->createToken($owner);
-        DB::table('password_resets')->where('email', $owner->email)->update(['created_at'=>now()->subHours(2)]);
+        $token = Password::broker('owner_activations')->createToken($owner);
+        DB::table('owner_activation_tokens')->where('email', $owner->email)->update(['created_at'=>now()->subHours(25)]);
         $this->get('http://expired.zigo-envios.com/admin/activate/'.$application->public_token.'/'.$token)->assertStatus(410);
 
         $outsider = User::create(['name'=>'Network','email'=>'outsider@example.test','password'=>Hash::make('secret'),'empresa_id'=>1]);
         $before = DB::table('network_tenant_memberships')->count();
         $this->actingAs($outsider)->get('http://expired.zigo-envios.com/admin')->assertRedirect('http://expired.zigo-envios.com/admin/login');
         $this->assertSame($before, DB::table('network_tenant_memberships')->count());
+    }
+
+    public function test_brokers_are_isolated_and_keep_their_respective_expiration_windows(): void
+    {
+        [$application, $owner] = $this->activeApplication('ttl');
+        $this->assertSame('users', config('auth.defaults.passwords'));
+        $this->assertSame(60, config('auth.passwords.users.expire'));
+        $this->assertSame(1440, config('auth.passwords.owner_activations.expire'));
+        $this->assertSame(60, config('auth.passwords.owner_activations.throttle'));
+        $activation = Password::broker('owner_activations');
+        $reset = Password::broker('users');
+        $token = $activation->createToken($owner);
+        $resetToken = $reset->createToken($owner);
+        $this->assertDatabaseCount('owner_activation_tokens', 1);
+        $this->assertDatabaseCount('password_resets', 1);
+        $this->assertNotSame($token, DB::table('owner_activation_tokens')->value('token'));
+        $this->assertFalse($reset->tokenExists($owner, $token));
+        $this->assertFalse($activation->tokenExists($owner, $resetToken));
+        $this->travel(59)->minutes();
+        $this->assertTrue($reset->tokenExists($owner, $resetToken));
+        $this->travel(2)->minutes();
+        $this->assertFalse($reset->tokenExists($owner, $resetToken));
+        $this->assertTrue($activation->tokenExists($owner, $token));
+        $this->get('http://ttl.zigo-envios.com/admin/activate/'.$application->public_token.'/'.$token)->assertOk();
+        $this->travel(1378)->minutes();
+        $this->assertTrue($activation->tokenExists($owner, $token));
+        $this->travel(2)->minutes();
+        $this->assertFalse($activation->tokenExists($owner, $token));
+        $url = 'http://ttl.zigo-envios.com/admin/activate/'.$application->public_token;
+        foreach ([$this->get($url.'/'.$token), $this->post($url, [
+            'token' => $token, 'password' => 'Nueva-clave-123', 'password_confirmation' => 'Nueva-clave-123',
+        ])] as $response) {
+            $response->assertStatus(410)->assertViewIs('tenant.admin.auth.activation-unavailable')
+                ->assertSee('Este enlace de activación ya no está disponible.')
+                ->assertSee('24 horas')->assertSee('http://ttl.zigo-envios.com/admin')
+                ->assertSee('Solicita un nuevo enlace de activación.')
+                ->assertDontSee($token)->assertDontSee($application->public_token)
+                ->assertDontSee($owner->email)->assertDontSee($owner->password)
+                ->assertDontSee('Nueva-clave-123')->assertDontSee('Oops!');
+        }
+        $this->assertGuest();
+        $this->assertNull($application->fresh()->owner_activation_completed_at);
+    }
+
+    public function test_activation_redirects_to_dashboard_when_setup_is_complete_and_emits_reset_event(): void
+    {
+        [$application, $owner] = $this->activeApplication('ready');
+        $application->update(['setup_completed_at' => now()]);
+        \Illuminate\Support\Facades\Event::fake([\Illuminate\Auth\Events\PasswordReset::class]);
+        $token = Password::broker('owner_activations')->createToken($owner);
+        $this->post('http://ready.zigo-envios.com/admin/activate/'.$application->public_token, [
+            'token' => $token, 'password' => 'Nueva-clave-123', 'password_confirmation' => 'Nueva-clave-123',
+        ])->assertRedirect('http://ready.zigo-envios.com/admin');
+        $this->assertAuthenticatedAs($owner);
+        \Illuminate\Support\Facades\Event::assertDispatched(\Illuminate\Auth\Events\PasswordReset::class);
+        $this->assertFalse(Password::broker('owner_activations')->tokenExists($owner, $token));
+        $this->assertSame(1, $application->events()->where('event', 'OWNER_ACTIVATION_COMPLETED')->count());
+        $this->get('http://ready.zigo-envios.com/admin/activate/'.$application->public_token.'/'.$token)
+            ->assertStatus(410)->assertViewIs('tenant.admin.auth.activation-unavailable')->assertDontSee($token);
+    }
+
+    public function test_network_admin_resend_rotates_activation_without_changing_application_or_reset(): void
+    {
+        Notification::fake();
+        [$application, $owner] = $this->activeApplication('resend');
+        $service = app(OwnerActivationService::class);
+        $service->sendIfNeeded($application);
+        $oldToken = basename(Notification::sent($owner, SaasOwnerWelcomeNotification::class)->first()->toMail($owner)->actionUrl);
+        $resetToken = Password::broker()->createToken($owner);
+        $before = $application->fresh()->getAttributes();
+        $membership = \App\Domain\Network\Tenancy\Models\TenantMembership::firstOrFail();
+        Schema::create('roles', fn (Blueprint $table) => [$table->id(), $table->string('name'), $table->string('slug'), $table->timestamps()]);
+        Schema::create('users_roles', fn (Blueprint $table) => [$table->unsignedBigInteger('user_id'), $table->unsignedBigInteger('roles_id')]);
+        $role = \App\Models\Roles\Roles::create(['name' => 'sysadmin', 'slug' => 'sysadmin']);
+        $owner->roles()->attach($role);
+        $host = 'https://'.config('zigo_surfaces.network.host');
+        $this->actingAs($owner)->post($host.'/network/tenants/'.$application->tenant_id.'/users/'.$membership->id.'/resend-activation')
+            ->assertRedirect()->assertSessionHas('success', 'Activación reenviada de forma segura.');
+        Notification::assertSentToTimes($owner, SaasOwnerWelcomeNotification::class, 2);
+        $mail = Notification::sent($owner, SaasOwnerWelcomeNotification::class)->last()->toMail($owner);
+        $newToken = basename($mail->actionUrl);
+        $this->assertNotSame($oldToken, $newToken);
+        $this->assertFalse(Password::broker('owner_activations')->tokenExists($owner, $oldToken));
+        $this->assertTrue(Password::broker('owner_activations')->tokenExists($owner, $newToken));
+        $this->assertTrue(Password::broker()->tokenExists($owner, $resetToken));
+        $this->assertSame($before, $application->fresh()->getAttributes());
+        $this->assertSame(SaasOnboardingApplication::ACTIVE, $application->fresh()->status);
+        $this->assertDatabaseCount('network_tenants', 1);
+        $this->assertDatabaseCount('users', 1);
+        $this->assertDatabaseCount('owner_activation_tokens', 1);
+        $this->assertDatabaseCount('zigo_notification_deliveries', 1);
+        $this->assertDatabaseHas('zigo_notification_deliveries', ['status' => 'SENT', 'attempts' => 1]);
+        $this->assertSame(1, $application->events()->where('event', 'OWNER_ACTIVATION_SENT')->count());
+        $this->assertSame('Tu plataforma ZIGO está lista', $mail->subject);
+        $this->assertSame('ACTIVAR Y CONFIGURAR MI CUENTA', $mail->actionText);
+        $copy = implode(' ', $mail->introLines).' '.implode(' ', $mail->outroLines);
+        $this->assertStringContainsString('URL administrativa: http://resend.zigo-envios.com/admin', $copy);
+        $this->assertStringContainsString('24 horas', $copy);
+        $this->assertStringContainsString('configuración inicial', $copy);
+        $this->assertStringNotContainsString('1440 minutos', $copy);
+        $route = app('router')->getRoutes()->getByName('network.users.activation');
+        $this->assertNotNull($route);
+        $this->assertContains('network.superadmin', $route->gatherMiddleware());
+    }
+
+    public function test_new_owner_binding_and_password_validation_cannot_be_bypassed(): void
+    {
+        [$first, $owner] = $this->activeApplication('bound');
+        [$second, $other] = $this->activeApplication('other');
+        $token = Password::broker('owner_activations')->createToken($owner);
+        $this->post('http://other.zigo-envios.com/admin/activate/'.$second->public_token, [
+            'token' => $token, 'password' => 'Nueva-clave-123', 'password_confirmation' => 'Nueva-clave-123',
+        ])->assertStatus(410);
+        $this->assertNull($second->fresh()->owner_activation_completed_at);
+        $this->assertFalse(Hash::check('Nueva-clave-123', $other->fresh()->password));
+        $this->post('http://bound.zigo-envios.com/admin/activate/'.$first->public_token, [
+            'token' => $token, 'password' => 'Nueva-clave-123', 'password_confirmation' => 'mismatch',
+        ])->assertSessionHasErrors('password');
+        $this->assertTrue(Password::broker('owner_activations')->tokenExists($owner, $token));
+        $this->assertNull($first->fresh()->owner_activation_completed_at);
+    }
+
+    public function test_delivery_processing_failure_retry_and_missing_activation_storage_preserve_semantics(): void
+    {
+        Notification::fake();
+        [$application, $owner] = $this->activeApplication('delivery');
+        $service = app(OwnerActivationService::class);
+        $service->sendIfNeeded($application);
+        $delivery = \App\Models\ZigoNotificationDelivery::firstOrFail();
+        $delivery->update(['status' => 'PROCESSING']);
+        $service->sendIfNeeded($application);
+        Notification::assertSentToTimes($owner, SaasOwnerWelcomeNotification::class, 1);
+        $delivery->update(['status' => 'FAILED', 'last_error' => 'OWNER_WELCOME_DELIVERY_FAILED']);
+        $service->sendIfNeeded($application);
+        Notification::assertSentToTimes($owner, SaasOwnerWelcomeNotification::class, 2);
+        $this->assertDatabaseHas('zigo_notification_deliveries', ['status' => 'SENT', 'attempts' => 2, 'last_error' => null]);
+        $this->assertSame(1, $application->events()->where('event', 'OWNER_ACTIVATION_SENT')->count());
+        [$missing, $missingOwner] = $this->activeApplication('missing');
+        config(['auth.passwords.owner_activations.table' => 'missing_activation_storage']);
+        $service->sendIfNeeded($missing);
+        Notification::assertNothingSentTo($missingOwner);
+        $this->assertNull($missing->fresh()->owner_activation_sent_at);
+    }
+
+    public function test_activation_storage_migration_is_reversible_and_does_not_touch_reset_tokens(): void
+    {
+        [$application, $owner] = $this->activeApplication('migration');
+        $token = Password::broker()->createToken($owner);
+        $before = DB::table('password_resets')->get()->toJson();
+        $migration = require database_path('migrations/2026_10_02_000000_create_owner_activation_tokens_table.php');
+        $migration->down();
+        $this->assertFalse(Schema::hasTable('owner_activation_tokens'));
+        $migration->up();
+        $this->assertTrue(Schema::hasTable('owner_activation_tokens'));
+        $this->assertSame(['email', 'token', 'created_at'], Schema::getColumnListing('owner_activation_tokens'));
+        $this->assertSame($before, DB::table('password_resets')->get()->toJson());
+        $this->assertTrue(Password::broker()->tokenExists($owner, $token));
     }
 
     private function activeApplication(string $slug, bool $isNew = true): array
@@ -189,6 +349,7 @@ final class ZigoSaasOnboardingOwnerActivationTest extends TestCase
     {
         Schema::create('users',fn(Blueprint$t)=>[$t->id(),$t->string('name'),$t->string('email')->unique(),$t->string('password'),$t->unsignedBigInteger('empresa_id'),$t->rememberToken(),$t->timestamps()]);
         Schema::create('password_resets',fn(Blueprint$t)=>[$t->string('email')->index(),$t->string('token'),$t->timestamp('created_at')->nullable()]);
+        (require database_path('migrations/2026_10_02_000000_create_owner_activation_tokens_table.php'))->up();
         Schema::create('network_plans',fn(Blueprint$t)=>[$t->id(),$t->string('code')->unique(),$t->string('name'),$t->string('status'),$t->decimal('monthly_price',12,2)->nullable(),$t->decimal('annual_price',12,2)->nullable(),$t->char('currency',3),$t->unsignedInteger('included_operations')->nullable(),$t->timestamps()]);
         DB::table('network_plans')->insert(['id'=>1,'code'=>'START','name'=>'Start','status'=>'active','currency'=>'MXN','created_at'=>now(),'updated_at'=>now()]);
         Schema::create('network_modules',fn(Blueprint$t)=>[$t->id(),$t->string('code')->unique(),$t->string('name'),$t->string('type'),$t->boolean('is_active'),$t->unsignedSmallInteger('sort_order'),$t->timestamps()]);
