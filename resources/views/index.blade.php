@@ -1096,6 +1096,9 @@
                                 class="landing-quote-option">
                                 @csrf
 
+                                @if(!empty($opcion['provider_snapshot_uuid']))
+                                    <input type="hidden" name="provider_snapshot_uuid" value="{{ $opcion['provider_snapshot_uuid'] }}">
+                                @endif
                                 <input type="hidden" name="logistico" value="{{ $opcion['logistico'] }}">
                                 <input type="hidden" name="servicio" value="{{ $opcion['servicio'] }}">
 
@@ -1131,6 +1134,9 @@
                                     ${{ number_format($opcion['commercial_price'], 2) }} MXN
                                 </div>
 
+                                @if($opcion['contract_selected'] ?? false)
+                                    <a class="landing-quote-continue" href="{{ route('b2c.checkout', $cotizacion_id) }}">Continuar</a>
+                                @else
                                 <button
                                     type="button"
                                     class="landing-quote-select"
@@ -1149,11 +1155,13 @@
                                 >
                                     {{ ($opcion['selection_enabled'] ?? true) ? 'Seleccionar' : 'Sólo cotización' }}
                                 </button>
+                                @endif
                             </form>
                         @endforeach
                     </div>
                 </div>
 
+                <style>.landing-quote-continue{display:inline-block;padding:12px 22px;background:#f97316;color:#fff;border-radius:10px;font-weight:900;text-decoration:none;text-align:center}</style>
                 <div class="landing-quote-modal" id="landing-quote-modal" role="dialog" aria-modal="true" aria-labelledby="landing-quote-modal-title">
                     <div class="landing-quote-modal-card">
                         <h2 id="landing-quote-modal-title">Resumen de tu cotización</h2>

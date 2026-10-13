@@ -3,9 +3,7 @@
 namespace App\Domain\Network\Providers;
 
 use App\Domain\Network\Tenancy\Models\Tenant;
-use App\Domain\Shipping\Local\Models\LocalShippingPackageRule;
 use App\Domain\Shipping\Local\Models\LocalShippingService;
-use App\Domain\Shipping\Local\PackageValidator;
 use App\Domain\Shipping\Local\Pricing\LocalPricingEngine;
 use App\Models\B2cCotizacion;
 use Illuminate\Support\Facades\Log;
@@ -14,44 +12,17 @@ use Throwable;
 
 class LocalProviderQuoteEvaluator
 {
-    public function __construct(private ProviderConnectionService $connections, private PackageValidator $packages,
+    public function __construct(private ProviderConnectionService $connections, private LocalProviderEligibility $eligibility,
         private LocalPricingEngine $pricing, private LocalProviderCommercialPricing $commercial) {}
 
     public function options(Tenant $consumer, Tenant $provider, B2cCotizacion $quote, string $segment): array
     {
         $type = strtolower((string) $quote->tipo_envio);
-        $weight = (float) $quote->peso;
-        if (! in_array($type, ['caja', 'sobre'], true) || $weight <= 0 || ! is_finite($weight)
-            || $quote->requiere_seguro_envio || ! preg_match('/^\d{5}$/', (string) $quote->cp_origen)
-            || ! preg_match('/^\d{5}$/', (string) $quote->cp_destino)) {
-            return [];
-        }
-        $dimensions = $type === 'caja' ? preg_split('/x/i', (string) $quote->medidas) : [null, null, null];
-        if (count($dimensions) !== 3 || ($type === 'caja' && collect($dimensions)->contains(
-            fn ($v) => ! is_numeric($v) || (float) $v <= 0 || ! is_finite((float) $v)))) {
-            return [];
-        }
-        $package = ['weight' => $weight, 'length' => $dimensions[0], 'width' => $dimensions[1], 'height' => $dimensions[2]];
         $options = [];
         foreach ($this->connections->authorizedLocalServices($consumer, $provider) as $service) {
             try {
-                // A CP-only public quote has no trustworthy road distance.
-                if (! in_array($service->pricing_strategy, ['FLAT', 'PACKAGE_FLAT'], true) || $service->currency !== 'MXN'
-                    || ! $this->covered($service, $provider->id, 'originZone', $quote->cp_origen)
-                    || ! $this->covered($service, $provider->id, 'destinationZone', $quote->cp_destino)) {
+                if (! $this->eligibility->allows($service, $quote)) {
                     continue;
-                }
-                $rule = LocalShippingPackageRule::query()->where('tenant_id', $provider->id)->where('active', true)
-                    ->where('package_type', $type)->where(fn ($q) => $q->where('service_id', $service->id)->orWhereNull('service_id'))
-                    ->orderByRaw('CASE WHEN service_id IS NULL THEN 1 ELSE 0 END')->orderBy('id')->first();
-                if (! $rule) {
-                    continue;
-                }
-                $this->packages->validate($rule, $package);
-                foreach (['weight' => 'max_weight', 'length' => 'max_length', 'width' => 'max_width', 'height' => 'max_height'] as $field => $limit) {
-                    if ($service->{$limit} !== null && ($package[$field] === null || (float) $package[$field] > (float) $service->{$limit})) {
-                        continue 2;
-                    }
                 }
                 $service->setRelation('pricingRules', $service->pricingRules()->where('tenant_id', $provider->id)
                     ->where('active', true)->where(fn ($q) => $q->whereNull('package_type')->orWhere('package_type', $type))
@@ -64,7 +35,7 @@ class LocalProviderQuoteEvaluator
                 if (! $commercial) {
                     continue;
                 }
-                $options[] = $this->normalize($consumer, $provider, $service, $quote, $price->matchedRuleId, $commercial);
+                $options[] = $this->normalize($consumer, $provider, $service, $quote, $price->matchedRuleId, $commercial, $price->metadata['rule']);
             } catch (ValidationException|\DomainException) {
                 continue;
             } catch (Throwable $exception) {
@@ -76,16 +47,8 @@ class LocalProviderQuoteEvaluator
         return $options;
     }
 
-    private function covered(LocalShippingService $service, int $providerId, string $relation, string $cp): bool
-    {
-        return $service->{$relation}()->where('tenant_id', $providerId)->where('status', 'active')
-            ->whereHas('postalCodes', fn ($q) => $q->where('tenant_id', $providerId)->where('postal_code', $cp)
-                ->where('active', true)->where(fn ($v) => $v->whereNull('valid_from')->orWhere('valid_from', '<=', now()))
-                ->where(fn ($v) => $v->whereNull('valid_to')->orWhere('valid_to', '>', now())))->exists();
-    }
-
     private function normalize(Tenant $consumer, Tenant $provider, LocalShippingService $service, B2cCotizacion $quote,
-        ?int $tariffId, array $commercial): array
+        ?int $tariffId, array $commercial, array $tariff): array
     {
         $key = 'local_'.hash('sha256', $consumer->uuid.'|'.$provider->uuid.'|'.$service->id);
 
@@ -103,6 +66,8 @@ class LocalProviderQuoteEvaluator
             // Internal only. Views must never serialize the complete option.
             '_tenant_provider' => ['consumer_tenant_id' => $consumer->id, 'provider_tenant_id' => $provider->id,
                 'service_id' => $service->id, 'tariff_rule_id' => $tariffId, 'commercial_rule_id' => $commercial['rule_id'],
-                'pricing_strategy' => $service->pricing_strategy, 'profit_amount' => $commercial['profit_amount']]];
+                'service_valid_to' => $service->valid_to?->toIso8601String(),
+                'pricing_strategy' => $service->pricing_strategy, 'profit_amount' => $commercial['profit_amount'],
+                'tariff_snapshot' => $tariff, 'economics' => $commercial]];
     }
 }

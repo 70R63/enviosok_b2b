@@ -11,6 +11,33 @@ class B2cCotizacion extends Model
 {
     use HasFactory;
 
+    protected $hidden = ['providerContract'];
+
+    public function providerContract(): HasOne
+    {
+        return $this->hasOne(\App\Domain\Network\Providers\Models\ProviderContract::class, 'b2c_cotizacion_id');
+    }
+
+    protected static function booted(): void
+    {
+        static::updating(function (self $quote): void {
+            if ($quote->getRawOriginal('provider') !== 'tenant_provider_local') return;
+            $frozen = ['provider', 'carrier', 'service_code', 'quote_source', 'provider_quote_reference',
+                'provider_base_price', 'provider_subtotal', 'provider_total', 'precio', 'precio_sin_seguro',
+                'quote_request_fingerprint', 'quote_expires_at', 'logistico', 'servicio', 'tipo_envio',
+                'peso', 'peso_real', 'peso_volumetrico', 'peso_facturable', 'medidas',
+                'cp_origen', 'cp_destino', 'colonia_origen', 'colonia_destino',
+                'requiere_seguro_envio', 'seguro_monto'];
+            foreach (array_keys($quote->getDirty()) as $field) {
+                if (in_array($field, $frozen, true) || str_starts_with($field, 'zigo_')) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'quote' => 'La selección local es inmutable. Crea una nueva cotización para cambiarla.',
+                    ]);
+                }
+            }
+        });
+    }
+
     protected $table = 'b2c_cotizaciones';
 
     protected $fillable = [

@@ -834,6 +834,7 @@
                                         type="checkbox"
                                         name="requiere_seguro_envio"
                                         id="requiere_seguro_envio"
+                                        @disabled($cotizacion->provider === 'tenant_provider_local')
                                         value="1"
                                         {{ old('requiere_seguro_envio', $cotizacion->requiere_seguro_envio ?? false) ? 'checked' : '' }}
                                     >

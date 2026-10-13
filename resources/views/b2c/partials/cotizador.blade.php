@@ -338,6 +338,9 @@
                     >
                         @csrf
 
+                        @if(!empty($opcion['provider_snapshot_uuid']))
+                            <input type="hidden" name="provider_snapshot_uuid" value="{{ $opcion['provider_snapshot_uuid'] }}">
+                        @endif
                         <input
                             type="hidden"
                             name="logistico"
@@ -361,9 +364,13 @@
                             ${{ number_format($opcion['precio'], 2) }}
                         </div>
 
+                        @if($opcion['contract_selected'] ?? false)
+                            <a href="{{ route('b2c.checkout', $cotizacion_id) }}">Continuar</a>
+                        @else
                         <button type="submit" @disabled(($opcion['selection_enabled'] ?? true) === false)>
                             {{ ($opcion['selection_enabled'] ?? true) ? 'Seleccionar' : 'Sólo cotización' }}
                         </button>
+                        @endif
                     </form>
                 @endforeach
             </div>

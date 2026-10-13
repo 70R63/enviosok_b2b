@@ -284,7 +284,11 @@ class CotizacionPublicaController extends Controller
 
     public function seleccionar(Request $request, B2cCotizacion $cotizacion)
     {
-        $data = $request->validate([
+        $local = $request->filled('provider_snapshot_uuid');
+        $data = $request->validate($local ? [
+            'provider_snapshot_uuid' => ['required', 'uuid'],
+            'auth_action' => ['nullable', 'in:login,register'],
+        ] : [
             'logistico' => ['required', 'string', 'max:100'],
             'servicio' => ['required', 'string', 'max:100'],
             'auth_action' => ['nullable', 'in:login,register'],
@@ -292,24 +296,30 @@ class CotizacionPublicaController extends Controller
 
         $tipoEnvio = strtolower($cotizacion->tipo_envio ?? 'caja');
 
-        if ($cotizacion->referencia === 'LANDING_PUBLICA') {
-            if ($tipoEnvio === 'sobre') {
-                $cotizacion->update([
-                    'peso' => 1.00,
-                    'medidas' => null,
-                ]);
+        if ($local) {
+            app(\App\Domain\Network\Providers\ProviderContractSelectionService::class)
+                ->select($cotizacion, $data['provider_snapshot_uuid']);
+            $cotizacion->refresh();
+        } else {
+            if ($cotizacion->referencia === 'LANDING_PUBLICA') {
+                if ($tipoEnvio === 'sobre') {
+                    $cotizacion->update([
+                        'peso' => 1.00,
+                        'medidas' => null,
+                    ]);
 
-                $cotizacion->refresh();
+                    $cotizacion->refresh();
+                }
             }
+
+            $option = $this->findSelectedOption($cotizacion, $data['logistico'], $data['servicio']);
+
+            if (!$option) {
+                return back()->with('error', 'La opción seleccionada no es válida.');
+            }
+
+            $this->applyPricingToCotizacion($cotizacion, $option);
         }
-
-        $option = $this->findSelectedOption($cotizacion, $data['logistico'], $data['servicio']);
-
-        if (!$option) {
-            return back()->with('error', 'La opción seleccionada no es válida.');
-        }
-
-        $this->applyPricingToCotizacion($cotizacion, $option);
 
         if (!auth()->check() && $tipoEnvio === 'caja') {
             session([
@@ -349,7 +359,10 @@ class CotizacionPublicaController extends Controller
         Request $request,
         B2cCotizacion $cotizacion
     ) {
-        $data = $request->validate([
+        $local = $request->filled('provider_snapshot_uuid');
+        $data = $request->validate($local ? [
+            'provider_snapshot_uuid' => ['required', 'uuid'],
+        ] : [
             'logistico' => [
                 'required',
                 'string',
@@ -364,6 +377,13 @@ class CotizacionPublicaController extends Controller
 
         if ($cotizacion->user_id !== auth()->id()) {
             abort(403);
+        }
+
+        if ($local) {
+            app(\App\Domain\Network\Providers\ProviderContractSelectionService::class)
+                ->select($cotizacion, $data['provider_snapshot_uuid']);
+            $cotizacion->refresh();
+            return redirect()->route($cotizacion->referencia === 'B2C_NUEVO_ENVIO' ? 'b2c.confirmar' : 'b2c.checkout', $cotizacion->id);
         }
 
         // Estafeta permite hasta 70.999 kg facturables.
@@ -1800,6 +1820,10 @@ public function generarGuia(
     IdentityGuideAccessService $identityGuideAccessService,
     \App\Services\Shipping\B2cXpertaGuideFlowService $xpertaGuideFlow
 ) {
+    if ($cotizacion->provider === 'tenant_provider_local') {
+        abort_unless(auth()->check() && (int) $cotizacion->user_id === (int) auth()->id(), 403);
+        abort(409, 'La ejecución logística local no está habilitada.');
+    }
     if (
         strtolower((string) $cotizacion->provider) === 'xperta'
         && config('services.xperta.enabled', false)
@@ -4422,11 +4446,15 @@ public function opcionesB2c(B2cCotizacion $cotizacion)
 
 private function getAvailableOptions(B2cCotizacion $cotizacion): array
     {
-        return app(\App\Services\B2cQuoteOptionsService::class)->options(
+        $publisher = app(\App\Domain\Network\Providers\ProviderQuotePublisher::class);
+        $selected = $publisher->selectedOptions($cotizacion);
+        if ($selected !== null) return $selected;
+        $options = app(\App\Services\B2cQuoteOptionsService::class)->options(
             $cotizacion,
             fn ($option) => $this->buildPricedOption($cotizacion, $option),
             $this->customerSegmentForCotizacion($cotizacion)
         );
+        return $publisher->publish($cotizacion, $options);
     }
 
     private function findSelectedOption(B2cCotizacion $cotizacion, string $logistico, string $servicio): ?array
@@ -4637,6 +4665,7 @@ private function getAvailableOptions(B2cCotizacion $cotizacion): array
 
     private function guardConditionalCheckout(B2cCotizacion $cotizacion)
     {
+        app(\App\Domain\Network\Providers\ProviderContractSelectionService::class)->assertCheckoutScope($cotizacion);
         $type = strtolower((string) $cotizacion->tipo_envio);
 
         if ($cotizacion->user_id !== null) {

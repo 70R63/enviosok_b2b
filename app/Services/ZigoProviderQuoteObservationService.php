@@ -12,6 +12,9 @@ class ZigoProviderQuoteObservationService
 {
     public function selectionMetadata(B2cCotizacion $cotizacion): array
     {
+        if ($cotizacion->provider === 'tenant_provider_local') {
+            return $cotizacion->providerContract?->snapshot?->publicMetadata() ?? [];
+        }
         try {
             $observation = ZigoProviderQuoteObservation::query()
                 ->where('b2c_cotizacion_id', $cotizacion->id)

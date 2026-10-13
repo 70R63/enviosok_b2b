@@ -31,7 +31,7 @@ class LocalProviderCommercialPricing
             $total = BigDecimal::of($rule->min_price);
         }
 
-        return ['rule_id' => $rule->id, 'provider_cost' => $cost,
+        return ['rule_id' => $rule->id, 'rule_snapshot' => $rule->toArray(), 'provider_cost' => $cost,
             'customer_price' => (string) $total->toScale(2, RoundingMode::HALF_UP),
             'profit_amount' => (string) $total->minus($base)->toScale(2, RoundingMode::HALF_UP)];
     }
