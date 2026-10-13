@@ -492,6 +492,7 @@
                             <button
                                 class="btn js-quote-summary"
                                 type="button"
+                                @disabled(($opcion['selection_enabled'] ?? true) === false)
                                 data-service="{{ $opcion['servicio'] }}"
                                 data-origin="{{ $cotizacion->cp_origen }}"
                                 data-destination="{{ $cotizacion->cp_destino }}"
@@ -502,7 +503,7 @@
                                 data-delivery="{{ $opcion['estimated_delivery_date'] ?: ($opcion['entrega'] ?? 'Por confirmar') }}"
                                 data-price="${{ number_format($opcion['commercial_price'], 2) }} MXN"
                             >
-                                Seleccionar
+                                {{ ($opcion['selection_enabled'] ?? true) ? 'Seleccionar' : 'Sólo cotización' }}
                             </button>
                         </div>
                     </form>

@@ -4422,34 +4422,18 @@ public function opcionesB2c(B2cCotizacion $cotizacion)
 
 private function getAvailableOptions(B2cCotizacion $cotizacion): array
     {
-        try {
-            $baseOptions = app(ZigoProviderRateService::class)
-                ->getOptionsForCotizacion($cotizacion);
-        } catch (Throwable $exception) {
-            Log::warning('B2C - proveedor de tarifas no disponible', [
-                'cotizacion_id' => $cotizacion->id,
-                'exception' => get_class($exception),
-                'provider_code' => property_exists($exception, 'errorCode')
-                    ? $exception->errorCode
-                    : null,
-            ]);
-            session()->flash(
-                'rate_error',
-                'No fue posible obtener tarifas de Estafeta en este momento. Intenta nuevamente.'
-            );
-
-            return [];
-        }
-
-        return array_map(
+        return app(\App\Services\B2cQuoteOptionsService::class)->options(
+            $cotizacion,
             fn ($option) => $this->buildPricedOption($cotizacion, $option),
-            $baseOptions
+            $this->customerSegmentForCotizacion($cotizacion)
         );
     }
 
     private function findSelectedOption(B2cCotizacion $cotizacion, string $logistico, string $servicio): ?array
     {
         foreach ($this->getAvailableOptions($cotizacion) as $option) {
+            // Tenant-provider options are quote-only until durable contracting.
+            if (($option['provider_source'] ?? null) === 'tenant_provider_local') continue;
             if (
                 strtolower($option['logistico']) === strtolower($logistico)
                 && strtolower($option['servicio']) === strtolower($servicio)

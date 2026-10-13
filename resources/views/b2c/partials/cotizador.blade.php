@@ -361,8 +361,8 @@
                             ${{ number_format($opcion['precio'], 2) }}
                         </div>
 
-                        <button type="submit">
-                            Seleccionar
+                        <button type="submit" @disabled(($opcion['selection_enabled'] ?? true) === false)>
+                            {{ ($opcion['selection_enabled'] ?? true) ? 'Seleccionar' : 'Sólo cotización' }}
                         </button>
                     </form>
                 @endforeach

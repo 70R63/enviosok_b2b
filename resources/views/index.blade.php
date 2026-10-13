@@ -1086,7 +1086,9 @@
 
                         @foreach($opciones as $opcion)
                             @php
-                                $deliveryDate = \Carbon\Carbon::parse($opcion['estimated_delivery_date'])->format('d/m/Y');
+                                $deliveryDate = !empty($opcion['estimated_delivery_date'])
+                                    ? \Carbon\Carbon::parse($opcion['estimated_delivery_date'])->format('d/m/Y')
+                                    : ($opcion['entrega'] ?? 'Por confirmar');
                                 $operatingDays = implode(', ', $opcion['operating_days']);
                                 $isReexpedition = (bool) $opcion['is_reexpedition'];
                             @endphp
@@ -1098,7 +1100,9 @@
                                 <input type="hidden" name="servicio" value="{{ $opcion['servicio'] }}">
 
                                 <div class="landing-quote-service">
-                                    <img src="{{ asset($opcion['logo']) }}" alt="{{ $opcion['logistico'] }}" style="width:90px;height:auto;object-fit:contain;">
+                                    @if(!empty($opcion['logo']))
+                                        <img src="{{ asset($opcion['logo']) }}" alt="{{ $opcion['logistico'] }}" style="width:90px;height:auto;object-fit:contain;">
+                                    @endif
                                     <div>
                                         <strong>{{ $opcion['logistico'] }}</strong>
                                         <div>{{ $opcion['servicio'] }}</div>
@@ -1130,6 +1134,7 @@
                                 <button
                                     type="button"
                                     class="landing-quote-select"
+                                    @disabled(($opcion['selection_enabled'] ?? true) === false)
                                     data-service="{{ $opcion['logistico'] }} {{ $opcion['servicio'] }}"
                                     data-origin="{{ $cotizacion_publica->cp_origen }}"
                                     data-destination="{{ $cotizacion_publica->cp_destino }}"
@@ -1142,7 +1147,7 @@
                                     data-insurance="{{ $opcion['insurance_enabled'] ? 'Incluido' : 'No incluido' }}"
                                     data-price="${{ number_format($opcion['commercial_price'], 2) }} MXN"
                                 >
-                                    Seleccionar
+                                    {{ ($opcion['selection_enabled'] ?? true) ? 'Seleccionar' : 'Sólo cotización' }}
                                 </button>
                             </form>
                         @endforeach
