@@ -101,6 +101,7 @@ Route::get('/envio/recuperar', [GuestGuideRecoveryController::class, 'requestFor
 Route::post('/envio/recuperar', [GuestGuideRecoveryController::class, 'requestLink'])->middleware('throttle:5,1')->name('guide-recovery.request');
 Route::get('/envio/recuperar/{token}', [GuestGuideRecoveryController::class, 'show'])->middleware('throttle:20,1')->name('guide-recovery.show');
 Route::get('/envio/recuperar/{token}/pdf', [GuestGuideRecoveryController::class, 'download'])->middleware('throttle:10,1')->name('guide-recovery.download');
+Route::get('/envio/recuperar/{token}/evidencia/{kind}', [GuestGuideRecoveryController::class, 'evidence'])->where('kind', 'photo|signature')->middleware('throttle:20,1')->name('guide-recovery.evidence');
 
 Route::post('/b2c/cotizacion/{cotizacion}/seleccionar', [CotizacionPublicaController::class, 'seleccionar'])
     ->name('b2c.seleccionar');
@@ -996,6 +997,8 @@ Route::get('/b2c/envio-local/{contract:uuid}', [\App\Http\Controllers\B2C\Provid
     ->name('b2c.provider-fulfillment');
 Route::get('/b2c/envio-local/{contract:uuid}/guia', [\App\Http\Controllers\B2C\ProviderFulfillmentController::class, 'publicGuide'])
     ->name('b2c.provider-fulfillment.guide');
+Route::get('/b2c/envio-local/{contract:uuid}/evidencia/{kind}', [\App\Http\Controllers\B2C\ProviderFulfillmentController::class, 'evidence'])
+    ->where('kind', 'photo|signature')->middleware('throttle:20,1')->name('b2c.provider-fulfillment.evidence');
 
 Route::get('/proximamente', [WaitlistController::class, 'index'])
     ->name('waitlist.index');

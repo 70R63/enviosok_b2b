@@ -87,7 +87,11 @@ final class DriverConsoleController extends Controller
             throw ValidationException::withMessages(['status' => 'Límite de intentos alcanzado.']);
         }
         try {
-            $tracking->transition($assignment->shipment, $data['status'], auth()->id());
+            if ($assignment->shipment->operation?->source_type === 'provider_contract') {
+                app(\App\Domain\Network\Providers\ProviderDriverExecutionService::class)->transition($assignment, auth()->id(), $data['status']);
+            } else {
+                $tracking->transition($assignment->shipment, $data['status'], auth()->id());
+            }
         } catch (\DomainException $exception) {
             throw ValidationException::withMessages(['status' => $exception->getMessage()]);
         }
@@ -104,7 +108,11 @@ final class DriverConsoleController extends Controller
 
     public function storeProof(Request $request, string $shipment, DeliveryEvidenceService $evidence, DeliveryRequirementService $requirements)
     {
-        $assignment = $this->assignment($request, $shipment);
+        $assignment = $this->assignment($request, $shipment, true);
+        if ($assignment->shipment->operation?->source_type === 'provider_contract' && $assignment->shipment->status === 'DELIVERED') {
+            app(\App\Domain\Network\Providers\ProviderDriverExecutionService::class)->deliver($assignment, auth()->id(), []);
+            return redirect()->route('driver.dashboard')->with('success', 'Entrega completada correctamente.');
+        }
         $requirement = $requirements->forShipment($assignment->shipment);
         $data = $request->validate($requirements->proofRules($requirement), [
             'received_by_name.required' => 'Escribe el nombre de quien recibe.',
@@ -122,7 +130,11 @@ final class DriverConsoleController extends Controller
         if ($request->file('photo')) $this->validateImageContent($request->file('photo'));
         $signature = ! empty($data['signature']) ? $this->signatureBinary($data['signature']) : null;
         $requirements->assertEvidence($requirement, $data, $request->file('photo'), $signature);
-        $evidence->deliver($assignment, auth()->id(), $data, $request->file('photo'), $signature);
+        if ($assignment->shipment->operation?->source_type === 'provider_contract') {
+            app(\App\Domain\Network\Providers\ProviderDriverExecutionService::class)->deliver($assignment, auth()->id(), $data, $request->file('photo'), $signature);
+        } else {
+            $evidence->deliver($assignment, auth()->id(), $data, $request->file('photo'), $signature);
+        }
         return redirect()->route('driver.dashboard')->with('success', 'Entrega completada correctamente.');
     }
 
@@ -151,7 +163,11 @@ final class DriverConsoleController extends Controller
             'photo.max' => 'La fotografía no debe exceder 5 MB.',
         ]);
         if ($request->file('photo')) $this->validateImageContent($request->file('photo'));
-        $evidence->fail($assignment, auth()->id(), $data, $request->file('photo'));
+        if ($assignment->shipment->operation?->source_type === 'provider_contract') {
+            app(\App\Domain\Network\Providers\ProviderDriverExecutionService::class)->fail($assignment, auth()->id(), $data, $request->file('photo'));
+        } else {
+            $evidence->fail($assignment, auth()->id(), $data, $request->file('photo'));
+        }
         return redirect()->route('driver.dashboard')->with('success', 'Intento de entrega registrado.');
     }
 
@@ -181,10 +197,15 @@ final class DriverConsoleController extends Controller
         return back()->with('success', 'Disponibilidad actualizada.');
     }
 
-    private function assignment(Request $request, string $shipment): DriverAssignment
+    private function assignment(Request $request, string $shipment, bool $allowCompleted = false): DriverAssignment
     {
         $profile = $request->attributes->get('driver_profile');
 
-        return DriverAssignment::with('shipment')->where('tenant_id', $profile->tenant_id)->where('driver_profile_id', $profile->id)->where('status', 'ACTIVE')->whereHas('shipment', fn ($query) => $query->where('uuid', $shipment)->whereIn('status', ['READY_FOR_PICKUP', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERY_FAILED']))->firstOrFail();
+        $query = DriverAssignment::with('shipment')->where('tenant_id', $profile->tenant_id)->where('driver_profile_id', $profile->id);
+        $active = (clone $query)->where('status', 'ACTIVE')->whereHas('shipment', fn ($query) => $query->where('uuid', $shipment)->whereIn('status', ['READY_FOR_PICKUP', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERY_FAILED']))->first();
+        if ($active) return $active;
+        abort_unless($allowCompleted, 404);
+        return $query->where('status', 'COMPLETED')->whereHas('shipment', fn ($q) => $q->where('uuid', $shipment)->where('status', 'DELIVERED')
+            ->whereHas('operation', fn ($op) => $op->where('source_type', 'provider_contract')))->firstOrFail();
     }
 }

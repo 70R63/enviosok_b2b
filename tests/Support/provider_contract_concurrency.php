@@ -25,6 +25,13 @@ use App\Domain\Network\Providers\Models\ProviderFulfillmentDecision;
 use App\Domain\Network\Tenancy\Models\TenantMembership;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
+use Tests\Support\ProviderTrackingFixture;
+use App\Domain\Network\Providers\ProviderDriverExecutionService;
+use App\Domain\Shipping\LastMile\DriverAssignmentService;
+use App\Domain\Shipping\LastMile\DriverDispatchService;
+use App\Domain\Shipping\LastMile\Models\DriverAssignment;
+use App\Domain\Shipping\LastMile\Models\DriverProfile;
+use Illuminate\Http\UploadedFile;
 
 $worker = ($argv[1] ?? '') === 'worker';
 if ($worker) {
@@ -34,11 +41,13 @@ if ($worker) {
     $directory = $state['directory'];
     $fulfillment = $state['fulfillment'] ?? false;
     $decisionMode = $state['decision_mode'] ?? '';
+    $executionMode = $state['execution_mode'] ?? '';
 } else {
+    $executionMode = in_array($argv[3] ?? '', ['dispatch', 'auto-dispatch', 'tracking', 'driver-conflict', 'pod', 'failed'], true) ? $argv[3] : '';
     $port = (int) ($argv[1] ?? 0);
     $directory = $argv[2] ?? '';
     $decisionMode = in_array($argv[3] ?? '', ['decision-accept', 'decision-conflict'], true) ? $argv[3] : '';
-    $fulfillment = ($argv[3] ?? '') === 'fulfillment' || $decisionMode !== '';
+    $fulfillment = ($argv[3] ?? '') === 'fulfillment' || $decisionMode !== '' || $executionMode !== '';
 }
 $expected = realpath($directory);
 $temp = realpath(sys_get_temp_dir());
@@ -79,6 +88,7 @@ config(['database.connections.enfa03_validation' => ['driver' => 'mysql', 'host'
     'database' => $database, 'username' => $username, 'password' => $password, 'charset' => 'utf8mb4',
     'collation' => 'utf8mb4_unicode_ci', 'prefix' => '', 'strict' => true, 'engine' => 'InnoDB']]);
 DB::setDefaultConnection('enfa03_validation');
+if ($executionMode) config(['filesystems.disks.local.root' => $expected.'/evidence-'.$database]);
 
 if ($worker) {
     app(TenantContext::class)->set(Tenant::findOrFail($state['consumer_id']));
@@ -86,8 +96,8 @@ if ($worker) {
     session()->put('tenant_provider_quote_nonce', $state['nonce']);
     if (($argv[3] ?? '') === 'hold') {
         $held = false;
-        DB::listen(function ($query) use (&$held, $statePath, $decisionMode) {
-            if (! $held && str_contains($query->sql, $decisionMode ? 'from `network_tenants`' : 'from `b2c_cotizaciones`') && str_contains($query->sql, 'for update')) {
+        DB::listen(function ($query) use (&$held, $statePath, $decisionMode, $executionMode) {
+            if (! $held && str_contains($query->sql, $executionMode ? 'from `local_shipments`' : ($decisionMode ? 'from `network_tenants`' : 'from `b2c_cotizaciones`')) && str_contains($query->sql, 'for update')) {
                 $held = true;
                 file_put_contents($statePath.'.locked', 'locked');
                 usleep(1000000);
@@ -95,6 +105,34 @@ if ($worker) {
         });
     }
     $started = microtime(true);
+    if ($executionMode) {
+        $provider = Tenant::findOrFail($state['provider_id']);
+        app(TenantContext::class)->set($provider);
+        $originalContext = app(TenantContext::class)->current();
+        $bridge = ProviderFulfillment::where('uuid', $state['fulfillment_uuid'])->firstOrFail();
+        $driver = DriverProfile::findOrFail($state['driver_id']);
+        $actorId = ($argv[3] ?? '') === 'hold' ? $state['actor_id'] : $state['second_actor_id'];
+        try {
+            if ($executionMode === 'dispatch') $result = app(DriverAssignmentService::class)->assign($provider, $bridge->shipment, $driver, $actorId);
+            elseif ($executionMode === 'auto-dispatch') $result = app(DriverDispatchService::class)->autoAssign($provider, $bridge->shipment, $actorId);
+            else {
+                $assignment = DriverAssignment::findOrFail($state['assignment_id']);
+                $driverUserId = $executionMode === 'driver-conflict' && ($argv[3] ?? '') !== 'hold' ? $state['other_driver_user_id'] : $driver->user_id;
+                $service = app(ProviderDriverExecutionService::class);
+                $result = match ($executionMode) {
+                    'tracking', 'driver-conflict' => $service->transition($assignment, $driverUserId, 'PICKED_UP'),
+                    'pod' => $service->deliver($assignment, $driverUserId, ProviderTrackingFixture::proofData(), UploadedFile::fake()->image('delivery.jpg', 240, 160), ProviderTrackingFixture::signature()),
+                    'failed' => $service->fail($assignment, $driverUserId, ['reason' => 'NO_ANSWER']),
+                };
+            }
+            echo json_encode(['contract_uuid' => (string) ($result?->uuid ?? $result?->id ?? 'NONE'), 'seconds' => microtime(true) - $started,
+                'status' => 'OK', 'context_unchanged' => $originalContext === app(TenantContext::class)->current()], JSON_THROW_ON_ERROR);
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException|ValidationException) {
+            echo json_encode(['contract_uuid' => 'CONFLICT', 'seconds' => microtime(true) - $started, 'status' => 'CONFLICT',
+                'context_unchanged' => $originalContext === app(TenantContext::class)->current()], JSON_THROW_ON_ERROR);
+        }
+        exit;
+    }
     if ($decisionMode) {
         $status = $decisionMode === 'decision-conflict' && ($argv[3] ?? '') !== 'hold' ? 'REJECTED' : 'ACCEPTED';
         try {
@@ -113,7 +151,9 @@ if ($worker) {
     exit;
 }
 
-if ($decisionMode) {
+if ($executionMode) {
+    ProviderTrackingFixture::schema();
+} elseif ($decisionMode) {
     ProviderAcceptanceFixture::schema();
 } elseif ($fulfillment) {
     ProviderFulfillmentFixture::schema();
@@ -136,7 +176,7 @@ if ($fulfillment) {
         'payment_verified_external_reference' => 'B2C-'.$fixture['quote']->id])->save());
 }
 $decisionState = [];
-if ($decisionMode) {
+if ($decisionMode || $executionMode) {
     $bridge = app(ProviderFulfillmentService::class)->fulfill($fixture['quote']->fresh());
     $actor = User::create(['name' => 'Native Operator', 'email' => 'operator@example.test', 'password' => 'unused']);
     TenantMembership::create(['tenant_id' => $fixture['provider']->id, 'user_id' => $actor->id, 'role' => 'operator', 'status' => 'active']);
@@ -144,8 +184,26 @@ if ($decisionMode) {
     TenantMembership::create(['tenant_id' => $fixture['provider']->id, 'user_id' => $secondActor->id, 'role' => 'admin', 'status' => 'active']);
     $decisionState = ['provider_id' => $fixture['provider']->id, 'actor_id' => $actor->id, 'second_actor_id' => $secondActor->id, 'fulfillment_uuid' => $bridge->uuid];
 }
+if ($executionMode) {
+    ProviderTrackingFixture::grantDriver($fixture);
+    app(ProviderFulfillmentDecisionService::class)->decide($fixture['provider'], $bridge->uuid, $actor, 'ACCEPTED');
+    $driver = ProviderTrackingFixture::driver($fixture['provider']);
+    $otherDriver = ProviderTrackingFixture::driver($fixture['provider'], 'two');
+    // Auto race has one online candidate; otherwise a second driver could validly win.
+    $otherDriver->update(['availability_status' => 'UNAVAILABLE']);
+    $decisionState += ['driver_id' => $driver->id, 'other_driver_user_id' => $otherDriver->user_id];
+    if (! in_array($executionMode, ['dispatch', 'auto-dispatch'], true)) {
+        $assignment = app(DriverAssignmentService::class)->assign($fixture['provider'], $bridge->shipment, $driver, $actor->id);
+        $decisionState['assignment_id'] = $assignment->id;
+        if (in_array($executionMode, ['pod', 'failed'], true)) foreach (['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'] as $status) {
+            app(ProviderDriverExecutionService::class)->transition($assignment, $driver->user_id, $status);
+        }
+    }
+    $frozenContract = ProviderContract::firstOrFail();
+    $economicFingerprint = hash('sha256', json_encode([$frozenContract->getAttributes(), $frozenContract->snapshot->getAttributes()], JSON_THROW_ON_ERROR));
+}
 $statePath = $expected.'/concurrency-'.bin2hex(random_bytes(4)).'.json';
-file_put_contents($statePath, json_encode(array_merge($decisionState, ['port' => $port, 'directory' => $expected, 'database' => $database, 'decision_mode' => $decisionMode,
+file_put_contents($statePath, json_encode(array_merge($decisionState, ['port' => $port, 'directory' => $expected, 'database' => $database, 'decision_mode' => $decisionMode, 'execution_mode' => $executionMode,
     'fulfillment' => $fulfillment, 'username' => $username, 'password' => $password, 'consumer_id' => $fixture['consumer']->id, 'quote_id' => $fixture['quote']->id,
     'offer_uuid' => $offer['provider_snapshot_uuid'], 'nonce' => session('tenant_provider_quote_nonce')]), JSON_THROW_ON_ERROR));
 $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
@@ -178,9 +236,32 @@ foreach ([[$first, $firstPipes], [$second, $secondPipes]] as [$process, $pipes])
     }
     $results[] = json_decode($output, true, flags: JSON_THROW_ON_ERROR);
 }
-if (($decisionMode === 'decision-conflict' ? ($results[0]['status'] !== 'ACCEPTED' || $results[1]['status'] !== 'CONFLICT') : $results[0]['contract_uuid'] !== $results[1]['contract_uuid']) || ProviderContract::count() !== 1
+if (($executionMode === 'driver-conflict' ? ($results[0]['status'] !== 'OK' || $results[1]['status'] !== 'CONFLICT')
+    : ($decisionMode === 'decision-conflict' ? ($results[0]['status'] !== 'ACCEPTED' || $results[1]['status'] !== 'CONFLICT') : $results[0]['contract_uuid'] !== $results[1]['contract_uuid'])) || ProviderContract::count() !== 1
     || $results[1]['seconds'] < 0.2) {
     throw new RuntimeException('Concurrent idempotency/lock validation failed.');
+}
+if ($executionMode) {
+    $expectedStatus = match ($executionMode) { 'dispatch', 'auto-dispatch' => 'READY_FOR_PICKUP', 'tracking', 'driver-conflict' => 'PICKED_UP', 'pod' => 'DELIVERED', 'failed' => 'DELIVERY_FAILED' };
+    $expectedEvents = match ($executionMode) { 'dispatch', 'auto-dispatch' => 2, 'tracking', 'driver-conflict' => 3, default => 6 };
+    if ($results[0]['status'] !== 'OK' || ($executionMode !== 'driver-conflict' && $results[1]['status'] !== 'OK')
+        || ! $results[0]['context_unchanged'] || ! $results[1]['context_unchanged']
+        || DB::table('local_driver_assignments')->count() !== 1 || DB::table('local_tracking_events')->count() !== $expectedEvents
+        || DB::table('local_delivery_proofs')->count() !== ($executionMode === 'pod' ? 1 : 0)
+        || DB::table('local_delivery_failed_attempts')->count() !== ($executionMode === 'failed' ? 1 : 0)
+        || ProviderFulfillment::count() !== 1 || DB::table('local_shipments')->count() !== 1 || DB::table('network_tenant_operations')->count() !== 1
+        || DB::table('network_usage_events')->count() !== 1 || $bridge->shipment->fresh()->status !== $expectedStatus
+        || $fixture['quote']->fresh()->precio !== '145.00'
+        || $economicFingerprint !== hash('sha256', json_encode([$frozenContract->fresh()->getAttributes(), $frozenContract->snapshot->fresh()->getAttributes()], JSON_THROW_ON_ERROR))) {
+        throw new RuntimeException('Concurrent last-mile execution changed economy, context or duplicated execution.');
+    }
+    if (DB::selectOne('SELECT COUNT(*) AS n FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE()')->n != 0) throw new RuntimeException('Unexpected triggers.');
+    foreach (['2026_10_13_130000_create_network_provider_fulfillment_decisions.php', '2026_10_13_120000_create_network_provider_fulfillments.php', '2026_10_13_110000_create_network_provider_contract_snapshots.php'] as $migrationFile) {
+        $migration = require database_path('migrations/'.$migrationFile);
+        $migration->down(); $migration->up(); $migration->down();
+    }
+    echo 'SQL '.DB::selectOne('SELECT VERSION() AS version')->version.': '.$executionMode.' race OK; one assignment, expected unique tracking/POD/attempts; frozen economy, tenant context, no TRIGGER and existing provider rollback OK.'.PHP_EOL;
+    exit;
 }
 if ($decisionMode) {
     $decision = ProviderFulfillmentDecision::firstOrFail();

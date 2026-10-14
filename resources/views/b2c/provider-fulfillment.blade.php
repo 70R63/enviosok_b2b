@@ -6,12 +6,8 @@
 <body><main>
 @if($shipment)
     <h1>{{ data_get($shipment->guide_snapshot, 'branding.brand_name') }} · Envío local</h1>
-    @if($bridge?->acceptanceStatus() === 'REJECTED')
-        <p>Tu compra fue confirmada.</p>
-    @else
-        <p>Tu envío fue confirmado. La recolección será realizada en la dirección origen.</p>
-    @endif
-    <p>{{ $bridge?->consumerStatusLabel() ?? 'Solicitud enviada al operador logístico' }}</p>
+    <p>Tu compra fue confirmada.</p>
+    <p role="status">{{ $trackingProjection['status_label'] ?? 'Solicitud enviada al operador logístico' }}</p>
     <p>Folio / guía: {{ $shipment->tracking_number }}</p>
     <p>Operado por {{ $shipment->guide_snapshot['provider'] }}</p>
     <p>Servicio: {{ $shipment->guide_snapshot['service_name'] }}</p>
@@ -26,7 +22,22 @@
         </section>
     @endforeach
     <a href="{{ isset($recoveryToken) ? route('guide-recovery.download', $recoveryToken) : route('b2c.provider-fulfillment.guide', $cotizacion->providerContract->uuid) }}">Descargar guía</a>
-    <p>El seguimiento detallado estará disponible próximamente.</p>
+    @if($trackingProjection)
+    <section><h2>Seguimiento de tu envío</h2><ol>
+    @foreach($trackingProjection['timeline'] as $event)
+        <li><strong>{{ $event['label'] }}</strong> · <time datetime="{{ $event['occurred_at'] }}">{{ \Carbon\Carbon::parse($event['occurred_at'])->format('d/m/Y H:i') }}</time></li>
+    @endforeach
+    </ol></section>
+    @if($trackingProjection['pod'])
+    <section><h2>Comprobante de entrega</h2>
+        <p>Entrega: {{ \Carbon\Carbon::parse($trackingProjection['pod']['delivered_at'])->format('d/m/Y H:i') }}</p>
+        @if($trackingProjection['pod']['receiver'])<p>Recibió: {{ $trackingProjection['pod']['receiver'] }}</p>@endif
+        @foreach(['photo'=>'Ver fotografía','signature'=>'Ver firma'] as $kind=>$label)
+            @if($trackingProjection['pod'][$kind.'_available'])<a href="{{ isset($recoveryToken) ? route('guide-recovery.evidence',[$recoveryToken,$kind]) : route('b2c.provider-fulfillment.evidence',[$cotizacion->providerContract->uuid,$kind]) }}">{{ $label }}</a>@endif
+        @endforeach
+    </section>
+    @endif
+    @endif
 @else
     <h1>Envío local</h1><p>La preparación del envío está pendiente. Si tu pago fue confirmado, no necesitas volver a pagar.</p>
 @endif

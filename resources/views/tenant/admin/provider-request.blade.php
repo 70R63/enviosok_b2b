@@ -6,6 +6,7 @@
 <p>{{ data_get($shipment->guide_snapshot,'branding.brand_name') }} · {{ data_get($shipment->guide_snapshot,'service_name') }}</p>
 <p>Decisión: {{ ['PENDING_PROVIDER'=>'Pendiente','ACCEPTED'=>'Aceptada','REJECTED'=>'Rechazada'][$fulfillment->acceptanceStatus()] }}</p>
 <p>Estado logístico: {{ str_replace('_',' ',$shipment->status) }}</p>
+<section class="z-card"><h2>Avance operativo</h2><ol>@foreach($shipment->events as $event)<li>{{ ['CREATED'=>'Envío creado','READY_FOR_PICKUP'=>'Recolección solicitada','PICKED_UP'=>'Paquete recolectado','IN_TRANSIT'=>'En tránsito','OUT_FOR_DELIVERY'=>'En reparto','DELIVERED'=>'Entregado','DELIVERY_FAILED'=>'Entrega no realizada'][$event->status] ?? 'Actualización' }} · {{ $event->occurred_at->format('d/m/Y H:i') }}</li>@endforeach</ol></section>
 @foreach(['Recolección'=>$shipment->sender_snapshot,'Entrega'=>$shipment->recipient_snapshot] as $title=>$party)
 <section class="z-card"><h2>{{ $title }}</h2>@foreach(\App\Support\Presentation\AddressPresenter::lines($party) as $line)<p>{{ $line }}</p>@endforeach<p>Teléfono: {{ $party['phone'] }}</p>@if(data_get($party,'address.references'))<p>Referencias: {{ data_get($party,'address.references') }}</p>@endif</section>
 @endforeach

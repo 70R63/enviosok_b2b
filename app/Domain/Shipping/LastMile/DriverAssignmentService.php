@@ -22,6 +22,15 @@ final class DriverAssignmentService
             abort_unless($shipment->status === 'READY_FOR_PICKUP', 422, 'Sólo se pueden asignar recolecciones pendientes.');
             abort_unless(app(\App\Domain\Network\Providers\ProviderDispatchEligibility::class)->allows($shipment), 422, 'La solicitud aún no está aceptada.');
             $current = DriverAssignment::query()->where('active_shipment_id', $shipment->id)->lockForUpdate()->first();
+            if ($shipment->operation?->source_type === 'provider_contract') {
+                app(\App\Domain\Network\Providers\ProviderDispatchEligibility::class)->authorizeActor($tenant->id, $actorId);
+                $driver = DriverProfile::whereKey($driver->id)->where('tenant_id', $tenant->id)->lockForUpdate()->firstOrFail();
+                $membership = \App\Domain\Network\Tenancy\Models\TenantMembership::where('tenant_id', $tenant->id)
+                    ->where('user_id', $driver->user_id)->lockForUpdate()->first();
+                abort_unless($driver->status === 'ACTIVE' && $membership && $membership->role === 'driver' && $membership->status === 'active', 422, 'El conductor no está autorizado.');
+                abort_unless(($current && (int) $current->driver_profile_id === (int) $driver->id)
+                    || $driver->availability_status === 'AVAILABLE', 422, 'El conductor no está disponible.');
+            }
             if ($current && (int) $current->driver_profile_id === (int) $driver->id) {
                 return $current;
             }
@@ -38,6 +47,6 @@ final class DriverAssignmentService
             $driver->forceFill(['availability_status' => 'BUSY'])->save();
 
             return $assignment;
-        });
+        }, 5);
     }
 }

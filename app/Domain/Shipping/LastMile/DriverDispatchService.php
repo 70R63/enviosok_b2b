@@ -44,7 +44,12 @@ final class DriverDispatchService
             return collect();
         }
 
-        return $this->baseCandidateQuery($tenant)->orderBy('code')->get();
+        $query = $this->baseCandidateQuery($tenant);
+        if ($shipment->operation?->source_type === 'provider_contract') {
+            $query->where(fn ($q) => $q->where('availability_status', 'AVAILABLE')
+                ->orWhereHas('assignments', fn ($a) => $a->where('active_shipment_id', $shipment->id)->where('status', 'ACTIVE')));
+        }
+        return $query->orderBy('code')->get();
     }
 
     public function isManuallyEligible(Tenant $tenant, LocalShipment $shipment, DriverProfile $driver): bool
@@ -60,6 +65,9 @@ final class DriverDispatchService
                 return null;
             }
             if (! app(\App\Domain\Network\Providers\ProviderDispatchEligibility::class)->allows($shipment)) return null;
+            if ($shipment->operation?->source_type === 'provider_contract') {
+                app(\App\Domain\Network\Providers\ProviderDispatchEligibility::class)->authorizeActor($tenant->id, $actorId);
+            }
             $existing = DriverAssignment::query()->where('active_shipment_id', $shipment->id)->lockForUpdate()->first();
             if ($existing) {
                 return $existing;
@@ -67,6 +75,13 @@ final class DriverDispatchService
             $driver = $this->candidates($tenant, $shipment)->first();
             if (! $driver) {
                 return null;
+            }
+            if ($shipment->operation?->source_type === 'provider_contract') {
+                $driver = DriverProfile::whereKey($driver->id)->where('tenant_id', $tenant->id)->lockForUpdate()->firstOrFail();
+                $member = \App\Domain\Network\Tenancy\Models\TenantMembership::where('tenant_id', $tenant->id)
+                    ->where('user_id', $driver->user_id)->lockForUpdate()->first();
+                if ($driver->status !== 'ACTIVE' || $driver->availability_status !== 'AVAILABLE' || ! $driver->isOnline()
+                    || ! $member || $member->role !== 'driver' || $member->status !== 'active') return null;
             }
 
             $assignment = DriverAssignment::create([

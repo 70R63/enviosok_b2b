@@ -9,6 +9,15 @@ use Illuminate\Support\Facades\Schema;
 
 final class ProviderDispatchEligibility
 {
+    /** Called inside assignment transaction with an actor resolved by the adapter. */
+    public function authorizeActor(int $providerId, int $actorId): void
+    {
+        $membership = \App\Domain\Network\Tenancy\Models\TenantMembership::where('tenant_id', $providerId)
+            ->where('user_id', $actorId)->lockForUpdate()->first();
+        abort_unless($membership && $membership->status === 'active'
+            && in_array($membership->role, ['owner', 'admin', 'operator'], true), 403);
+    }
+
     public function allows(LocalShipment $shipment): bool
     {
         $operation = $shipment->operation;

@@ -52,4 +52,11 @@ final class GuestGuideRecoveryController extends Controller
         $recovery->audit($q,'DOWNLOAD_PDF','SUCCESS');
         return Storage::disk('local')->download($q->documento,'guia-'.$q->referencia.'.pdf',['Content-Type'=>'application/pdf']);
     }
+
+    public function evidence(string $token, string $kind, GuideRecoveryService $recovery)
+    {
+        $access = $recovery->resolve($token);
+        abort_unless($access && $access->cotizacion->provider === 'tenant_provider_local', 404);
+        return app(ProviderFulfillmentController::class)->recoveredEvidence($access, $token, $kind);
+    }
 }
