@@ -48,7 +48,9 @@ if ($worker) {
     $decisionMode = $state['decision_mode'] ?? '';
     $executionMode = $state['execution_mode'] ?? '';
     $apiMode=$state['api_mode']??'';
+    $financialMode=$state['financial_mode']??'';
 } else {
+    $financialMode=in_array($argv[3]??'',['payable-create','settlement-repeat','settlement-partials','settlement-overpay'],true)?$argv[3]:'';
     $apiMode=in_array($argv[3]??'',['api-accept','api-tracking','api-pod','api-outbox'],true)?$argv[3]:'';
     $executionMode = in_array($argv[3] ?? '', ['dispatch', 'auto-dispatch', 'tracking', 'driver-conflict', 'pod', 'failed'], true) ? $argv[3] : '';
     $port = (int) ($argv[1] ?? 0);
@@ -97,6 +99,52 @@ config(['database.connections.enfa03_validation' => ['driver' => 'mysql', 'host'
 DB::setDefaultConnection('enfa03_validation');
 if ($executionMode||$apiMode) config(['filesystems.disks.local.root' => $expected.'/evidence-'.$database]);
 
+if (!$worker && $financialMode) {
+    config(['filesystems.disks.local.root'=>$expected.'/evidence-'.$database]); Mail::fake();
+    ProviderApiFixture::schema();
+    $financialMigration=require database_path('migrations/2026_10_13_150000_create_provider_payable_ledger.php');$financialMigration->down();$financialMigration->up();
+    $fixture=ProviderContractFixture::seed();ProviderFulfillmentFixture::operational($fixture);ProviderTrackingFixture::grantDriver($fixture);
+    app(TenantContext::class)->set($fixture['consumer']);session()->put('cotizacion_publica_id',$fixture['quote']->id);
+    $actor=User::create(['name'=>'Finance one','email'=>'finance-one@example.test','password'=>'unused']);
+    $secondActor=User::create(['name'=>'Finance two','email'=>'finance-two@example.test','password'=>'unused']);
+    $role=\App\Models\Roles\Roles::create(['slug'=>'sysadmin']);$actor->roles()->attach($role->id);$secondActor->roles()->attach($role->id);
+    TenantMembership::create(['tenant_id'=>$fixture['provider']->id,'user_id'=>$actor->id,'role'=>'operator','status'=>'active']);
+    $offer=app(ProviderQuotePublisher::class)->publish($fixture['quote'],app(TenantProviderQuoteSource::class)->options($fixture['quote'],'anonymous'))[0];
+    app(ProviderContractSelectionService::class)->select($fixture['quote'],$offer['provider_snapshot_uuid']);
+    B2cCotizacion::withoutEvents(fn()=>$fixture['quote']->refresh()->forceFill(['estatus'=>'PAGADA','payment_status'=>'approved','payment_verification_status'=>'VERIFIED',
+        'payment_verified_at'=>now(),'payment_verified_amount'=>145,'payment_verified_currency'=>'MXN','payment_verified_external_reference'=>'B2C-'.$fixture['quote']->id])->save());
+    $bridge=app(ProviderFulfillmentService::class)->fulfill($fixture['quote']);
+    if($financialMode==='payable-create'){DB::table('network_provider_payable_events')->delete();DB::table('network_provider_payables')->delete();}
+    else {
+        app(ProviderFulfillmentDecisionService::class)->decide($fixture['provider'],$bridge->uuid,$actor,'ACCEPTED');
+        $driver=ProviderTrackingFixture::driver($fixture['provider']);$assignment=app(DriverAssignmentService::class)->assign($fixture['provider'],$bridge->shipment,$driver,$actor->id);
+        foreach(['PICKED_UP','IN_TRANSIT','OUT_FOR_DELIVERY']as$status)app(ProviderDriverExecutionService::class)->transition($assignment,$driver->user_id,$status);
+        app(ProviderDriverExecutionService::class)->deliver($assignment,$driver->user_id,ProviderTrackingFixture::proofData(),UploadedFile::fake()->image('pod.jpg'),ProviderTrackingFixture::signature());
+    }
+    $statePath=$expected.'/finance-'.bin2hex(random_bytes(4)).'.json';
+    file_put_contents($statePath,json_encode(['financial_mode'=>$financialMode,'port'=>$port,'directory'=>$expected,'database'=>$database,'username'=>$username,'password'=>$password,
+        'consumer_id'=>$fixture['consumer']->id,'quote_id'=>$fixture['quote']->id,'nonce'=>session('tenant_provider_quote_nonce'),
+        'fulfillment_uuid'=>$bridge->uuid,'payable_uuid'=>\App\Domain\Network\Providers\Models\ProviderPayable::value('uuid'),
+        'actor_id'=>$actor->id,'second_actor_id'=>$secondActor->id,'paid_at'=>now()->subMinute()->format('Y-m-d H:i:s')],JSON_THROW_ON_ERROR));
+    $descriptors=[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']];$first=proc_open([PHP_BINARY,__FILE__,'worker',$statePath,'hold'],$descriptors,$firstPipes);
+    $deadline=microtime(true)+10;while(!file_exists($statePath.'.locked')&&microtime(true)<$deadline)usleep(10000);
+    if(!file_exists($statePath.'.locked')){proc_terminate($first);throw new RuntimeException('Financial lock not acquired.');}
+    $second=proc_open([PHP_BINARY,__FILE__,'worker',$statePath],$descriptors,$secondPipes);$results=[];
+    foreach([[$first,$firstPipes],[$second,$secondPipes]]as[$process,$pipes]){fclose($pipes[0]);$output=stream_get_contents($pipes[1]);$error=stream_get_contents($pipes[2]);fclose($pipes[1]);fclose($pipes[2]);if(proc_close($process)!==0)throw new RuntimeException('Financial worker failed: '.$error.$output);$results[]=json_decode($output,true,flags:JSON_THROW_ON_ERROR);}
+    $payable=\App\Domain\Network\Providers\Models\ProviderPayable::firstOrFail();
+    $count=DB::table('network_provider_settlement_entries')->count();
+    if($results[0]['status']!=='OK'||$results[1]['seconds']<0.2||\App\Domain\Network\Providers\Models\ProviderPayable::count()!==1)throw new RuntimeException('Financial serialization failed.');
+    if($financialMode==='payable-create'&&($count!==0||$results[0]['uuid']!==$results[1]['uuid']))throw new RuntimeException('Duplicate payable.');
+    if($financialMode==='settlement-repeat'&&($count!==1||$results[0]['uuid']!==$results[1]['uuid']||$payable->remainingAmount()!=='50.00'))throw new RuntimeException('Repeat payment duplicated.');
+    if($financialMode==='settlement-partials'&&($count!==2||$payable->remainingAmount()!=='0.00'||$payable->financialStatus()!=='SETTLED'))throw new RuntimeException('Partial payment totals failed.');
+    if($financialMode==='settlement-overpay'&&($count!==1||$results[1]['status']!=='CONFLICT'||$payable->remainingAmount()!=='30.00'))throw new RuntimeException('Overpayment accepted.');
+    try{$financialMigration->down();throw new LogicException('Financial history erased.');}catch(RuntimeException $e){if(!str_contains($e->getMessage(),'Export/migrate'))throw $e;}
+    if(\Illuminate\Support\Facades\Artisan::call('network:provider-payables:reconcile')!==0)throw new RuntimeException('Native financial reconciliation failed.');
+    if($fixture['quote']->fresh()->precio!=='145.00'||$payable->provider_net_amount!=='100.00'||$payable->provider_tax_amount!==null)throw new RuntimeException('Economic history changed.');
+    echo 'SQL '.DB::selectOne('SELECT VERSION() AS version')->version.': '.$financialMode.' concurrent locks, immutable source, no overpayment, reconciliation and up/down/up with protected populated rollback OK.'.PHP_EOL;
+    exit;
+}
+
 if (! $worker && ($argv[3] ?? '') === 'network-readiness') {
     ProviderApiFixture::schema();
     $fixture = ProviderContractFixture::seed();
@@ -136,8 +184,8 @@ if ($worker) {
     session()->put('tenant_provider_quote_nonce', $state['nonce']);
     if (($argv[3] ?? '') === 'hold') {
         $held = false;
-        DB::listen(function ($query) use (&$held, $statePath, $decisionMode, $executionMode,$apiMode) {
-            $target=$apiMode?($apiMode==='api-outbox'?'from `tenant_api_webhook_deliveries`':'from `network_provider_integrations`'):($executionMode?'from `local_shipments`':($decisionMode?'from `network_tenants`':'from `b2c_cotizaciones`'));
+        DB::listen(function ($query) use (&$held, $statePath, $decisionMode, $executionMode,$apiMode,$financialMode) {
+            $target=$financialMode?($financialMode==='payable-create'?'from `network_provider_fulfillments`':'from `network_tenants`'):($apiMode?($apiMode==='api-outbox'?'from `tenant_api_webhook_deliveries`':'from `network_provider_integrations`'):($executionMode?'from `local_shipments`':($decisionMode?'from `network_tenants`':'from `b2c_cotizaciones`')));
             if (! $held && str_contains($query->sql,$target) && str_contains($query->sql, 'for update')) {
                 $held = true;
                 file_put_contents($statePath.'.locked', 'locked');
@@ -146,6 +194,20 @@ if ($worker) {
         });
     }
     $started = microtime(true);
+    if($financialMode){
+        $hold=($argv[3]??'')==='hold';
+        try{
+            if($financialMode==='payable-create')$result=app(\App\Domain\Network\Providers\ProviderPayableService::class)->sync(ProviderFulfillment::where('uuid',$state['fulfillment_uuid'])->firstOrFail());
+            else {
+                $same=$financialMode==='settlement-repeat';$amount=match($financialMode){'settlement-repeat'=>'50.00','settlement-partials'=>$hold?'40.00':'60.00',default=>'70.00'};
+                $suffix=$same?'one':($hold?'one':'two');
+                $result=app(\App\Domain\Network\Providers\ProviderSettlementService::class)->settle(User::findOrFail($hold?$state['actor_id']:$state['second_actor_id']),$state['payable_uuid'],
+                    ['amount'=>$amount,'currency'=>'MXN','payment_reference'=>'PAY-'.$suffix,'idempotency_key'=>'financial-key-'.$suffix,'paid_at'=>$state['paid_at']]);
+            }
+            $resultData=['status'=>'OK','uuid'=>$result->uuid];
+        }catch(ValidationException|\Symfony\Component\HttpKernel\Exception\HttpException){$resultData=['status'=>'CONFLICT'];}
+        echo json_encode($resultData+['seconds'=>microtime(true)-$started],JSON_THROW_ON_ERROR);exit;
+    }
     if($apiMode){
         if($apiMode==='api-outbox'){
             config(['provider_crm.adapters.fake'=>FakeProviderCrmAdapter::class]);app(ProviderCrmOutbox::class)->deliver($state['outbox_id']);

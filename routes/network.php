@@ -123,6 +123,9 @@ Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superad
         Route::delete('/security/users/{user}/two-factor', [NetworkTwoFactorController::class, 'reset'])->middleware('throttle:3,1')->name('two-factor.reset');
         Route::get('/topology', NetworkTopologyController::class)->name('topology');
         Route::get('/dashboard', NetworkDashboardController::class)->name('dashboard');
+        Route::get('/provider-settlements', [\App\Http\Controllers\Network\ProviderSettlementController::class, 'index'])->name('provider-settlements.index');
+        Route::get('/provider-settlements/{payable}', [\App\Http\Controllers\Network\ProviderSettlementController::class, 'show'])->whereUuid('payable')->name('provider-settlements.show');
+        Route::post('/provider-settlements/{payable}', [\App\Http\Controllers\Network\ProviderSettlementController::class, 'store'])->whereUuid('payable')->name('provider-settlements.store');
         Route::get('/provider-connections', [\App\Http\Controllers\Network\ProviderConnectionController::class, 'index'])->name('provider-connections.index');
         Route::get('/provider-connections/create', [\App\Http\Controllers\Network\ProviderConnectionController::class, 'create'])->name('provider-connections.create');
         Route::post('/provider-connections', [\App\Http\Controllers\Network\ProviderConnectionController::class, 'store'])->name('provider-connections.store');

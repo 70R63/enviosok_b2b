@@ -43,10 +43,17 @@ class AppServiceProvider extends ServiceProvider
     {
         \App\Models\B2cCotizacion::observe(\App\Domain\Network\Providers\ProviderPaymentObserver::class);
         \App\Domain\Network\Providers\Models\ProviderFulfillment::created(function($bridge):void {
+            app(\App\Domain\Network\Providers\ProviderPayableService::class)->afterCommit($bridge->id);
             \Illuminate\Support\Facades\DB::afterCommit(function()use($bridge):void {
                 try {app(\App\Domain\Network\Providers\ProviderCrmOutbox::class)->publish($bridge);}
                 catch(\Throwable){\Illuminate\Support\Facades\Log::warning('provider.outbox.publish_unavailable');}
             });
+        });
+        \App\Domain\Network\Providers\Models\ProviderFulfillmentDecision::created(function ($decision): void {
+            app(\App\Domain\Network\Providers\ProviderPayableService::class)->afterCommit($decision->provider_fulfillment_id);
+        });
+        \App\Domain\Shipping\Local\Models\LocalTrackingEvent::created(function ($event): void {
+            app(\App\Domain\Network\Providers\ProviderPayableService::class)->afterShipmentCommit($event->local_shipment_id);
         });
         app(\App\Services\Security\StageSafetyGuard::class)->enforce();
         \App\Domain\Shipping\Local\Models\LocalTrackingEvent::created(function ($event): void { try { app(\App\Domain\ApiHub\ApiWebhookPublisher::class)->tracking($event); } catch (\Throwable $exception) { \Illuminate\Support\Facades\Log::warning('api_hub.webhook_queue_failed',['tracking_event_id'=>$event->id]); } });

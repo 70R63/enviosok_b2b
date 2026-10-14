@@ -1,0 +1,19 @@
+@extends('network.layout')
+@section('title','Detalle de obligación provider - Network')
+@section('content')
+<h1 class="title">Obligación {{ $payable->uuid }}</h1><p><a href="{{ route('network.provider-settlements.index') }}">Volver a liquidaciones</a></p>
+<div class="card"><h2>{{ $payable->consumer->name }} → {{ $payable->provider->name }}</h2><p>Guía: {{ $payable->fulfillment->shipment->tracking_number }}. Servicio: {{ $payable->snapshot->service_snapshot['name'] }}.</p>
+<p>Logística: {{ $payable->fulfillment->shipment->status }}. Financiero: {{ $payable->financialStatus() }}.</p>
+<dl><dt>Obligación contractual neta provider</dt><dd>{{ $payable->provider_net_amount }} {{ $payable->currency }}</dd><dt>Impuesto / bruto provider</dt><dd>Pendientes de soporte fiscal; no calculados.</dd><dt>Venta consumer neta / IVA / total bruto</dt><dd>{{ $payable->snapshot->subtotal_amount }} / {{ $payable->snapshot->tax_amount }} / {{ $payable->snapshot->total_amount }} {{ $payable->currency }}</dd><dt>Utilidad comercial neta congelada</dt><dd>{{ $payable->snapshot->profit_amount }} {{ $payable->currency }}</dd><dt>Liquidado / pendiente</dt><dd>{{ $payable->settledAmount() }} / {{ $payable->remainingAmount() }} {{ $payable->currency }}</dd></dl></div>
+@if($payable->financialStatus()==='PAYABLE')
+<form class="card" method="POST" action="{{ route('network.provider-settlements.store',$payable->uuid) }}">@csrf
+<h2>Registrar liquidación manual</h2><p>Registrar sólo un pago realizado y conciliado fuera del sistema. Se aplica a la obligación neta; el soporte fiscal provider sigue pendiente. No guardar datos bancarios ni secretos.</p>
+<input type="hidden" name="idempotency_key" value="{{ $idempotencyKey }}"><input type="hidden" name="currency" value="{{ $payable->currency }}">
+<div class="grid"><div class="field"><label for="amount">Importe ({{ $payable->currency }})</label><input id="amount" name="amount" type="text" inputmode="decimal" required value="{{ old('amount') }}"></div>
+<div class="field"><label for="payment-reference">Referencia única de pago / asignación</label><input id="payment-reference" name="payment_reference" maxlength="128" required value="{{ old('payment_reference') }}"></div>
+<div class="field"><label for="paid-at">Fecha del pago ({{ config('app.timezone') }})</label><input id="paid-at" name="paid_at" type="datetime-local" required value="{{ old('paid_at') }}"></div></div>
+<div class="field"><label for="notes">Nota opcional, sin secretos</label><input id="notes" name="notes" maxlength="500" value="{{ old('notes') }}"></div><button class="btn">Registrar pago manual</button></form>
+@else<p>La liquidación sólo está disponible en PAYABLE. REVIEW requiere atención administrativa, sin cancelar ni borrar historial.</p>@endif
+<div class="card table-wrap"><h2>Historial de liquidaciones</h2><table><thead><tr><th>Referencia</th><th>Importe</th><th>Pagado</th><th>Actor</th><th>Registro / Nota</th></tr></thead><tbody>@forelse($payable->settlements as $entry)<tr><td>{{ $entry->payment_reference }}</td><td>{{ $entry->amount }} {{ $entry->currency }}</td><td>{{ $entry->paid_at->format('d/m/Y H:i') }} UTC</td><td>{{ $entry->actor_user_id }}</td><td>{{ $entry->created_at->format('d/m/Y H:i') }} / {{ $entry->notes }}</td></tr>@empty<tr><td colspan="5">Sin liquidaciones.</td></tr>@endforelse</tbody></table></div>
+<div class="card table-wrap"><h2>Auditoría financiera</h2><table><thead><tr><th>Evento</th><th>Anterior / Nuevo</th><th>Canal / Actor</th><th>Fecha</th></tr></thead><tbody>@foreach($payable->events as $event)<tr><td>{{ $event->action }}</td><td>{{ $event->previous_status ?? '—' }} / {{ $event->status }}</td><td>{{ $event->channel }} / {{ $event->actor_user_id ?? 'Sistema / integración' }}</td><td>{{ $event->created_at->format('d/m/Y H:i') }}</td></tr>@endforeach</tbody></table></div>
+@endsection

@@ -144,6 +144,8 @@ final class ProviderNetworkReadinessService
         $commands = collect(app(Kernel::class)->resolveConsoleSchedule()->events())->pluck('command')->implode(' ');
         $test('scheduler.application', str_contains($commands, 'network:provider-fulfillment:retry') && str_contains($commands, 'network:provider-crm:deliver'), 'Recovery y outbox registrados en scheduler de aplicación');
         $add('scheduler.host', 'WARN', 'Verificar cron schedule:run, permisos y ejecución en el host; no comprobables desde este diagnóstico');
+        $test('settlement.infrastructure', collect(['network_provider_payables', 'network_provider_payable_events', 'network_provider_settlement_entries'])->every(fn ($t) => Schema::hasTable($t))
+            && str_contains($commands, 'network:provider-payables:reconcile'), 'Ledger y reconciliación disponibles; liquidación manual válida, sin datos bancarios ni payout automático');
         $this->crm($connection, $provider, $add);
 
         return $this->report($checks);
