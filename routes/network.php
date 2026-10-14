@@ -123,6 +123,11 @@ Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superad
         Route::delete('/security/users/{user}/two-factor', [NetworkTwoFactorController::class, 'reset'])->middleware('throttle:3,1')->name('two-factor.reset');
         Route::get('/topology', NetworkTopologyController::class)->name('topology');
         Route::get('/dashboard', NetworkDashboardController::class)->name('dashboard');
+        Route::get('/provider-connections', [\App\Http\Controllers\Network\ProviderConnectionController::class, 'index'])->name('provider-connections.index');
+        Route::get('/provider-connections/create', [\App\Http\Controllers\Network\ProviderConnectionController::class, 'create'])->name('provider-connections.create');
+        Route::post('/provider-connections', [\App\Http\Controllers\Network\ProviderConnectionController::class, 'store'])->name('provider-connections.store');
+        Route::get('/provider-connections/{connection}/edit', [\App\Http\Controllers\Network\ProviderConnectionController::class, 'edit'])->name('provider-connections.edit');
+        Route::post('/provider-connections/{connection}', [\App\Http\Controllers\Network\ProviderConnectionController::class, 'update'])->name('provider-connections.update');
         Route::get('/onboarding', [NetworkOnboardingController::class, 'index'])->name('onboarding.index');
         Route::get('/onboarding/{uuid}', [NetworkOnboardingController::class, 'show'])->name('onboarding.show');
         Route::post('/onboarding/{uuid}/retry', [NetworkOnboardingController::class, 'retry'])

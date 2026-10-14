@@ -97,6 +97,39 @@ config(['database.connections.enfa03_validation' => ['driver' => 'mysql', 'host'
 DB::setDefaultConnection('enfa03_validation');
 if ($executionMode||$apiMode) config(['filesystems.disks.local.root' => $expected.'/evidence-'.$database]);
 
+if (! $worker && ($argv[3] ?? '') === 'network-readiness') {
+    ProviderApiFixture::schema();
+    $fixture = ProviderContractFixture::seed();
+    ProviderFulfillmentFixture::operational($fixture);
+    ProviderTrackingFixture::grantDriver($fixture);
+    $actor = User::create(['name'=>'Network validation','email'=>'network-validation@example.test','password'=>'unused']);
+    $role = \App\Models\Roles\Roles::create(['slug'=>'sysadmin']); $actor->roles()->attach($role->id);
+    TenantMembership::create(['tenant_id'=>$fixture['provider']->id,'user_id'=>$actor->id,'role'=>'operator','status'=>'active']);
+    app(TenantContext::class)->set($fixture['consumer']);
+    $readiness = app(\App\Domain\Network\Providers\ProviderNetworkReadinessService::class);
+    $service = app(\App\Domain\Network\Providers\ProviderConnectionService::class);
+    $input = ['consumer_uuid'=>$fixture['consumer']->uuid,'provider_uuid'=>$fixture['provider']->uuid,'capability'=>'LOCAL_SHIPPING',
+        'status'=>'active','services'=>[$fixture['service']->id]];
+    $fixture['connection']->forceFill(['status'=>'inactive'])->save();
+    if (!$readiness->evaluate($fixture['consumer'],$fixture['provider'],$fixture['connection'],true)['ready']) throw new RuntimeException('Valid activation candidate failed readiness.');
+    $service->saveConfiguration($actor,$fixture['connection'],$input);
+    $service->saveConfiguration($actor,$fixture['connection'],$input);
+    if (\App\Domain\Network\Providers\Models\ProviderConnection::count()!==1 || DB::table('network_provider_connection_services')->count()!==1) throw new RuntimeException('Repeated admin activation duplicated configuration.');
+    $fixture['connection'] = $fixture['connection']->fresh();
+    $fixture['connection']->forceFill(['status'=>'inactive'])->save();
+    $fixture['tariff']->update(['tenant_id'=>$fixture['consumer']->id]);
+    try { $service->saveConfiguration($actor,$fixture['connection'],$input); throw new RuntimeException('Foreign tariff allowed activation.'); }
+    catch (ValidationException) {}
+    if ($fixture['connection']->fresh()->status!=='inactive') throw new RuntimeException('Failed activation changed state.');
+    $fixture['tariff']->update(['tenant_id'=>$fixture['provider']->id]);
+    $service->saveConfiguration($actor,$fixture['connection'],$input);
+    if (\Illuminate\Support\Facades\Artisan::call('network:provider-network:check',['--consumer'=>'slug:consumer','--provider'=>'uuid:'.$fixture['provider']->uuid])!==0
+        || DB::table('network_tenant_operations')->count()!==0 || DB::table('local_shipments')->count()!==0
+        || DB::table('tenant_api_webhook_deliveries')->count()!==0 || app(TenantContext::class)->id()!==$fixture['consumer']->id) throw new RuntimeException('Preflight mutated operations/context or failed.');
+    echo 'SQL '.DB::selectOne('SELECT VERSION() AS version')->version.': provider readiness, repeated activation, foreign tariff exclusion, rollback of failed activation and read-only internal mode OK.'.PHP_EOL;
+    exit;
+}
+
 if ($worker) {
     app(TenantContext::class)->set(Tenant::findOrFail($state['consumer_id']));
     session()->put('cotizacion_publica_id', $state['quote_id']);
