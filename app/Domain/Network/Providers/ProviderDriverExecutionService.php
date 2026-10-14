@@ -25,7 +25,7 @@ final class ProviderDriverExecutionService
     public function __construct(private LocalTrackingService $tracking, private DeliveryEvidenceService $evidence,
         private DeliveryRequirementService $requirements, private ProviderDispatchEligibility $eligibility) {}
 
-    public function transition(DriverAssignment $assignment, int $actorId, string $status): LocalTrackingEvent
+    public function transition(DriverAssignment $assignment, int|ProviderApiPrincipal $actorId, string $status): LocalTrackingEvent
     {
         if (! in_array($status, ['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'], true)) {
             throw ValidationException::withMessages(['status' => 'Acción de ejecución no válida.']);
@@ -38,11 +38,12 @@ final class ProviderDriverExecutionService
                 throw ValidationException::withMessages(['status' => 'Límite de intentos alcanzado.']);
             }
 
-            return $this->tracking->transition($locked->shipment, $status, $actorId);
+            return $this->tracking->transition($locked->shipment, $status, $actorId instanceof ProviderApiPrincipal ? null : $actorId, null,
+                $actorId instanceof ProviderApiPrincipal ? $actorId->metadata() : []);
         }, 5);
     }
 
-    public function deliver(DriverAssignment $assignment, int $actorId, array $data, ?UploadedFile $photo = null,
+    public function deliver(DriverAssignment $assignment, int|ProviderApiPrincipal $actorId, array $data, ?UploadedFile $photo = null,
         ?string $signature = null): LocalDeliveryProof
     {
         // No SQL retry around filesystem writes; a request retry is safe after rollback.
@@ -71,7 +72,7 @@ final class ProviderDriverExecutionService
         });
     }
 
-    public function fail(DriverAssignment $assignment, int $actorId, array $data, ?UploadedFile $photo = null): LocalDeliveryFailedAttempt
+    public function fail(DriverAssignment $assignment, int|ProviderApiPrincipal $actorId, array $data, ?UploadedFile $photo = null): LocalDeliveryFailedAttempt
     {
         return DB::transaction(function () use ($assignment, $actorId, $data, $photo) {
             $locked = $this->lockedAssignment($assignment, $actorId);
@@ -92,16 +93,17 @@ final class ProviderDriverExecutionService
         });
     }
 
-    private function lockedAssignment(DriverAssignment $assignment, int $actorId, bool $allowCompleted = false): DriverAssignment
+    private function lockedAssignment(DriverAssignment $assignment, int|ProviderApiPrincipal $actorId, bool $allowCompleted = false): DriverAssignment
     {
         $shipment = LocalShipment::whereKey($assignment->local_shipment_id)->lockForUpdate()->firstOrFail();
         $locked = DriverAssignment::whereKey($assignment->id)->lockForUpdate()->firstOrFail();
         $driver = DriverProfile::whereKey($locked->driver_profile_id)->lockForUpdate()->firstOrFail();
-        $membership = TenantMembership::where('tenant_id', $shipment->tenant_id)->where('user_id', $actorId)->lockForUpdate()->first();
+        if($actorId instanceof ProviderApiPrincipal) $actorId->authorize($allowCompleted ? 'provider:pod:write' : 'provider:tracking:write',$shipment);
+        $membership = TenantMembership::where('tenant_id', $shipment->tenant_id)->where('user_id', $driver->user_id)->lockForUpdate()->first();
         abort_unless($shipment->operation?->source_type === 'provider_contract'
             && (int) $locked->local_shipment_id === (int) $shipment->id
             && (int) $shipment->tenant_id === (int) $locked->tenant_id && (int) $driver->tenant_id === (int) $shipment->tenant_id
-            && (int) $driver->user_id === $actorId && $driver->status === 'ACTIVE'
+            && ($actorId instanceof ProviderApiPrincipal || (int) $driver->user_id === $actorId) && $driver->status === 'ACTIVE'
             && $membership && $membership->role === 'driver' && $membership->status === 'active'
             && Tenant::whereKey($shipment->tenant_id)->where('status', 'active')->exists()
             && $this->eligibility->allows($shipment)

@@ -32,6 +32,11 @@ use App\Domain\Shipping\LastMile\DriverDispatchService;
 use App\Domain\Shipping\LastMile\Models\DriverAssignment;
 use App\Domain\Shipping\LastMile\Models\DriverProfile;
 use Illuminate\Http\UploadedFile;
+use Tests\Support\ProviderApiFixture;
+use Tests\Support\FakeProviderCrmAdapter;
+use App\Domain\ApiHub\Models\{TenantApiClient,TenantApiKey};
+use App\Domain\Network\Providers\Models\ProviderIntegration;
+use App\Domain\Network\Providers\{ProviderApiPrincipal,ProviderApiOperations,ProviderCrmOutbox};
 
 $worker = ($argv[1] ?? '') === 'worker';
 if ($worker) {
@@ -42,12 +47,14 @@ if ($worker) {
     $fulfillment = $state['fulfillment'] ?? false;
     $decisionMode = $state['decision_mode'] ?? '';
     $executionMode = $state['execution_mode'] ?? '';
+    $apiMode=$state['api_mode']??'';
 } else {
+    $apiMode=in_array($argv[3]??'',['api-accept','api-tracking','api-pod','api-outbox'],true)?$argv[3]:'';
     $executionMode = in_array($argv[3] ?? '', ['dispatch', 'auto-dispatch', 'tracking', 'driver-conflict', 'pod', 'failed'], true) ? $argv[3] : '';
     $port = (int) ($argv[1] ?? 0);
     $directory = $argv[2] ?? '';
     $decisionMode = in_array($argv[3] ?? '', ['decision-accept', 'decision-conflict'], true) ? $argv[3] : '';
-    $fulfillment = ($argv[3] ?? '') === 'fulfillment' || $decisionMode !== '' || $executionMode !== '';
+    $fulfillment = ($argv[3] ?? '') === 'fulfillment' || $decisionMode !== '' || $executionMode !== '' || $apiMode!=='';
 }
 $expected = realpath($directory);
 $temp = realpath(sys_get_temp_dir());
@@ -88,7 +95,7 @@ config(['database.connections.enfa03_validation' => ['driver' => 'mysql', 'host'
     'database' => $database, 'username' => $username, 'password' => $password, 'charset' => 'utf8mb4',
     'collation' => 'utf8mb4_unicode_ci', 'prefix' => '', 'strict' => true, 'engine' => 'InnoDB']]);
 DB::setDefaultConnection('enfa03_validation');
-if ($executionMode) config(['filesystems.disks.local.root' => $expected.'/evidence-'.$database]);
+if ($executionMode||$apiMode) config(['filesystems.disks.local.root' => $expected.'/evidence-'.$database]);
 
 if ($worker) {
     app(TenantContext::class)->set(Tenant::findOrFail($state['consumer_id']));
@@ -96,8 +103,9 @@ if ($worker) {
     session()->put('tenant_provider_quote_nonce', $state['nonce']);
     if (($argv[3] ?? '') === 'hold') {
         $held = false;
-        DB::listen(function ($query) use (&$held, $statePath, $decisionMode, $executionMode) {
-            if (! $held && str_contains($query->sql, $executionMode ? 'from `local_shipments`' : ($decisionMode ? 'from `network_tenants`' : 'from `b2c_cotizaciones`')) && str_contains($query->sql, 'for update')) {
+        DB::listen(function ($query) use (&$held, $statePath, $decisionMode, $executionMode,$apiMode) {
+            $target=$apiMode?($apiMode==='api-outbox'?'from `tenant_api_webhook_deliveries`':'from `network_provider_integrations`'):($executionMode?'from `local_shipments`':($decisionMode?'from `network_tenants`':'from `b2c_cotizaciones`'));
+            if (! $held && str_contains($query->sql,$target) && str_contains($query->sql, 'for update')) {
                 $held = true;
                 file_put_contents($statePath.'.locked', 'locked');
                 usleep(1000000);
@@ -105,6 +113,19 @@ if ($worker) {
         });
     }
     $started = microtime(true);
+    if($apiMode){
+        if($apiMode==='api-outbox'){
+            config(['provider_crm.adapters.fake'=>FakeProviderCrmAdapter::class]);app(ProviderCrmOutbox::class)->deliver($state['outbox_id']);
+            $body=['event_uuid'=>$state['fulfillment_uuid']];
+        }else{
+            $p=new ProviderApiPrincipal($state['integration_id'],$state['key_id']);$action=match($apiMode){'api-accept'=>'accept','api-tracking'=>'tracking','api-pod'=>'pod'};
+            $data=match($apiMode){'api-tracking'=>['status'=>'PICKED_UP'],'api-pod'=>ProviderTrackingFixture::proofData(),default=>[]};
+            $response=app(ProviderApiOperations::class)->command($p,$state['fulfillment_uuid'],$action,'concurrent-api-key-123',$data,
+                $apiMode==='api-pod'?UploadedFile::fake()->image('proof.jpg'):null,$apiMode==='api-pod'?ProviderTrackingFixture::signature():null);
+            $body=$response['body'];
+        }
+        echo json_encode(['contract_uuid'=>hash('sha256',json_encode($body)),'seconds'=>microtime(true)-$started],JSON_THROW_ON_ERROR);exit;
+    }
     if ($executionMode) {
         $provider = Tenant::findOrFail($state['provider_id']);
         app(TenantContext::class)->set($provider);
@@ -151,7 +172,9 @@ if ($worker) {
     exit;
 }
 
-if ($executionMode) {
+if($apiMode){
+    ProviderApiFixture::schema();$migration=require database_path('migrations/2026_10_13_140000_add_provider_api_boundary.php');$migration->down();$migration->up();
+} elseif ($executionMode) {
     ProviderTrackingFixture::schema();
 } elseif ($decisionMode) {
     ProviderAcceptanceFixture::schema();
@@ -176,13 +199,27 @@ if ($fulfillment) {
         'payment_verified_external_reference' => 'B2C-'.$fixture['quote']->id])->save());
 }
 $decisionState = [];
-if ($decisionMode || $executionMode) {
+if ($decisionMode || $executionMode || $apiMode) {
     $bridge = app(ProviderFulfillmentService::class)->fulfill($fixture['quote']->fresh());
     $actor = User::create(['name' => 'Native Operator', 'email' => 'operator@example.test', 'password' => 'unused']);
     TenantMembership::create(['tenant_id' => $fixture['provider']->id, 'user_id' => $actor->id, 'role' => 'operator', 'status' => 'active']);
     $secondActor = User::create(['name' => 'Second Native Operator', 'email' => 'second@example.test', 'password' => 'unused']);
     TenantMembership::create(['tenant_id' => $fixture['provider']->id, 'user_id' => $secondActor->id, 'role' => 'admin', 'status' => 'active']);
     $decisionState = ['provider_id' => $fixture['provider']->id, 'actor_id' => $actor->id, 'second_actor_id' => $secondActor->id, 'fulfillment_uuid' => $bridge->uuid];
+}
+if($apiMode){
+    ProviderTrackingFixture::grantDriver($fixture);
+    $client=TenantApiClient::create(['tenant_id'=>$fixture['provider']->id,'name'=>'Disposable CRM','environment'=>'SANDBOX','status'=>'ACTIVE','created_by_user_id'=>$actor->id]);
+    $key=TenantApiKey::create(['tenant_id'=>$client->tenant_id,'api_client_id'=>$client->id,'name'=>'Disposable','key_prefix'=>'test','last_four'=>'test','key_hash'=>hash('sha256','disposable-provider-key'),
+        'scopes'=>['provider:fulfillment:read','provider:fulfillment:decide','provider:dispatch:write','provider:tracking:write','provider:pod:write']]);
+    $integration=ProviderIntegration::forceCreate(['provider_tenant_id'=>$client->tenant_id,'api_client_id'=>$client->id,'provider_connection_id'=>$fixture['connection']->id,'status'=>'active','adapter'=>$apiMode==='api-outbox'?'fake':'disabled']);
+    app(ProviderCrmOutbox::class)->publish($bridge);$p=new ProviderApiPrincipal($integration->id,$key->id);
+    $decisionState+=['integration_id'=>$integration->id,'key_id'=>$key->id,'outbox_id'=>DB::table('tenant_api_webhook_deliveries')->value('id')];
+    if(in_array($apiMode,['api-tracking','api-pod'],true)){
+        $operations=app(ProviderApiOperations::class);$operations->command($p,$bridge->uuid,'accept','parent-accept-key',[]);
+        $driver=ProviderTrackingFixture::driver($fixture['provider']);$operations->command($p,$bridge->uuid,'dispatch','parent-dispatch-key',['driver_uuid'=>$driver->uuid]);
+        if($apiMode==='api-pod')foreach(['PICKED_UP','IN_TRANSIT','OUT_FOR_DELIVERY'] as $status)$operations->command($p,$bridge->uuid,'tracking','parent-'.$status,['status'=>$status]);
+    }
 }
 if ($executionMode) {
     ProviderTrackingFixture::grantDriver($fixture);
@@ -203,7 +240,7 @@ if ($executionMode) {
     $economicFingerprint = hash('sha256', json_encode([$frozenContract->getAttributes(), $frozenContract->snapshot->getAttributes()], JSON_THROW_ON_ERROR));
 }
 $statePath = $expected.'/concurrency-'.bin2hex(random_bytes(4)).'.json';
-file_put_contents($statePath, json_encode(array_merge($decisionState, ['port' => $port, 'directory' => $expected, 'database' => $database, 'decision_mode' => $decisionMode, 'execution_mode' => $executionMode,
+file_put_contents($statePath, json_encode(array_merge($decisionState, ['port' => $port, 'directory' => $expected, 'database' => $database, 'decision_mode' => $decisionMode, 'execution_mode' => $executionMode,'api_mode'=>$apiMode,
     'fulfillment' => $fulfillment, 'username' => $username, 'password' => $password, 'consumer_id' => $fixture['consumer']->id, 'quote_id' => $fixture['quote']->id,
     'offer_uuid' => $offer['provider_snapshot_uuid'], 'nonce' => session('tenant_provider_quote_nonce')]), JSON_THROW_ON_ERROR));
 $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
@@ -262,6 +299,18 @@ if ($executionMode) {
     }
     echo 'SQL '.DB::selectOne('SELECT VERSION() AS version')->version.': '.$executionMode.' race OK; one assignment, expected unique tracking/POD/attempts; frozen economy, tenant context, no TRIGGER and existing provider rollback OK.'.PHP_EOL;
     exit;
+}
+if($apiMode){
+    if(ProviderFulfillment::count()!==1||DB::table('local_shipments')->count()!==1||DB::table('network_tenant_operations')->count()!==1
+        ||$fixture['quote']->fresh()->precio!=='145.00'||DB::table('tenant_api_webhook_deliveries')->count()!==1)throw new RuntimeException('API/outbox changed business ownership/economy.');
+    $expectedEvents=match($apiMode){'api-tracking'=>3,'api-pod'=>6,default=>2};
+    if(DB::table('local_tracking_events')->count()!==$expectedEvents||DB::table('local_delivery_proofs')->count()!==($apiMode==='api-pod'?1:0))throw new RuntimeException('API duplicate tracking/POD.');
+    if($apiMode==='api-outbox'){ $out=DB::table('tenant_api_webhook_deliveries')->first();if($out->status!=='PR_DELIVERED'||$out->attempt!==1)throw new RuntimeException('Outbox lease failed.'); }
+    else { $d=DB::table('network_provider_fulfillment_decisions')->first();if(!$d||$d->actor_user_id!==null||$d->channel!=='CRM_API'||(int)$d->actor_api_client_id!==(int)$client->id)throw new RuntimeException('API actor impersonated human.');}
+    if($apiMode!=='api-outbox'&&DB::table('tenant_api_idempotency_records')->where('endpoint_code','like','provider.%')->where('expires_at','<',now()->addHours(12))->exists())throw new RuntimeException('Legacy TIMESTAMP auto-update shortened idempotency retention.');
+    $migration=require database_path('migrations/2026_10_13_140000_add_provider_api_boundary.php');
+    try{$migration->down();throw new LogicException('Rollback erased API history.');}catch(RuntimeException $e){if(!str_contains($e->getMessage(),'Export/migrate'))throw $e;}
+    echo 'SQL '.DB::selectOne('SELECT VERSION() AS version')->version.': '.$apiMode.' concurrent idempotency/lease, nonhuman audit, migration up/down/up and protected populated rollback OK.'.PHP_EOL;exit;
 }
 if ($decisionMode) {
     $decision = ProviderFulfillmentDecision::firstOrFail();

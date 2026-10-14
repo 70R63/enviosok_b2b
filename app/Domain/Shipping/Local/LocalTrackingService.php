@@ -31,11 +31,11 @@ final class LocalTrackingService
         ];
     }
 
-    public function transition(LocalShipment $shipment, string $status, ?int $userId = null, ?string $description = null): LocalTrackingEvent
+    public function transition(LocalShipment $shipment, string $status, ?int $userId = null, ?string $description = null, array $actorMetadata = []): LocalTrackingEvent
     {
         $status = strtoupper($status);
 
-        return DB::transaction(function () use ($shipment, $status, $userId, $description) {
+        return DB::transaction(function () use ($shipment, $status, $userId, $description, $actorMetadata) {
             $shipment = LocalShipment::query()->whereKey($shipment->id)->lockForUpdate()->firstOrFail();
             if ($shipment->status === $status) {
                 return $shipment->events()->where('status', $status)->latest('id')->firstOrFail();
@@ -45,7 +45,9 @@ final class LocalTrackingService
             }
             $shipment->update(['status' => $status]);
 
-            return $shipment->events()->create(['status' => $status, 'event_code' => $status, 'description' => $description, 'occurred_at' => now(), 'created_by_user_id' => $userId]);
+            $data=['status' => $status, 'event_code' => $status, 'description' => $description, 'occurred_at' => now(), 'created_by_user_id' => $userId];
+            if($actorMetadata)$data['metadata']=$actorMetadata;
+            return $shipment->events()->create($data);
         });
     }
 }

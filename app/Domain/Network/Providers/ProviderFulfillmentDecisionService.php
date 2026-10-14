@@ -20,10 +20,11 @@ final class ProviderFulfillmentDecisionService
             ->where('status', 'active')->whereIn('role', ['owner', 'admin', 'operator'])->exists(), 403);
     }
 
-    public function decide(Tenant $provider, string $fulfillmentUuid, User $actor, string $status,
+    public function decide(Tenant $provider, string $fulfillmentUuid, User|ProviderApiPrincipal $actor, string $status,
         ?string $reason = null, string $channel = 'TENANT_UI'): ProviderFulfillmentDecision
     {
-        if (! in_array($status, ['ACCEPTED', 'REJECTED'], true) || ! in_array($channel, ['TENANT_UI', 'INTERNAL'], true)) {
+        if ($actor instanceof ProviderApiPrincipal) $channel='CRM_API';
+        if (! in_array($status, ['ACCEPTED', 'REJECTED'], true) || ! in_array($channel, $actor instanceof ProviderApiPrincipal ? ['CRM_API'] : ['TENANT_UI', 'INTERNAL'], true)) {
             throw ValidationException::withMessages(['decision' => 'Decisión no válida.']);
         }
         $reason = $reason === null ? null : trim($reason);
@@ -38,10 +39,16 @@ final class ProviderFulfillmentDecisionService
         return DB::transaction(function () use ($provider, $fulfillmentUuid, $actor, $status, $reason, $channel) {
             // Current reads revalidate authorization under concurrency; no TenantContext mutation.
             $tenant = Tenant::whereKey($provider->id)->lockForUpdate()->firstOrFail();
+            if($actor instanceof ProviderApiPrincipal){
+                $i=$actor->authorize('provider:fulfillment:decide');
+                abort_unless((int)$i->provider_tenant_id===(int)$tenant->id,404);
+                $actor->fulfillment($fulfillmentUuid);
+            } else {
             $membership = TenantMembership::where('tenant_id', $tenant->id)->where('user_id', $actor->id)
                 ->lockForUpdate()->first();
             abort_unless($tenant->status === 'active' && $membership && $membership->status === 'active'
                 && in_array($membership->role, ['owner', 'admin', 'operator'], true), 403);
+            }
             $fulfillment = ProviderFulfillment::where('provider_tenant_id', $tenant->id)
                 ->where('uuid', $fulfillmentUuid)->lockForUpdate()->firstOrFail();
             $existing = ProviderFulfillmentDecision::where('provider_fulfillment_id', $fulfillment->id)->lockForUpdate()->first();
@@ -53,8 +60,11 @@ final class ProviderFulfillmentDecisionService
                 return $existing;
             }
             $decision = new ProviderFulfillmentDecision;
-            $decision->forceFill(['provider_fulfillment_id' => $fulfillment->id, 'status' => $status,
-                'actor_user_id' => $actor->id, 'channel' => $channel, 'rejection_reason' => $reason, 'decided_at' => now()])->save();
+            $data=['provider_fulfillment_id' => $fulfillment->id, 'status' => $status,
+                'actor_user_id' => $actor instanceof ProviderApiPrincipal ? null : $actor->id,
+                'channel' => $channel, 'rejection_reason' => $reason, 'decided_at' => now()];
+            if($actor instanceof ProviderApiPrincipal)$data['actor_api_client_id']=$actor->clientId();
+            $decision->forceFill($data)->save();
 
             return $decision;
         }, 5);

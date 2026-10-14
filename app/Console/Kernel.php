@@ -27,6 +27,7 @@ class Kernel extends ConsoleKernel
     {
         //$schedule->command('inspire')->hourly();
         $schedule->command('network:provider-fulfillment:retry --limit=100')->everyMinute()->withoutOverlapping(10);
+        $schedule->command('network:provider-crm:deliver --limit=100')->everyMinute()->withoutOverlapping(10);
         $schedule->command('rastreo:automatico')->hourly();
 
         $schedule

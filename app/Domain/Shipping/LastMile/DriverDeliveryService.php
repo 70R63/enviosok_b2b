@@ -14,13 +14,16 @@ final class DriverDeliveryService
 {
     public function __construct(private LocalTrackingService $tracking) {}
 
-    public function deliver(DriverAssignment $assignment, int $userId, ?int $proofId = null): DriverDeliveryAttribution
+    public function deliver(DriverAssignment $assignment, int|\App\Domain\Network\Providers\ProviderApiPrincipal $userId, ?int $proofId = null): DriverDeliveryAttribution
     {
         return DB::transaction(function () use ($assignment, $userId, $proofId): DriverDeliveryAttribution {
             $assignment = DriverAssignment::with(['shipment', 'driverProfile'])->whereKey($assignment->id)->lockForUpdate()->firstOrFail();
-            abort_unless($assignment->status === 'ACTIVE' && (int) $assignment->driverProfile->user_id === $userId, 404);
+            if($userId instanceof \App\Domain\Network\Providers\ProviderApiPrincipal) $userId->authorize('provider:pod:write',$assignment->shipment);
+            abort_unless($assignment->status === 'ACTIVE' && ($userId instanceof \App\Domain\Network\Providers\ProviderApiPrincipal || (int) $assignment->driverProfile->user_id === $userId), 404);
             abort_unless($proofId && LocalDeliveryProof::whereKey($proofId)->where('tenant_id', $assignment->tenant_id)->where('local_shipment_id', $assignment->local_shipment_id)->where('driver_assignment_id', $assignment->id)->where('driver_profile_id', $assignment->driver_profile_id)->exists(), 422, 'Se requiere una prueba de entrega válida.');
-            $event = $this->tracking->transition($assignment->shipment, 'DELIVERED', $userId);
+            $event = $this->tracking->transition($assignment->shipment, 'DELIVERED', $userId instanceof \App\Domain\Network\Providers\ProviderApiPrincipal ? null : $userId, null,
+                $userId instanceof \App\Domain\Network\Providers\ProviderApiPrincipal ? $userId->metadata() : []);
+            $driverUserId=$assignment->driverProfile->user_id;
 
             $attribution = DriverDeliveryAttribution::firstOrCreate(
                 ['local_shipment_id' => $assignment->local_shipment_id],
@@ -28,7 +31,7 @@ final class DriverDeliveryService
                     'tenant_id' => $assignment->tenant_id,
                     'driver_assignment_id' => $assignment->id,
                     'driver_profile_id' => $assignment->driver_profile_id,
-                    'driver_user_id' => $userId,
+                    'driver_user_id' => $driverUserId,
                     'driver_code_snapshot' => $assignment->driverProfile->code,
                     'delivered_at' => $event->occurred_at,
                     'created_at' => now(),
@@ -48,7 +51,7 @@ final class DriverDeliveryService
                     ],
                     [
                         'tenant_id' => $assignment->tenant_id,
-                        'driver_user_id' => $userId,
+                        'driver_user_id' => $driverUserId,
                         'driver_assignment_id' => $assignment->id,
                         'compensation_type' => $policy->compensation_type,
                         'amount' => $policy->amount_per_delivery,

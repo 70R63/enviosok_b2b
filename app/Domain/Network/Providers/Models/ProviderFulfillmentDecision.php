@@ -12,7 +12,7 @@ final class ProviderFulfillmentDecision extends Model
 
     protected $guarded = ['*'];
 
-    protected $hidden = ['id', 'provider_fulfillment_id', 'actor_user_id', 'rejection_reason', 'channel'];
+    protected $hidden = ['id', 'provider_fulfillment_id', 'actor_user_id', 'actor_api_client_id', 'rejection_reason', 'channel'];
 
     protected $casts = ['decided_at' => 'immutable_datetime'];
 
@@ -20,8 +20,8 @@ final class ProviderFulfillmentDecision extends Model
     {
         self::creating(function (self $decision): void {
             if (! in_array($decision->status, ['ACCEPTED', 'REJECTED'], true)
-                || ! in_array($decision->channel, ['TENANT_UI', 'INTERNAL'], true)
-                || ! $decision->actor_user_id || ! $decision->decided_at
+                || ! in_array($decision->channel, ['TENANT_UI', 'INTERNAL','CRM_API'], true)
+                || ($decision->channel==='CRM_API' ? (!$decision->actor_api_client_id || $decision->actor_user_id !== null) : (!$decision->actor_user_id || $decision->actor_api_client_id !== null)) || ! $decision->decided_at
                 || ($decision->status === 'ACCEPTED' && $decision->rejection_reason !== null)
                 || ($decision->rejection_reason !== null && (mb_strlen($decision->rejection_reason) > 500
                     || preg_match('/[\x00-\x1F\x7F]/u', $decision->rejection_reason)))) {

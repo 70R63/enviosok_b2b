@@ -16,7 +16,7 @@ final class DeliveryEvidenceService
 {
     public function __construct(private DriverDeliveryService $delivery, private LocalTrackingService $tracking, private DeliveryRequirementService $requirements) {}
 
-    public function deliver(DriverAssignment $assignment, int $userId, array $data, ?UploadedFile $photo, ?string $signatureBinary): LocalDeliveryProof
+    public function deliver(DriverAssignment $assignment, int|\App\Domain\Network\Providers\ProviderApiPrincipal $userId, array $data, ?UploadedFile $photo, ?string $signatureBinary): LocalDeliveryProof
     {
         $photoPath = $photo ? $this->storeUpload($photo, 'pod/photos') : null;
         $signaturePath = $signatureBinary ? 'pod/signatures/'.Str::uuid().'.png' : null;
@@ -25,7 +25,8 @@ final class DeliveryEvidenceService
         try {
             return DB::transaction(function () use ($assignment, $userId, $data, $photoPath, $signaturePath): LocalDeliveryProof {
                 $locked = DriverAssignment::with(['shipment', 'driverProfile'])->whereKey($assignment->id)->lockForUpdate()->firstOrFail();
-                abort_unless($locked->status === 'ACTIVE' && $locked->shipment->status === 'OUT_FOR_DELIVERY' && (int) $locked->driverProfile->user_id === $userId, 404);
+                if($userId instanceof \App\Domain\Network\Providers\ProviderApiPrincipal) $userId->authorize('provider:pod:write',$locked->shipment);
+                abort_unless($locked->status === 'ACTIVE' && $locked->shipment->status === 'OUT_FOR_DELIVERY' && ($userId instanceof \App\Domain\Network\Providers\ProviderApiPrincipal || (int) $locked->driverProfile->user_id === $userId), 404);
                 $proof = LocalDeliveryProof::create([
                     'tenant_id' => $locked->tenant_id, 'local_shipment_id' => $locked->local_shipment_id,
                     'driver_assignment_id' => $locked->id, 'driver_profile_id' => $locked->driver_profile_id,
@@ -44,13 +45,14 @@ final class DeliveryEvidenceService
         }
     }
 
-    public function fail(DriverAssignment $assignment, int $userId, array $data, ?UploadedFile $photo): LocalDeliveryFailedAttempt
+    public function fail(DriverAssignment $assignment, int|\App\Domain\Network\Providers\ProviderApiPrincipal $userId, array $data, ?UploadedFile $photo): LocalDeliveryFailedAttempt
     {
         $photoPath = $photo ? $this->storeUpload($photo, 'pod/failed') : null;
         try {
             return DB::transaction(function () use ($assignment, $userId, $data, $photoPath): LocalDeliveryFailedAttempt {
                 $locked = DriverAssignment::with(['shipment', 'driverProfile'])->whereKey($assignment->id)->lockForUpdate()->firstOrFail();
-                abort_unless($locked->status === 'ACTIVE' && $locked->shipment->status === 'OUT_FOR_DELIVERY' && (int) $locked->driverProfile->user_id === $userId, 404);
+                if($userId instanceof \App\Domain\Network\Providers\ProviderApiPrincipal) $userId->authorize('provider:tracking:write',$locked->shipment);
+                abort_unless($locked->status === 'ACTIVE' && $locked->shipment->status === 'OUT_FOR_DELIVERY' && ($userId instanceof \App\Domain\Network\Providers\ProviderApiPrincipal || (int) $locked->driverProfile->user_id === $userId), 404);
                 $attemptNumber = LocalDeliveryFailedAttempt::where('local_shipment_id', $locked->local_shipment_id)->lockForUpdate()->count() + 1;
                 if ($attemptNumber > $this->requirements->forShipment($locked->shipment)->max_delivery_attempts) throw \Illuminate\Validation\ValidationException::withMessages(['attempt' => 'Límite de intentos alcanzado.']);
                 $attempt = LocalDeliveryFailedAttempt::create([
@@ -60,7 +62,8 @@ final class DeliveryEvidenceService
                     'latitude' => $data['latitude'] ?? null, 'longitude' => $data['longitude'] ?? null,
                     'accuracy_meters' => $data['accuracy_meters'] ?? null, 'occurred_at' => now(), 'created_at' => now(),
                 ]);
-                $this->tracking->transition($locked->shipment, 'DELIVERY_FAILED', $userId, 'Intento de entrega fallido: '.$attempt->reason);
+                $this->tracking->transition($locked->shipment, 'DELIVERY_FAILED', $userId instanceof \App\Domain\Network\Providers\ProviderApiPrincipal ? null : $userId, 'Intento de entrega fallido: '.$attempt->reason,
+                    $userId instanceof \App\Domain\Network\Providers\ProviderApiPrincipal ? $userId->metadata() : []);
 
                 return $attempt;
             });

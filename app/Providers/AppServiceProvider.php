@@ -42,6 +42,12 @@ class AppServiceProvider extends ServiceProvider
     public function boot()
     {
         \App\Models\B2cCotizacion::observe(\App\Domain\Network\Providers\ProviderPaymentObserver::class);
+        \App\Domain\Network\Providers\Models\ProviderFulfillment::created(function($bridge):void {
+            \Illuminate\Support\Facades\DB::afterCommit(function()use($bridge):void {
+                try {app(\App\Domain\Network\Providers\ProviderCrmOutbox::class)->publish($bridge);}
+                catch(\Throwable){\Illuminate\Support\Facades\Log::warning('provider.outbox.publish_unavailable');}
+            });
+        });
         app(\App\Services\Security\StageSafetyGuard::class)->enforce();
         \App\Domain\Shipping\Local\Models\LocalTrackingEvent::created(function ($event): void { try { app(\App\Domain\ApiHub\ApiWebhookPublisher::class)->tracking($event); } catch (\Throwable $exception) { \Illuminate\Support\Facades\Log::warning('api_hub.webhook_queue_failed',['tracking_event_id'=>$event->id]); } });
         Schema::defaultStringLength(191);

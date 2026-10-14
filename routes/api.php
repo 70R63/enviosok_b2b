@@ -451,6 +451,14 @@ Route::domain(config('zigo_api_hub.host'))->prefix('hub/v1')->name('api.hub.v1.'
     ->middleware(['zigo.api.v1.request','zigo.api.v1.auth','zigo.api.v1.meter'])
     ->group(function (): void {
         Route::get('/postal-codes/{postalCode}', [V1PostalController::class, 'show'])->middleware('zigo.api.v1.scope:postal:read')->where('postalCode','[0-9]{5}')->name('postal.show');
+        Route::prefix('provider')->name('provider.')->middleware(\App\Http\Middleware\AuthorizeProviderApi::class)->group(function():void {
+            $controller=\App\Http\Controllers\API\Hub\V1\ProviderFulfillmentApiController::class;
+            Route::get('/fulfillments',[$controller,'index'])->middleware('zigo.api.v1.scope:provider:fulfillment:read')->name('index');
+            Route::get('/fulfillments/{fulfillment}',[$controller,'show'])->whereUuid('fulfillment')->middleware('zigo.api.v1.scope:provider:fulfillment:read')->name('show');
+            foreach(\App\Domain\Network\Providers\ProviderApiOperations::SCOPES as $action=>$scope){
+                Route::post('/fulfillments/{fulfillment}/'.$action,[$controller,'command'])->whereUuid('fulfillment')->defaults('provider_action',$action)->middleware('zigo.api.v1.scope:'.$scope)->name($action);
+            }
+        });
         Route::post('/quotes', [V1QuoteController::class, 'store'])->middleware('zigo.api.v1.scope:quotes:write')->name('quotes.store');
         Route::post('/shipments', [V1ShipmentController::class, 'store'])->middleware('zigo.api.v1.scope:shipments:write')->name('shipments.store');
         Route::get('/shipments/{shipment}', [V1ShipmentController::class, 'show'])->middleware('zigo.api.v1.scope:shipments:read')->name('shipments.show');
