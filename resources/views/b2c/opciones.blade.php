@@ -433,7 +433,9 @@
                         >
 
                         <div>
-                            @if($opcion['logistico'] === 'FedEx')
+                            @if(($opcion['provider_source'] ?? null) === 'tenant_provider_local')
+@if(!empty($opcion['logo']))<img class="logo-carrier" src="{{ $opcion['logo'] }}" alt="{{ $opcion['logistico'] }}">@else<span aria-hidden="true">&#128230;</span>@endif
+@elseif($opcion['logistico'] === 'FedEx')
                                 <img
                                     class="logo-carrier"
                                     src="{{ asset('img/fedex.png') }}"

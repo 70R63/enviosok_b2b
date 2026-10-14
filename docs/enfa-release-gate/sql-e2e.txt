@@ -1,0 +1,1 @@
+SQL 10.4.32-MariaDB: settlement-partials concurrent locks, immutable source, no overpayment, reconciliation and up/down/up with protected populated rollback OK.

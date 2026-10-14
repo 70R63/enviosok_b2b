@@ -1,0 +1,98 @@
+[
+  {
+    "path": "app/Domain/Network/Providers/LocalProviderQuoteEvaluator.php",
+    "sha256": "2BBB1CDBE26A0D3C6E964DE998C96E7142A84B7F27166AE9952C76D98506F81E"
+  },
+  {
+    "path": "app/Domain/Network/Providers/Models/ProviderQuoteSnapshot.php",
+    "sha256": "885B03A769F88BC8CCC1EC9C7187B488074D0939D4AC810E8F10A7427C5A941D"
+  },
+  {
+    "path": "app/Domain/Shipping/Local/LocalGuidePdfRenderer.php",
+    "sha256": "87E4D6A1A371F3346CA6FA52F7E19EA9F56B0C882746EEDC06B324026D984DBD"
+  },
+  {
+    "path": "app/Domain/Shipping/Local/LocalShipmentService.php",
+    "sha256": "E1C5BBD685A3809DA496B676728573F5ABA48DE27392489ACA7F56E354112A21"
+  },
+  {
+    "path": "resources/views/b2c/checkout.blade.php",
+    "sha256": "9962562FF10B8C201E45F311CCE38007AA1C8CC75E4D9ED322A5C1283120130A"
+  },
+  {
+    "path": "resources/views/b2c/opciones.blade.php",
+    "sha256": "2FA33346ED5BAC7F563CA49359D14F3B35A7A0FCBDFF4E9F1A80680B6BDF05F7"
+  },
+  {
+    "path": "resources/views/b2c/partials/cotizador.blade.php",
+    "sha256": "96343A4764012599725FB45A43D5317AC10BA16FE72D7968ABF787EF33B0C9D0"
+  },
+  {
+    "path": "resources/views/b2c/provider-fulfillment.blade.php",
+    "sha256": "FB8E4E1AED766492DAA4218B5300FBE982569C7E83A26DA6AADAD99C2873557C"
+  },
+  {
+    "path": "resources/views/index.blade.php",
+    "sha256": "35FE8DB9806E3478B45B546A1D0B00C6461C48E09AB46D95E7905E7DC9E030AE"
+  },
+  {
+    "path": "tests/Feature/NetworkProviderFulfillmentTest.php",
+    "sha256": "B14D1416349A07DCC7AA916E4566A237202D4806129A96F6945644B8F1403D70"
+  },
+  {
+    "path": "tests/Feature/NetworkTenantProviderQuotingTest.php",
+    "sha256": "E322F06BD9DFA1CC6E9A3F7A3403A44B867A0EA71BB41502BD164D9D87AB4BBD"
+  },
+  {
+    "path": "app/Domain/Network/Providers/ProviderPresentation.php",
+    "sha256": "71E7AB2126ABFE3A82834AF98CC257501C61280CA252853AFA4B615661C1876E"
+  },
+  {
+    "path": "config/provider_network.php",
+    "sha256": "2C7398D9C979213EDCEE7EBE47C90564F1716AAD48DCF091AAD249FA92B0F90C"
+  },
+  {
+    "path": "docs/ENFA-10-release-candidate.md",
+    "sha256": "5F3919FD919328F53D22C2090F4E337F63B324A27FB879760BB1827C84EA45D7"
+  },
+  {
+    "path": "docs/ENFA-10-validation.md",
+    "sha256": "C6172C7C3037EFE6DA4D2F53AA333A68562AC25C136B6B4382565A55B70E2B3F"
+  },
+  {
+    "path": "docs/ENFA-STAGE-RUNBOOK.md",
+    "sha256": "EB15E0A1CA0B9620CCA354F6270366622502E940D54D4AF79B2CF15C762C8647"
+  },
+  {
+    "path": "docs/enfa10-evidence/baseline.txt",
+    "sha256": "EF8E4DC0D92B2EAD80B2DE4B0ED563C5B98CD0AB96D22CF3B43ED7C9D88396DE"
+  },
+  {
+    "path": "docs/enfa10-evidence/checkout.txt",
+    "sha256": "09CA7ECDDE43FB639F0E59B1E2749044BFF1F58753608AAC8B4B56A1E2884AC9"
+  },
+  {
+    "path": "docs/enfa10-evidence/front-files.txt",
+    "sha256": "E5A60238DE9B57C81DFF4685A97037C139EB4DAFE25A0D0B918E4818A4E81619"
+  },
+  {
+    "path": "docs/enfa10-evidence/front-surface.diff",
+    "sha256": "0A4FC6A913799305678C4985EB476DB578B4D302B2349225132F531037AB3C44"
+  },
+  {
+    "path": "docs/enfa10-evidence/provider.txt",
+    "sha256": "ED6193F3523E3CD8876422178069259A7E088C8FF8D6DC7059051B2548BA8E7E"
+  },
+  {
+    "path": "docs/enfa10-evidence/regression.txt",
+    "sha256": "94D397A2B2D225DC8016A834F2E20C38BEF70C893C1BF941EE62CD53585EFC06"
+  },
+  {
+    "path": "docs/enfa10-evidence/review.diff",
+    "sha256": "2A11A8D44AE668C32A0702C7E3EAE7125F15E844C086B0B6072F4FA4C449CD48"
+  },
+  {
+    "path": "tests/Feature/NetworkProviderReleaseCandidateTest.php",
+    "sha256": "9C8E1AA4F79D5F2E1999D84A1E28D464779CEF41B323FD7E1223F5CB63C03844"
+  }
+]

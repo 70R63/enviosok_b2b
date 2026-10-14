@@ -1,0 +1,86 @@
+[
+  {
+    "path": "app/Domain/Network/Providers/LocalProviderQuoteEvaluator.php",
+    "before": "2BBB1CDBE26A0D3C6E964DE998C96E7142A84B7F27166AE9952C76D98506F81E",
+    "after": "2BBB1CDBE26A0D3C6E964DE998C96E7142A84B7F27166AE9952C76D98506F81E",
+    "unchanged": true
+  },
+  {
+    "path": "app/Domain/Network/Providers/Models/ProviderQuoteSnapshot.php",
+    "before": "885B03A769F88BC8CCC1EC9C7187B488074D0939D4AC810E8F10A7427C5A941D",
+    "after": "885B03A769F88BC8CCC1EC9C7187B488074D0939D4AC810E8F10A7427C5A941D",
+    "unchanged": true
+  },
+  {
+    "path": "app/Domain/Shipping/Local/LocalGuidePdfRenderer.php",
+    "before": "87E4D6A1A371F3346CA6FA52F7E19EA9F56B0C882746EEDC06B324026D984DBD",
+    "after": "87E4D6A1A371F3346CA6FA52F7E19EA9F56B0C882746EEDC06B324026D984DBD",
+    "unchanged": true
+  },
+  {
+    "path": "app/Domain/Shipping/Local/LocalShipmentService.php",
+    "before": "E1C5BBD685A3809DA496B676728573F5ABA48DE27392489ACA7F56E354112A21",
+    "after": "E1C5BBD685A3809DA496B676728573F5ABA48DE27392489ACA7F56E354112A21",
+    "unchanged": true
+  },
+  {
+    "path": "resources/views/b2c/checkout.blade.php",
+    "before": "9962562FF10B8C201E45F311CCE38007AA1C8CC75E4D9ED322A5C1283120130A",
+    "after": "9962562FF10B8C201E45F311CCE38007AA1C8CC75E4D9ED322A5C1283120130A",
+    "unchanged": true
+  },
+  {
+    "path": "resources/views/b2c/opciones.blade.php",
+    "before": "2FA33346ED5BAC7F563CA49359D14F3B35A7A0FCBDFF4E9F1A80680B6BDF05F7",
+    "after": "2FA33346ED5BAC7F563CA49359D14F3B35A7A0FCBDFF4E9F1A80680B6BDF05F7",
+    "unchanged": true
+  },
+  {
+    "path": "resources/views/b2c/partials/cotizador.blade.php",
+    "before": "96343A4764012599725FB45A43D5317AC10BA16FE72D7968ABF787EF33B0C9D0",
+    "after": "96343A4764012599725FB45A43D5317AC10BA16FE72D7968ABF787EF33B0C9D0",
+    "unchanged": true
+  },
+  {
+    "path": "resources/views/b2c/provider-fulfillment.blade.php",
+    "before": "FB8E4E1AED766492DAA4218B5300FBE982569C7E83A26DA6AADAD99C2873557C",
+    "after": "FB8E4E1AED766492DAA4218B5300FBE982569C7E83A26DA6AADAD99C2873557C",
+    "unchanged": true
+  },
+  {
+    "path": "resources/views/index.blade.php",
+    "before": "35FE8DB9806E3478B45B546A1D0B00C6461C48E09AB46D95E7905E7DC9E030AE",
+    "after": "35FE8DB9806E3478B45B546A1D0B00C6461C48E09AB46D95E7905E7DC9E030AE",
+    "unchanged": true
+  },
+  {
+    "path": "tests/Feature/NetworkProviderFulfillmentTest.php",
+    "before": "B14D1416349A07DCC7AA916E4566A237202D4806129A96F6945644B8F1403D70",
+    "after": "B14D1416349A07DCC7AA916E4566A237202D4806129A96F6945644B8F1403D70",
+    "unchanged": true
+  },
+  {
+    "path": "tests/Feature/NetworkTenantProviderQuotingTest.php",
+    "before": "E322F06BD9DFA1CC6E9A3F7A3403A44B867A0EA71BB41502BD164D9D87AB4BBD",
+    "after": "E322F06BD9DFA1CC6E9A3F7A3403A44B867A0EA71BB41502BD164D9D87AB4BBD",
+    "unchanged": true
+  },
+  {
+    "path": "app/Domain/Network/Providers/ProviderPresentation.php",
+    "before": "71E7AB2126ABFE3A82834AF98CC257501C61280CA252853AFA4B615661C1876E",
+    "after": "71E7AB2126ABFE3A82834AF98CC257501C61280CA252853AFA4B615661C1876E",
+    "unchanged": true
+  },
+  {
+    "path": "config/provider_network.php",
+    "before": "2C7398D9C979213EDCEE7EBE47C90564F1716AAD48DCF091AAD249FA92B0F90C",
+    "after": "2C7398D9C979213EDCEE7EBE47C90564F1716AAD48DCF091AAD249FA92B0F90C",
+    "unchanged": true
+  },
+  {
+    "path": "tests/Feature/NetworkProviderReleaseCandidateTest.php",
+    "before": "9C8E1AA4F79D5F2E1999D84A1E28D464779CEF41B323FD7E1223F5CB63C03844",
+    "after": "9C8E1AA4F79D5F2E1999D84A1E28D464779CEF41B323FD7E1223F5CB63C03844",
+    "unchanged": true
+  }
+]

@@ -1,0 +1,8 @@
+tenant.customer.app.support.store=app/ayuda/tickets
+tenant.driver.support.store=MISSING
+driver.support.store=driver/support/tickets
+tenant.admin.support.index=admin/soporte
+network.support.index=network/support
+network.support.store=network/support
+corporate configured host=zigo.local
+network configured host=network.zigo.local

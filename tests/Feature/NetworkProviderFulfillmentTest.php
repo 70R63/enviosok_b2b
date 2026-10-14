@@ -246,7 +246,7 @@ final class NetworkProviderFulfillmentTest extends TestCase
         foreach (['provider_cost', 'provider_tenant_id', 'consumer_tenant_id', 'connection_id', 'profit_amount', 'Cancelar'] as $secret) {
             $this->assertStringNotContainsString($secret, $html);
         }
-        foreach (['Consumer Store', 'Provider Delivery', 'Pickup Street', 'Delivery Street', 'Listo para recolectar'] as $text) {
+        foreach (['Consumer Store', 'Provider Delivery', 'Pickup Street', 'Delivery Street', 'Recolección solicitada'] as $text) {
             $this->assertStringContainsString($text, $html);
         }
     }

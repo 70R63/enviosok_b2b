@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="Tests\Feature\NetworkProviderReleaseGateSafetyTest" file="C:\xampp\htdocs\enviosok_b2b_enfa_provider\tests\Feature\NetworkProviderReleaseGateSafetyTest.php" tests="2" assertions="58" errors="0" failures="0" skipped="0" time="0.620511">
+    <testsuite name="Tests\Feature\NetworkProviderReleaseGateSafetyTest::test_no_active_connection_preserves_national_checkout_and_has_no_provider_side_effects" tests="2" assertions="58" errors="0" failures="0" skipped="0" time="0.620511">
+      <testcase name="test_no_active_connection_preserves_national_checkout_and_has_no_provider_side_effects with data set &quot;no connection&quot;" file="C:\xampp\htdocs\enviosok_b2b_enfa_provider\tests\Feature\NetworkProviderReleaseGateSafetyTest.php" line="31" class="Tests\Feature\NetworkProviderReleaseGateSafetyTest" classname="Tests.Feature.NetworkProviderReleaseGateSafetyTest" assertions="29" time="0.504719"/>
+      <testcase name="test_no_active_connection_preserves_national_checkout_and_has_no_provider_side_effects with data set &quot;inactive connection&quot;" file="C:\xampp\htdocs\enviosok_b2b_enfa_provider\tests\Feature\NetworkProviderReleaseGateSafetyTest.php" line="31" class="Tests\Feature\NetworkProviderReleaseGateSafetyTest" classname="Tests.Feature.NetworkProviderReleaseGateSafetyTest" assertions="29" time="0.115792"/>
+    </testsuite>
+  </testsuite>
+</testsuites>

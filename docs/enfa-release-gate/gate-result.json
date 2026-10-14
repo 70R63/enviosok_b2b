@@ -1,0 +1,14 @@
+{
+  "known_baseline_failures": 21,
+  "new_failures_introduced_by_ENFA": 0,
+  "baseline_failures_changed": 0,
+  "critical_ENFA_failures": 0,
+  "enfa_e2e": "PASS",
+  "feature_safety": "PASS",
+  "migration_gate": "PASS",
+  "decision": "READY FOR STAGE WITH BASELINE EXCEPTIONS",
+  "rc_total": 716,
+  "rc_passed": 695,
+  "rc_errors": 0,
+  "enfa_cases": 377
+}

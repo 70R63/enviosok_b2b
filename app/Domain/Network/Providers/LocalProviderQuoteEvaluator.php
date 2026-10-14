@@ -51,11 +51,12 @@ class LocalProviderQuoteEvaluator
         ?int $tariffId, array $commercial, array $tariff): array
     {
         $key = 'local_'.hash('sha256', $consumer->uuid.'|'.$provider->uuid.'|'.$service->id);
+        $identity = app(ProviderPresentation::class)->identity($provider);
 
         return ['provider' => 'tenant_provider', 'carrier' => $this->commercial->carrierKey($consumer, $provider),
             'provider_source' => 'tenant_provider_local', 'capability' => 'LOCAL_SHIPPING', 'option_key' => $key,
-            'logistico' => $provider->name, 'servicio' => $service->name, 'service_code' => $service->code,
-            'logo' => null, 'entrega' => $service->sla_text ?: ($service->estimated_max_hours ? $service->estimated_max_hours.' h' : 'Por confirmar'),
+            'logistico' => $identity['name'], 'servicio' => $service->name, 'service_code' => $service->code,
+            'logo' => $identity['logo'], 'entrega' => $service->sla_text ?: ($service->estimated_max_hours ? $service->estimated_max_hours.' h' : 'Por confirmar'),
             'base_price' => (float) $commercial['provider_cost'], 'provider_cost' => (float) $commercial['provider_cost'],
             'precio_base' => (float) $commercial['provider_cost'], 'precio' => (float) $commercial['customer_price'],
             'commercial_price' => (float) $commercial['customer_price'], 'currency' => $service->currency,

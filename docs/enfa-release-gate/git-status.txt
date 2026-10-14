@@ -1,0 +1,24 @@
+ M app/Domain/Network/Providers/LocalProviderQuoteEvaluator.php
+ M app/Domain/Network/Providers/Models/ProviderQuoteSnapshot.php
+ M app/Domain/Shipping/Local/LocalGuidePdfRenderer.php
+ M app/Domain/Shipping/Local/LocalShipmentService.php
+ M resources/views/b2c/checkout.blade.php
+ M resources/views/b2c/opciones.blade.php
+ M resources/views/b2c/partials/cotizador.blade.php
+ M resources/views/b2c/provider-fulfillment.blade.php
+ M resources/views/index.blade.php
+ M tests/Feature/NetworkProviderFulfillmentTest.php
+ M tests/Feature/NetworkTenantProviderQuotingTest.php
+?? app/Domain/Network/Providers/ProviderPresentation.php
+?? config/provider_network.php
+?? docs/ENFA-10-release-candidate.md
+?? docs/ENFA-10-validation.md
+?? docs/ENFA-RELEASE-BASELINE-EXCEPTIONS.md
+?? docs/ENFA-STAGE-RUNBOOK.md
+?? docs/enfa-release-gate/
+?? docs/enfa10-evidence/
+?? tests/Feature/NetworkProviderReleaseCandidateTest.php
+?? tests/Feature/NetworkProviderReleaseGateSafetyTest.php
+?? tests/Feature/NetworkProviderReleaseGateSecurityTest.php
+?? tests/Support/analyze_provider_release_gate.php
+?? tests/Support/provider_release_migrations.php

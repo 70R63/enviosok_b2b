@@ -48,9 +48,8 @@ final class LocalShipmentService
             if ($commercialTenant) {
                 $guide['provider'] = $branding?->brand_name ?: $tenant->name;
                 $guide['service_name'] = $data['service_name'] ?? $operation->service_code;
-                // Consumer logo rendering is deferred; preserve existing provider logo isolation.
                 $guide['branding'] = ['brand_name' => $commercialBranding?->brand_name ?: $commercialTenant->name,
-                    'logo_path' => null, 'primary_color' => $commercialBranding?->primary_color];
+                    'logo_path' => $this->snapshotLogo($commercialTenant, $commercialBranding?->logo_path), 'primary_color' => $commercialBranding?->primary_color];
                 $guide['tracking_label'] = 'CONSULTA TU ENVÍO';
             }
             $shipment = LocalShipment::create([
@@ -78,7 +77,7 @@ final class LocalShipmentService
 
     private function snapshotLogo(Tenant $tenant, mixed $path): ?string
     {
-        if (! is_string($path) || ! str_starts_with($path, 'tenant-branding/'.$tenant->uuid.'/')) return null;
+        if (! is_string($path) || ! str_starts_with($path, 'tenant-branding/'.$tenant->uuid.'/') || str_contains($path, '..') || str_contains($path, '\\')) return null;
         $disk = Storage::disk('public');
         if (! $disk->exists($path)) return $path;
         $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION)) ?: 'img';

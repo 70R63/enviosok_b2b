@@ -70,7 +70,8 @@ final class ProviderQuoteSnapshot extends Model
             'contract_selected' => true,
             'logistico' => $this->service_snapshot['provider_name'], 'servicio' => $this->service_snapshot['name'],
             'service_code' => $this->service_snapshot['code'], 'carrier' => $this->service_snapshot['carrier'],
-            'logo' => null, 'commercial_price' => (float) $this->total_amount, 'precio' => (float) $this->total_amount,
+            'logo' => ($tenant = \App\Domain\Network\Tenancy\Models\Tenant::find($this->provider_tenant_id)) ? app(\App\Domain\Network\Providers\ProviderPresentation::class)->identity($tenant)['logo'] : null,
+            'commercial_price' => (float) $this->total_amount, 'precio' => (float) $this->total_amount,
             'currency' => $this->currency, 'insurance_enabled' => false, 'restriction' => false, 'restriction_description' => '',
             'weight_billable' => (float) $this->package_snapshot['weight'],
             'dimensions' => $this->package_snapshot['dimensions'] ?: 'No aplica']);

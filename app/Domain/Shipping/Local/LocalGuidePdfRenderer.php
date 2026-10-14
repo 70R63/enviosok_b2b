@@ -107,7 +107,12 @@ final class LocalGuidePdfRenderer
     private function logo(TCPDF $pdf, LocalShipment $shipment, mixed $path): bool
     {
         $tenant = $shipment->tenant()->first();
-        if (! $tenant || ! is_string($path) || ! str_starts_with($path, 'tenant-branding/'.$tenant->uuid.'/')) return false;
+        if ($shipment->operation?->source_type === 'provider_contract') {
+            $bridge = \App\Domain\Network\Providers\Models\ProviderFulfillment::where('local_shipment_id', $shipment->id)
+                ->where('provider_tenant_id', $shipment->tenant_id)->first();
+            $tenant = $bridge ? \App\Domain\Network\Tenancy\Models\Tenant::find($bridge->consumer_tenant_id) : null;
+        }
+        if (! $tenant || ! is_string($path) || ! str_starts_with($path, 'tenant-branding/'.$tenant->uuid.'/') || str_contains($path, '..') || str_contains($path, '\\')) return false;
         $disk = Storage::disk('public');
         if (! $disk->exists($path)) return false;
         try {

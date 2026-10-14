@@ -1,0 +1,12 @@
+PHPUnit 11.5.56 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.2.12
+Configuration: C:\xampp\htdocs\enviosok_b2b_enfa_provider\phpunit.xml
+
+................................................................. 65 / 92 ( 70%)
+...........................                                       92 / 92 (100%)
+
+Time: 00:04.372, Memory: 88.00 MB
+
+OK, but there were issues!
+Tests: 92, Assertions: 444, PHPUnit Deprecations: 1.

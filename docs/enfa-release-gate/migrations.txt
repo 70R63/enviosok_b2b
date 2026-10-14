@@ -1,0 +1,319 @@
+PASS migration user has no TRIGGER privilege
+PASS six ENFA migrations in chronological order
+PASS 2026_10_13_100000_create_network_provider_connections.php has no trigger DDL or seeded tenant data
+PASS 2026_10_13_110000_create_network_provider_contract_snapshots.php has no trigger DDL or seeded tenant data
+PASS 2026_10_13_120000_create_network_provider_fulfillments.php has no trigger DDL or seeded tenant data
+PASS 2026_10_13_130000_create_network_provider_fulfillment_decisions.php has no trigger DDL or seeded tenant data
+PASS 2026_10_13_140000_add_provider_api_boundary.php has no trigger DDL or seeded tenant data
+PASS 2026_10_13_150000_create_provider_payable_ledger.php has no trigger DDL or seeded tenant data
+PASS fresh equivalent schema creates eleven provider tables
+PASS network_provider_connections empty after migration
+PASS network_provider_connection_services empty after migration
+PASS network_provider_contracts empty after migration
+PASS network_provider_external_references empty after migration
+PASS network_provider_fulfillments empty after migration
+PASS network_provider_fulfillment_decisions empty after migration
+PASS network_provider_integrations empty after migration
+PASS network_provider_payables empty after migration
+PASS network_provider_payable_events empty after migration
+PASS network_provider_quote_snapshots empty after migration
+PASS network_provider_settlement_entries empty after migration
+PASS empty rollback 2026_10_13_150000_create_provider_payable_ledger.php
+PASS empty rollback 2026_10_13_140000_add_provider_api_boundary.php
+PASS empty rollback 2026_10_13_130000_create_network_provider_fulfillment_decisions.php
+PASS empty rollback 2026_10_13_120000_create_network_provider_fulfillments.php
+PASS empty rollback 2026_10_13_110000_create_network_provider_contract_snapshots.php
+PASS empty rollback 2026_10_13_100000_create_network_provider_connections.php
+PASS all provider schema removed in empty rollback
+PASS ordered up 2026_10_13_100000_create_network_provider_connections.php
+PASS ordered up 2026_10_13_110000_create_network_provider_contract_snapshots.php
+PASS ordered up 2026_10_13_120000_create_network_provider_fulfillments.php
+PASS ordered up 2026_10_13_130000_create_network_provider_fulfillment_decisions.php
+PASS ordered up 2026_10_13_140000_add_provider_api_boundary.php
+PASS ordered up 2026_10_13_150000_create_provider_payable_ledger.php
+PASS network_provider_connections FK and indexes installed
+PASS network_provider_connection_services FK and indexes installed
+PASS network_provider_contracts FK and indexes installed
+PASS network_provider_external_references FK and indexes installed
+PASS network_provider_fulfillments FK and indexes installed
+PASS network_provider_fulfillment_decisions FK and indexes installed
+PASS network_provider_integrations FK and indexes installed
+PASS network_provider_payables FK and indexes installed
+PASS network_provider_payable_events FK and indexes installed
+PASS network_provider_quote_snapshots FK and indexes installed
+PASS network_provider_settlement_entries FK and indexes installed
+PASS zero triggers
+PASS covered quote visible
+PASS uncovered quote hidden
+PASS composite ownership FK rejects foreign service grant
+PASS consumer context unchanged
+{
+    "version": "10.4.32-MariaDB",
+    "schema": "fresh fixture-equivalent parents; real ENFA migrations",
+    "inventory": {
+        "network_provider_connections": {
+            "foreign_keys": [
+                {
+                    "CONSTRAINT_NAME": "net_provider_consumer_fk",
+                    "REFERENCED_TABLE_NAME": "network_tenants"
+                },
+                {
+                    "CONSTRAINT_NAME": "net_provider_provider_fk",
+                    "REFERENCED_TABLE_NAME": "network_tenants"
+                }
+            ],
+            "indexes": [
+                "PRIMARY",
+                "net_provider_pair_uq",
+                "net_provider_identity_uq",
+                "net_provider_contract_scope_uq",
+                "pr_api_connection_owner_uq",
+                "net_provider_consumer_idx",
+                "net_provider_provider_idx"
+            ]
+        },
+        "network_provider_connection_services": {
+            "foreign_keys": [
+                {
+                    "CONSTRAINT_NAME": "net_provider_service_connection_fk",
+                    "REFERENCED_TABLE_NAME": "network_provider_connections"
+                },
+                {
+                    "CONSTRAINT_NAME": "net_provider_service_owner_fk",
+                    "REFERENCED_TABLE_NAME": "local_shipping_services"
+                }
+            ],
+            "indexes": [
+                "PRIMARY",
+                "net_provider_service_uq",
+                "net_provider_service_connection_fk",
+                "net_provider_service_owner_idx"
+            ]
+        },
+        "network_provider_contracts": {
+            "foreign_keys": [
+                {
+                    "CONSTRAINT_NAME": "net_provider_contract_b2c_fk",
+                    "REFERENCED_TABLE_NAME": "b2c_cotizaciones"
+                },
+                {
+                    "CONSTRAINT_NAME": "net_provider_contract_offer_fk",
+                    "REFERENCED_TABLE_NAME": "network_provider_quote_snapshots"
+                },
+                {
+                    "CONSTRAINT_NAME": "net_provider_contract_user_fk",
+                    "REFERENCED_TABLE_NAME": "users"
+                }
+            ],
+            "indexes": [
+                "PRIMARY",
+                "net_provider_contract_uuid_uq",
+                "net_provider_contract_offer_uq",
+                "net_provider_contract_b2c_uq",
+                "net_pf_contract_scope_uq",
+                "net_provider_contract_offer_fk",
+                "net_provider_contract_user_fk"
+            ]
+        },
+        "network_provider_external_references": {
+            "foreign_keys": [
+                {
+                    "CONSTRAINT_NAME": "pr_api_ref_fulfillment_fk",
+                    "REFERENCED_TABLE_NAME": "network_provider_fulfillments"
+                },
+                {
+                    "CONSTRAINT_NAME": "pr_api_ref_integration_fk",
+                    "REFERENCED_TABLE_NAME": "network_provider_integrations"
+                }
+            ],
+            "indexes": [
+                "PRIMARY",
+                "pr_api_ref_fulfillment_uq",
+                "pr_api_ref_external_uq",
+                "pr_api_ref_fulfillment_fk"
+            ]
+        },
+        "network_provider_fulfillments": {
+            "foreign_keys": [
+                {
+                    "CONSTRAINT_NAME": "net_pf_contract_fk",
+                    "REFERENCED_TABLE_NAME": "network_provider_contracts"
+                },
+                {
+                    "CONSTRAINT_NAME": "net_pf_offer_fk",
+                    "REFERENCED_TABLE_NAME": "network_provider_quote_snapshots"
+                },
+                {
+                    "CONSTRAINT_NAME": "net_pf_operation_fk",
+                    "REFERENCED_TABLE_NAME": "network_tenant_operations"
+                },
+                {
+                    "CONSTRAINT_NAME": "net_pf_shipment_fk",
+                    "REFERENCED_TABLE_NAME": "local_shipments"
+                }
+            ],
+            "indexes": [
+                "PRIMARY",
+                "net_pf_uuid_uq",
+                "net_pf_contract_uq",
+                "net_pf_operation_uq",
+                "net_pf_shipment_uq",
+                "np_payable_bridge_uq",
+                "net_pf_contract_fk",
+                "net_pf_offer_fk",
+                "net_pf_operation_fk",
+                "net_pf_shipment_fk",
+                "net_pf_consumer_idx"
+            ]
+        },
+        "network_provider_fulfillment_decisions": {
+            "foreign_keys": [
+                {
+                    "CONSTRAINT_NAME": "net_pfd_actor_fk",
+                    "REFERENCED_TABLE_NAME": "users"
+                },
+                {
+                    "CONSTRAINT_NAME": "net_pfd_fulfillment_fk",
+                    "REFERENCED_TABLE_NAME": "network_provider_fulfillments"
+                },
+                {
+                    "CONSTRAINT_NAME": "pr_api_decision_actor_fk",
+                    "REFERENCED_TABLE_NAME": "tenant_api_clients"
+                }
+            ],
+            "indexes": [
+                "PRIMARY",
+                "net_pfd_uuid_uq",
+                "net_pfd_fulfillment_uq",
+                "net_pfd_actor_fk",
+                "net_pfd_status_idx",
+                "pr_api_decision_actor_fk"
+            ]
+        },
+        "network_provider_integrations": {
+            "foreign_keys": [
+                {
+                    "CONSTRAINT_NAME": "pr_api_client_owner_fk",
+                    "REFERENCED_TABLE_NAME": "tenant_api_clients"
+                },
+                {
+                    "CONSTRAINT_NAME": "pr_api_connection_owner_fk",
+                    "REFERENCED_TABLE_NAME": "network_provider_connections"
+                }
+            ],
+            "indexes": [
+                "PRIMARY",
+                "network_provider_integrations_uuid_unique",
+                "network_provider_integrations_api_client_id_unique",
+                "pr_api_client_owner_fk",
+                "pr_api_connection_owner_fk"
+            ]
+        },
+        "network_provider_payables": {
+            "foreign_keys": [
+                {
+                    "CONSTRAINT_NAME": "np_payable_bridge_fk",
+                    "REFERENCED_TABLE_NAME": "network_provider_fulfillments"
+                }
+            ],
+            "indexes": [
+                "PRIMARY",
+                "np_payable_owner_uq",
+                "network_provider_payables_uuid_unique",
+                "network_provider_payables_provider_fulfillment_id_unique",
+                "network_provider_payables_provider_contract_id_unique",
+                "np_payable_bridge_fk",
+                "np_payable_list_idx"
+            ]
+        },
+        "network_provider_payable_events": {
+            "foreign_keys": [
+                {
+                    "CONSTRAINT_NAME": "network_provider_payable_events_actor_user_id_foreign",
+                    "REFERENCED_TABLE_NAME": "users"
+                },
+                {
+                    "CONSTRAINT_NAME": "network_provider_payable_events_provider_payable_id_foreign",
+                    "REFERENCED_TABLE_NAME": "network_provider_payables"
+                },
+                {
+                    "CONSTRAINT_NAME": "network_provider_payable_events_settlement_entry_id_foreign",
+                    "REFERENCED_TABLE_NAME": "network_provider_settlement_entries"
+                }
+            ],
+            "indexes": [
+                "PRIMARY",
+                "np_payable_event_source_uq",
+                "network_provider_payable_events_uuid_unique",
+                "network_provider_payable_events_actor_user_id_foreign",
+                "network_provider_payable_events_settlement_entry_id_foreign"
+            ]
+        },
+        "network_provider_quote_snapshots": {
+            "foreign_keys": [
+                {
+                    "CONSTRAINT_NAME": "net_provider_offer_b2c_fk",
+                    "REFERENCED_TABLE_NAME": "b2c_cotizaciones"
+                },
+                {
+                    "CONSTRAINT_NAME": "net_provider_offer_connection_fk",
+                    "REFERENCED_TABLE_NAME": "network_provider_connections"
+                },
+                {
+                    "CONSTRAINT_NAME": "net_provider_offer_consumer_fk",
+                    "REFERENCED_TABLE_NAME": "network_tenants"
+                },
+                {
+                    "CONSTRAINT_NAME": "net_provider_offer_pricing_fk",
+                    "REFERENCED_TABLE_NAME": "zigo_pricing_rules"
+                },
+                {
+                    "CONSTRAINT_NAME": "net_provider_offer_provider_fk",
+                    "REFERENCED_TABLE_NAME": "network_tenants"
+                },
+                {
+                    "CONSTRAINT_NAME": "net_provider_offer_service_fk",
+                    "REFERENCED_TABLE_NAME": "local_shipping_services"
+                },
+                {
+                    "CONSTRAINT_NAME": "net_provider_offer_tariff_fk",
+                    "REFERENCED_TABLE_NAME": "local_shipping_pricing_rules"
+                }
+            ],
+            "indexes": [
+                "PRIMARY",
+                "net_provider_offer_quote_uq",
+                "net_provider_offer_uuid_uq",
+                "net_pf_offer_scope_uq",
+                "net_provider_offer_b2c_fk",
+                "net_provider_offer_provider_fk",
+                "net_provider_offer_tariff_fk",
+                "net_provider_offer_pricing_fk",
+                "net_provider_offer_connection_fk",
+                "net_provider_offer_service_fk",
+                "net_provider_offer_lookup_idx"
+            ]
+        },
+        "network_provider_settlement_entries": {
+            "foreign_keys": [
+                {
+                    "CONSTRAINT_NAME": "network_provider_settlement_entries_actor_user_id_foreign",
+                    "REFERENCED_TABLE_NAME": "users"
+                },
+                {
+                    "CONSTRAINT_NAME": "np_settlement_owner_fk",
+                    "REFERENCED_TABLE_NAME": "network_provider_payables"
+                }
+            ],
+            "indexes": [
+                "PRIMARY",
+                "np_settlement_key_uq",
+                "np_settlement_reference_uq",
+                "network_provider_settlement_entries_uuid_unique",
+                "network_provider_settlement_entries_actor_user_id_foreign",
+                "np_settlement_owner_fk"
+            ]
+        }
+    }
+}
+MIGRATION_GATE=PASS

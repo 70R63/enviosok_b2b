@@ -1,0 +1,170 @@
+[
+  {
+    "suite": "Tests\\Feature\\DriverLastMileFoundationTest",
+    "test": "test_permissions_state_machine_public_tracking_append_only_and_usage_contract",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\DriverLastMileFoundationTest.php",
+    "line": "196",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponseAssert.php:45 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:710 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\DriverLastMileFoundationTest.php:216"
+  },
+  {
+    "suite": "Tests\\Feature\\DriverLastMileFoundationTest",
+    "test": "test_customer_pickup_is_fixed_idempotent_ignores_client_logistics_fields_and_enters_tenant_queue",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\DriverLastMileFoundationTest.php",
+    "line": "222",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponseAssert.php:45 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:710 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\DriverLastMileFoundationTest.php:240"
+  },
+  {
+    "suite": "Tests\\Feature\\NetworkBuildYourZigoTest",
+    "test": "test_dashboard_and_tenant_detail_show_only_effective_modules_without_blade_directives",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\NetworkBuildYourZigoTest.php",
+    "line": "10",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:175 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\Concerns\\AssertsStatusCodes.php:16 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\NetworkBuildYourZigoTest.php:10"
+  },
+  {
+    "suite": "Tests\\Feature\\NetworkBuildYourZigoTest",
+    "test": "test_tenant_without_plan_shows_no_catalog_modules_as_contracted",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\NetworkBuildYourZigoTest.php",
+    "line": "11",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:175 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\Concerns\\AssertsStatusCodes.php:16 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\NetworkBuildYourZigoTest.php:11"
+  },
+  {
+    "suite": "Tests\\Feature\\NetworkTenantB2cTest",
+    "test": "test_operation_shipment_guide_and_tracking_are_tenant_isolated_and_public_tracking_is_private",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\NetworkTenantB2cTest.php",
+    "line": "378",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponseAssert.php:45 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:710 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\NetworkTenantB2cTest.php:413"
+  },
+  {
+    "suite": "Tests\\Feature\\NetworkWhiteLabelTest",
+    "test": "test_preview_uses_fallback_and_only_included_modules",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\NetworkWhiteLabelTest.php",
+    "line": "12",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponseAssert.php:45 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:710 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\NetworkWhiteLabelTest.php:12"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoCustomerPortalNavigationTest",
+    "test": "test_known_tracking_statuses_use_canonical_labels_on_customer_admin_and_public_surfaces",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoCustomerPortalTest.php",
+    "line": "157",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponseAssert.php:45 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:710 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoCustomerPortalTest.php:178"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoCustomerPortalTest",
+    "test": "test_known_tracking_statuses_use_canonical_labels_on_customer_admin_and_public_surfaces",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoCustomerPortalTest.php",
+    "line": "157",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponseAssert.php:45 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:710 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoCustomerPortalTest.php:178"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest",
+    "test": "test_host_auth_and_two_factor_contract_are_preserved",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOnboardingOperationsTest.php",
+    "line": "43",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:175 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\Concerns\\AssertsStatusCodes.php:151 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOnboardingOperationsTest.php:48"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest",
+    "test": "test_payment_approved_failed_is_visible_and_security_contract_is_preserved",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOperationsConsoleTest.php",
+    "line": "49",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:175 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\Concerns\\AssertsStatusCodes.php:151 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOperationsConsoleTest.php:53"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest",
+    "test": "test_pre_stage_network_navigation_smoke_has_no_dead_or_duplicate_links",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOperationsConsoleTest.php",
+    "line": "64",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:175 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\Concerns\\AssertsStatusCodes.php:151 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOperationsConsoleTest.php:69"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest",
+    "test": "test_reminders_are_configurable_and_idempotent",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkBillingLifecycleTest.php",
+    "line": "36",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "Failed asserting that false is true. | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkBillingLifecycleTest.php:41"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest",
+    "test": "test_notice_uses_server_side_order_amount_semantics_and_tenant_payment_cta",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkBillingLifecycleTest.php",
+    "line": "72",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "Failed asserting that false is true. | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkBillingLifecycleTest.php:78"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoNetworkOnboardingOperationsTest",
+    "test": "test_host_auth_and_two_factor_contract_are_preserved",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOnboardingOperationsTest.php",
+    "line": "43",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:175 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\Concerns\\AssertsStatusCodes.php:151 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOnboardingOperationsTest.php:48"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoNetworkOperationsConsoleTest",
+    "test": "test_host_auth_and_two_factor_contract_are_preserved",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOnboardingOperationsTest.php",
+    "line": "43",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:175 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\Concerns\\AssertsStatusCodes.php:151 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOnboardingOperationsTest.php:48"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoNetworkOperationsConsoleTest",
+    "test": "test_payment_approved_failed_is_visible_and_security_contract_is_preserved",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOperationsConsoleTest.php",
+    "line": "49",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:175 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\Concerns\\AssertsStatusCodes.php:151 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOperationsConsoleTest.php:53"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoNetworkOperationsConsoleTest",
+    "test": "test_pre_stage_network_navigation_smoke_has_no_dead_or_duplicate_links",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOperationsConsoleTest.php",
+    "line": "64",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:175 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\Concerns\\AssertsStatusCodes.php:151 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOperationsConsoleTest.php:69"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoSaasOnboardingEndToEndTest",
+    "test": "test_unknown_visitor_reaches_operational_tenant_owner_customer_and_network",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoSaasOnboardingEndToEndTest.php",
+    "line": "38",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:175 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\Concerns\\AssertsStatusCodes.php:16 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoSaasOnboardingEndToEndTest.php:42"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoStageHostContractTest",
+    "test": "test_driver_and_network_surfaces_do_not_leak_across_hosts",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoStageHostContractTest.php",
+    "line": "21",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:175 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\Concerns\\AssertsStatusCodes.php:151 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoStageHostContractTest.php:23"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoSupportCenterTest",
+    "test": "test_route_contract_enforces_surface_middleware_and_network_scope_controller",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoSupportCenterTest.php",
+    "line": "11",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoSupportCenterTest.php:11"
+  },
+  {
+    "suite": "Tests\\Feature\\ZigoTenantRetentionTest",
+    "test": "test_pre_stage_network_navigation_smoke_has_no_dead_or_duplicate_links",
+    "file": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOperationsConsoleTest.php",
+    "line": "64",
+    "type": "PHPUnit\\Framework\\ExpectationFailedException",
+    "tail": "C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponse.php:175 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\Concerns\\AssertsStatusCodes.php:151 | C:\\xampp\\htdocs\\enviosok_b2b_enfa_provider\\tests\\Feature\\ZigoNetworkOperationsConsoleTest.php:69"
+  }
+]

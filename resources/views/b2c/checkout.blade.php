@@ -870,6 +870,14 @@
                     <h2>Resumen</h2>
 
                     <div class="summary-row"><span>Mensajería</span><strong>{{ $cotizacion->logistico }}</strong></div>
+                    @if($cotizacion->provider === 'tenant_provider_local')
+                        @php
+                            $partnerTenant = \App\Domain\Network\Tenancy\Models\Tenant::find($cotizacion->providerContract?->snapshot?->provider_tenant_id);
+                            $partnerLogo = $partnerTenant ? app(\App\Domain\Network\Providers\ProviderPresentation::class)->identity($partnerTenant)['logo'] : null;
+                        @endphp
+                        <p>Operado por {{ $cotizacion->logistico }}</p>
+                        @if($partnerLogo)<img src="{{ $partnerLogo }}" alt="{{ $cotizacion->logistico }}" style="max-width:120px;max-height:60px">@else<span aria-hidden="true">&#128230;</span>@endif
+                    @endif
                     <div class="summary-row"><span>Servicio</span><strong>{{ $cotizacion->servicio }}</strong></div>
                     @if(!empty($quoteMetadata))
                         <div class="summary-row">

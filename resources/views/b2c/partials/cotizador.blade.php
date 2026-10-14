@@ -354,7 +354,9 @@
                         >
 
                         <div>
-                            <strong>{{ $opcion['logistico'] }}</strong>
+                            @if(($opcion['provider_source'] ?? null) === 'tenant_provider_local')
+@if(!empty($opcion['logo']))<img src="{{ $opcion['logo'] }}" alt="" style="max-width:100px;max-height:50px">@else<span aria-hidden="true">&#128230;</span>@endif
+@endif<strong>{{ $opcion['logistico'] }}</strong>
                             <div>{{ $opcion['servicio'] }}</div>
                         </div>
 

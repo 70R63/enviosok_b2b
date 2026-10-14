@@ -1,0 +1,510 @@
+[
+    {
+        "number": 1,
+        "key": "Tests\\Feature\\DriverLastMileFoundationTest::test_permissions_state_machine_public_tracking_append_only_and_usage_contract",
+        "suite": "Tests\\Feature\\DriverLastMileFoundationTest",
+        "test": "test_permissions_state_machine_public_tracking_append_only_and_usage_contract",
+        "file": "tests/Feature/DriverLastMileFoundationTest.php",
+        "line": "216",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertSee",
+            "expected": "DELIVERED",
+            "actual": "missing from HTTP response"
+        },
+        "rc": {
+            "assertion": "assertSee",
+            "expected": "DELIVERED",
+            "actual": "missing from HTTP response"
+        },
+        "normalized_equal": true,
+        "base_sha256": "64d681167c4603c8b00d47620807a66baa1146d577b009d57c10d7a0b1b3ed6a",
+        "rc_sha256": "64d681167c4603c8b00d47620807a66baa1146d577b009d57c10d7a0b1b3ed6a",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 2,
+        "key": "Tests\\Feature\\DriverLastMileFoundationTest::test_customer_pickup_is_fixed_idempotent_ignores_client_logistics_fields_and_enters_tenant_queue",
+        "suite": "Tests\\Feature\\DriverLastMileFoundationTest",
+        "test": "test_customer_pickup_is_fixed_idempotent_ignores_client_logistics_fields_and_enters_tenant_queue",
+        "file": "tests/Feature/DriverLastMileFoundationTest.php",
+        "line": "240",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertSee",
+            "expected": "READY FOR PICKUP",
+            "actual": "missing from HTTP response"
+        },
+        "rc": {
+            "assertion": "assertSee",
+            "expected": "READY FOR PICKUP",
+            "actual": "missing from HTTP response"
+        },
+        "normalized_equal": true,
+        "base_sha256": "4fffe0149372025da4ba4214309657b94ee114ac9adb5f7e8cc7e359ec398cea",
+        "rc_sha256": "4fffe0149372025da4ba4214309657b94ee114ac9adb5f7e8cc7e359ec398cea",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 3,
+        "key": "Tests\\Feature\\NetworkBuildYourZigoTest::test_dashboard_and_tenant_detail_show_only_effective_modules_without_blade_directives",
+        "suite": "Tests\\Feature\\NetworkBuildYourZigoTest",
+        "test": "test_dashboard_and_tenant_detail_show_only_effective_modules_without_blade_directives",
+        "file": "tests/Feature/NetworkBuildYourZigoTest.php",
+        "line": "10",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertStatus",
+            "expected": "200",
+            "actual": "500",
+            "cause": "SQLite fixture lacks network_subscriptions"
+        },
+        "rc": {
+            "assertion": "assertStatus",
+            "expected": "200",
+            "actual": "500",
+            "cause": "SQLite fixture lacks network_subscriptions"
+        },
+        "normalized_equal": true,
+        "base_sha256": "39f0a9b82079d9a07694c7235b582874933abc2656dff3142a55a1f09faecf38",
+        "rc_sha256": "39f0a9b82079d9a07694c7235b582874933abc2656dff3142a55a1f09faecf38",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 4,
+        "key": "Tests\\Feature\\NetworkBuildYourZigoTest::test_tenant_without_plan_shows_no_catalog_modules_as_contracted",
+        "suite": "Tests\\Feature\\NetworkBuildYourZigoTest",
+        "test": "test_tenant_without_plan_shows_no_catalog_modules_as_contracted",
+        "file": "tests/Feature/NetworkBuildYourZigoTest.php",
+        "line": "11",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertStatus",
+            "expected": "200",
+            "actual": "500",
+            "cause": "SQLite fixture lacks network_subscriptions"
+        },
+        "rc": {
+            "assertion": "assertStatus",
+            "expected": "200",
+            "actual": "500",
+            "cause": "SQLite fixture lacks network_subscriptions"
+        },
+        "normalized_equal": true,
+        "base_sha256": "a0d10552f6fc711f0958d6ab3b76b33175a4b502ca9c03a2785ea6a7d3b9cc4c",
+        "rc_sha256": "a0d10552f6fc711f0958d6ab3b76b33175a4b502ca9c03a2785ea6a7d3b9cc4c",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 5,
+        "key": "Tests\\Feature\\NetworkTenantB2cTest::test_operation_shipment_guide_and_tracking_are_tenant_isolated_and_public_tracking_is_private",
+        "suite": "Tests\\Feature\\NetworkTenantB2cTest",
+        "test": "test_operation_shipment_guide_and_tracking_are_tenant_isolated_and_public_tracking_is_private",
+        "file": "tests/Feature/NetworkTenantB2cTest.php",
+        "line": "413",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertSee",
+            "expected": "TENANT ADMIN",
+            "actual": "missing from HTTP response"
+        },
+        "rc": {
+            "assertion": "assertSee",
+            "expected": "TENANT ADMIN",
+            "actual": "missing from HTTP response"
+        },
+        "normalized_equal": true,
+        "base_sha256": "fb4bb9c0f274e74e53c74030b95c2078d26a36e99f074917eaf0b2e618245c46",
+        "rc_sha256": "fb4bb9c0f274e74e53c74030b95c2078d26a36e99f074917eaf0b2e618245c46",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 6,
+        "key": "Tests\\Feature\\NetworkWhiteLabelTest::test_preview_uses_fallback_and_only_included_modules",
+        "suite": "Tests\\Feature\\NetworkWhiteLabelTest",
+        "test": "test_preview_uses_fallback_and_only_included_modules",
+        "file": "tests/Feature/NetworkWhiteLabelTest.php",
+        "line": "12",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertSee",
+            "expected": "#185FA8",
+            "actual": "missing from HTTP response"
+        },
+        "rc": {
+            "assertion": "assertSee",
+            "expected": "#185FA8",
+            "actual": "missing from HTTP response"
+        },
+        "normalized_equal": true,
+        "base_sha256": "0471f8de6ad6e652584ce50258ddd1a0855e764ba7635a12b2cea3dd04ee38e9",
+        "rc_sha256": "0471f8de6ad6e652584ce50258ddd1a0855e764ba7635a12b2cea3dd04ee38e9",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 7,
+        "key": "Tests\\Feature\\ZigoCustomerPortalNavigationTest::test_known_tracking_statuses_use_canonical_labels_on_customer_admin_and_public_surfaces",
+        "suite": "Tests\\Feature\\ZigoCustomerPortalNavigationTest",
+        "test": "test_known_tracking_statuses_use_canonical_labels_on_customer_admin_and_public_surfaces",
+        "file": "tests/Feature/ZigoCustomerPortalTest.php",
+        "line": "178",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertSee",
+            "expected": "TENANT ADMIN",
+            "actual": "missing from HTTP response"
+        },
+        "rc": {
+            "assertion": "assertSee",
+            "expected": "TENANT ADMIN",
+            "actual": "missing from HTTP response"
+        },
+        "normalized_equal": true,
+        "base_sha256": "6aef5f43aa59581f7e21430966364e0b2ade971e3823cdf72108cd6ab9f0b73b",
+        "rc_sha256": "6aef5f43aa59581f7e21430966364e0b2ade971e3823cdf72108cd6ab9f0b73b",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 8,
+        "key": "Tests\\Feature\\ZigoCustomerPortalTest::test_known_tracking_statuses_use_canonical_labels_on_customer_admin_and_public_surfaces",
+        "suite": "Tests\\Feature\\ZigoCustomerPortalTest",
+        "test": "test_known_tracking_statuses_use_canonical_labels_on_customer_admin_and_public_surfaces",
+        "file": "tests/Feature/ZigoCustomerPortalTest.php",
+        "line": "178",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertSee",
+            "expected": "TENANT ADMIN",
+            "actual": "missing from HTTP response"
+        },
+        "rc": {
+            "assertion": "assertSee",
+            "expected": "TENANT ADMIN",
+            "actual": "missing from HTTP response"
+        },
+        "normalized_equal": true,
+        "base_sha256": "636ad0d679ffe116e87861751e4107a7d87e9c818ace6613b404212ca27c81c8",
+        "rc_sha256": "636ad0d679ffe116e87861751e4107a7d87e9c818ace6613b404212ca27c81c8",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 9,
+        "key": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest::test_host_auth_and_two_factor_contract_are_preserved",
+        "suite": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest",
+        "test": "test_host_auth_and_two_factor_contract_are_preserved",
+        "file": "tests/Feature/ZigoNetworkOnboardingOperationsTest.php",
+        "line": "48",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "rc": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "normalized_equal": true,
+        "base_sha256": "5429a2904fb20d8588126dc57d777305cd3943e39e34a7a2bf4d5881e4417572",
+        "rc_sha256": "5429a2904fb20d8588126dc57d777305cd3943e39e34a7a2bf4d5881e4417572",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 10,
+        "key": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest::test_payment_approved_failed_is_visible_and_security_contract_is_preserved",
+        "suite": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest",
+        "test": "test_payment_approved_failed_is_visible_and_security_contract_is_preserved",
+        "file": "tests/Feature/ZigoNetworkOperationsConsoleTest.php",
+        "line": "53",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "rc": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "normalized_equal": true,
+        "base_sha256": "5e5df6e81cea8fb0a730adc9115825fded6b5878a41cea2455673179ddf1e87f",
+        "rc_sha256": "5e5df6e81cea8fb0a730adc9115825fded6b5878a41cea2455673179ddf1e87f",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 11,
+        "key": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest::test_pre_stage_network_navigation_smoke_has_no_dead_or_duplicate_links",
+        "suite": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest",
+        "test": "test_pre_stage_network_navigation_smoke_has_no_dead_or_duplicate_links",
+        "file": "tests/Feature/ZigoNetworkOperationsConsoleTest.php",
+        "line": "69",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "rc": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "normalized_equal": true,
+        "base_sha256": "49ecc9b380dd35dc14fac50edc5ce2e4c92a10264d268e23c3e9a7348ea97de8",
+        "rc_sha256": "49ecc9b380dd35dc14fac50edc5ce2e4c92a10264d268e23c3e9a7348ea97de8",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 12,
+        "key": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest::test_reminders_are_configurable_and_idempotent",
+        "suite": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest",
+        "test": "test_reminders_are_configurable_and_idempotent",
+        "file": "tests/Feature/ZigoNetworkBillingLifecycleTest.php",
+        "line": "41",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertTrue",
+            "expected": "true",
+            "actual": "false"
+        },
+        "rc": {
+            "assertion": "assertTrue",
+            "expected": "true",
+            "actual": "false"
+        },
+        "normalized_equal": true,
+        "base_sha256": "39f5fb738078655f32078bcb5c148d58d813a8fe8b59c2f99f0e1dfc66c1833e",
+        "rc_sha256": "39f5fb738078655f32078bcb5c148d58d813a8fe8b59c2f99f0e1dfc66c1833e",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 13,
+        "key": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest::test_notice_uses_server_side_order_amount_semantics_and_tenant_payment_cta",
+        "suite": "Tests\\Feature\\ZigoNetworkBillingLifecycleTest",
+        "test": "test_notice_uses_server_side_order_amount_semantics_and_tenant_payment_cta",
+        "file": "tests/Feature/ZigoNetworkBillingLifecycleTest.php",
+        "line": "78",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertTrue",
+            "expected": "true",
+            "actual": "false"
+        },
+        "rc": {
+            "assertion": "assertTrue",
+            "expected": "true",
+            "actual": "false"
+        },
+        "normalized_equal": true,
+        "base_sha256": "44fef980a7f5126aabd3b257d96e17c6a9a1460bd0b69c91a773a0f39abad9e6",
+        "rc_sha256": "44fef980a7f5126aabd3b257d96e17c6a9a1460bd0b69c91a773a0f39abad9e6",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 14,
+        "key": "Tests\\Feature\\ZigoNetworkOnboardingOperationsTest::test_host_auth_and_two_factor_contract_are_preserved",
+        "suite": "Tests\\Feature\\ZigoNetworkOnboardingOperationsTest",
+        "test": "test_host_auth_and_two_factor_contract_are_preserved",
+        "file": "tests/Feature/ZigoNetworkOnboardingOperationsTest.php",
+        "line": "48",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "rc": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "normalized_equal": true,
+        "base_sha256": "6c4c347d37866ef8aca84b0d10f76cc3cec5ad447919b3c5c76c563742fa0906",
+        "rc_sha256": "6c4c347d37866ef8aca84b0d10f76cc3cec5ad447919b3c5c76c563742fa0906",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 15,
+        "key": "Tests\\Feature\\ZigoNetworkOperationsConsoleTest::test_host_auth_and_two_factor_contract_are_preserved",
+        "suite": "Tests\\Feature\\ZigoNetworkOperationsConsoleTest",
+        "test": "test_host_auth_and_two_factor_contract_are_preserved",
+        "file": "tests/Feature/ZigoNetworkOnboardingOperationsTest.php",
+        "line": "48",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "rc": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "normalized_equal": true,
+        "base_sha256": "3830c2404194d019a069a562756a7927afef79914d306e231d44fa8391a3703e",
+        "rc_sha256": "3830c2404194d019a069a562756a7927afef79914d306e231d44fa8391a3703e",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 16,
+        "key": "Tests\\Feature\\ZigoNetworkOperationsConsoleTest::test_payment_approved_failed_is_visible_and_security_contract_is_preserved",
+        "suite": "Tests\\Feature\\ZigoNetworkOperationsConsoleTest",
+        "test": "test_payment_approved_failed_is_visible_and_security_contract_is_preserved",
+        "file": "tests/Feature/ZigoNetworkOperationsConsoleTest.php",
+        "line": "53",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "rc": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "normalized_equal": true,
+        "base_sha256": "265d40d8673c0fa18f601dc13ff330589b8e54bbf61366e5161a04e3b412446e",
+        "rc_sha256": "265d40d8673c0fa18f601dc13ff330589b8e54bbf61366e5161a04e3b412446e",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 17,
+        "key": "Tests\\Feature\\ZigoNetworkOperationsConsoleTest::test_pre_stage_network_navigation_smoke_has_no_dead_or_duplicate_links",
+        "suite": "Tests\\Feature\\ZigoNetworkOperationsConsoleTest",
+        "test": "test_pre_stage_network_navigation_smoke_has_no_dead_or_duplicate_links",
+        "file": "tests/Feature/ZigoNetworkOperationsConsoleTest.php",
+        "line": "69",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "rc": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "normalized_equal": true,
+        "base_sha256": "2111d58c252a8da268c36f4774c95c78c9c297219851d52c11ae96d693273270",
+        "rc_sha256": "2111d58c252a8da268c36f4774c95c78c9c297219851d52c11ae96d693273270",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 18,
+        "key": "Tests\\Feature\\ZigoSaasOnboardingEndToEndTest::test_unknown_visitor_reaches_operational_tenant_owner_customer_and_network",
+        "suite": "Tests\\Feature\\ZigoSaasOnboardingEndToEndTest",
+        "test": "test_unknown_visitor_reaches_operational_tenant_owner_customer_and_network",
+        "file": "tests/Feature/ZigoSaasOnboardingEndToEndTest.php",
+        "line": "42",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertStatus",
+            "expected": "200",
+            "actual": "404"
+        },
+        "rc": {
+            "assertion": "assertStatus",
+            "expected": "200",
+            "actual": "404"
+        },
+        "normalized_equal": true,
+        "base_sha256": "62e9f0d806e50924256331adc289345e1deedf18f64c8d4de5a59b76156197ea",
+        "rc_sha256": "62e9f0d806e50924256331adc289345e1deedf18f64c8d4de5a59b76156197ea",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 19,
+        "key": "Tests\\Feature\\ZigoStageHostContractTest::test_driver_and_network_surfaces_do_not_leak_across_hosts",
+        "suite": "Tests\\Feature\\ZigoStageHostContractTest",
+        "test": "test_driver_and_network_surfaces_do_not_leak_across_hosts",
+        "file": "tests/Feature/ZigoStageHostContractTest.php",
+        "line": "23",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "rc": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "normalized_equal": true,
+        "base_sha256": "746614008864fd6f3874d59443c1c89499ad6e6051c2cfb94cbe58be9acbf6bf",
+        "rc_sha256": "746614008864fd6f3874d59443c1c89499ad6e6051c2cfb94cbe58be9acbf6bf",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 20,
+        "key": "Tests\\Feature\\ZigoSupportCenterTest::test_route_contract_enforces_surface_middleware_and_network_scope_controller",
+        "suite": "Tests\\Feature\\ZigoSupportCenterTest",
+        "test": "test_route_contract_enforces_surface_middleware_and_network_scope_controller",
+        "file": "tests/Feature/ZigoSupportCenterTest.php",
+        "line": "11",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertNotNull",
+            "expected": "route exists",
+            "actual": "null"
+        },
+        "rc": {
+            "assertion": "assertNotNull",
+            "expected": "route exists",
+            "actual": "null"
+        },
+        "normalized_equal": true,
+        "base_sha256": "7bb5ede5743bd80ed46d242e1c641765933bb75e19e970ce25eb6c5df559a135",
+        "rc_sha256": "7bb5ede5743bd80ed46d242e1c641765933bb75e19e970ce25eb6c5df559a135",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    },
+    {
+        "number": 21,
+        "key": "Tests\\Feature\\ZigoTenantRetentionTest::test_pre_stage_network_navigation_smoke_has_no_dead_or_duplicate_links",
+        "suite": "Tests\\Feature\\ZigoTenantRetentionTest",
+        "test": "test_pre_stage_network_navigation_smoke_has_no_dead_or_duplicate_links",
+        "file": "tests/Feature/ZigoNetworkOperationsConsoleTest.php",
+        "line": "69",
+        "base_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "rc_type": "PHPUnit\\Framework\\ExpectationFailedException",
+        "baseline": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "rc": {
+            "assertion": "assertStatus",
+            "expected": "404",
+            "actual": "400"
+        },
+        "normalized_equal": true,
+        "base_sha256": "448e453c8fc5580139514eb8276b4f02e5de30e40e6b30109727b790f5c74538",
+        "rc_sha256": "448e453c8fc5580139514eb8276b4f02e5de30e40e6b30109727b790f5c74538",
+        "classification": "IDENTICAL_BASELINE_FAILURE"
+    }
+]

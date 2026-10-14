@@ -259,6 +259,16 @@ final class NetworkTenantProviderQuotingTest extends TestCase
         $this->assertSame($national, $this->aggregate());
     }
 
+    public function test_uncovered_origin_or_destination_preserves_national_options(): void
+    {
+        $national = [['logistico' => 'Estafeta', 'provider_source' => 'xperta', 'service_code' => 'ground', 'base_price' => 123.45]];
+        $this->nationalMock($national);
+        foreach ([['99999', '64001'], ['64000', '99999']] as [$origin, $destination]) {
+            $this->quote->cp_origen = $origin;
+            $this->quote->cp_destino = $destination;
+            $this->assertSame($national, $this->aggregate());
+        }
+    }
     public function test_quote_creates_no_operation_shipment_snapshot_tracking_or_any_write(): void
     {
         DB::enableQueryLog();

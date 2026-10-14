@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="Tests\Feature\NetworkProviderReleaseGateSecurityTest" file="C:\xampp\htdocs\enviosok_b2b_enfa_provider\tests\Feature\NetworkProviderReleaseGateSecurityTest.php" tests="2" assertions="11" errors="0" failures="0" skipped="0" time="0.438663">
+    <testcase name="test_provider_administration_is_accessible_on_configured_nonlocal_host_but_untrusted_host_is_denied" file="C:\xampp\htdocs\enviosok_b2b_enfa_provider\tests\Feature\NetworkProviderReleaseGateSecurityTest.php" line="38" class="Tests\Feature\NetworkProviderReleaseGateSecurityTest" classname="Tests.Feature.NetworkProviderReleaseGateSecurityTest" assertions="7" time="0.326783"/>
+    <testcase name="test_nonlocal_provider_network_requires_two_factor_and_sysadmin" file="C:\xampp\htdocs\enviosok_b2b_enfa_provider\tests\Feature\NetworkProviderReleaseGateSecurityTest.php" line="55" class="Tests\Feature\NetworkProviderReleaseGateSecurityTest" classname="Tests.Feature.NetworkProviderReleaseGateSecurityTest" assertions="4" time="0.111880"/>
+  </testsuite>
+</testsuites>

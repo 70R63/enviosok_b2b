@@ -1,0 +1,12 @@
+ .../Providers/LocalProviderQuoteEvaluator.php      |  5 +++--
+ .../Providers/Models/ProviderQuoteSnapshot.php     |  3 ++-
+ .../Shipping/Local/LocalGuidePdfRenderer.php       |  7 ++++++-
+ app/Domain/Shipping/Local/LocalShipmentService.php |  5 ++---
+ resources/views/b2c/checkout.blade.php             |  8 ++++++++
+ resources/views/b2c/opciones.blade.php             |  4 +++-
+ resources/views/b2c/partials/cotizador.blade.php   |  4 +++-
+ resources/views/b2c/provider-fulfillment.blade.php |  5 ++++-
+ resources/views/index.blade.php                    | 22 +++++++++++++++++++++-
+ tests/Feature/NetworkProviderFulfillmentTest.php   |  2 +-
+ tests/Feature/NetworkTenantProviderQuotingTest.php | 10 ++++++++++
+ 11 files changed, 63 insertions(+), 12 deletions(-)

@@ -1,0 +1,4 @@
+Tests\Feature\ZigoSupportCenterTest::test_route_contract_enforces_surface_middleware_and_network_scope_controller
+Failed asserting that null is not null.
+
+<ROOT>\tests\Feature\ZigoSupportCenterTest.php:11

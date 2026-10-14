@@ -1377,6 +1377,24 @@
         </div>
     </section>
 
+    @php
+$localPartners = app(\App\Domain\Network\Providers\ProviderPresentation::class)->partners();
+@endphp
+    @if($localPartners)
+    <section class="section" id="socios-locales">
+        <h2>Socios logísticos locales</h2>
+        <div class="logos">
+        @foreach($localPartners as $partner)
+            <article>
+                @if($partner['logo'])<img src="{{ $partner['logo'] }}" alt="{{ $partner['name'] }}" loading="lazy">@else<span aria-hidden="true">📦</span>@endif
+                <h3>{{ $partner['name'] }}</h3><p>Envíos locales</p><p>Disponible según cobertura</p>
+            </article>
+        @endforeach
+        </div>
+        <p>Consulta el cotizador para conocer la disponibilidad de tu envío.</p>
+    </section>
+    @endif
+
     <section class="faq-section" id="faq">
         <h2>Preguntas frecuentes</h2>
         <div class="faq-grid">
@@ -1442,7 +1460,9 @@
         </div>
     </footer>
 
-    @php($publicWhatsapp = app(\App\Services\Marketing\PublicChannelService::class)->active()->firstWhere('channel', 'whatsapp'))
+    @php
+$publicWhatsapp = app(\App\Services\Marketing\PublicChannelService::class)->active()->firstWhere('channel', 'whatsapp');
+@endphp
     @if($publicWhatsapp)
     <a class="whatsapp" href="{{ $publicWhatsapp['url'] }}" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp ZIGO">
         <svg viewBox="0 0 32 32" aria-hidden="true">

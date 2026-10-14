@@ -1,0 +1,4 @@
+Tests\Feature\ZigoNetworkBillingLifecycleTest::test_reminders_are_configurable_and_idempotent
+Failed asserting that false is true.
+
+<ROOT>\tests\Feature\ZigoNetworkBillingLifecycleTest.php:41

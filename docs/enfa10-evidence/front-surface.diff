@@ -1,0 +1,103 @@
+diff --git a/app/Console/Kernel.php b/app/Console/Kernel.php
+index 9719ed13..d42175de 100644
+--- a/app/Console/Kernel.php
++++ b/app/Console/Kernel.php
+@@ -26,6 +26,9 @@ class Kernel extends ConsoleKernel
+     protected function schedule(Schedule $schedule)
+     {
+         //$schedule->command('inspire')->hourly();
++        $schedule->command('network:provider-fulfillment:retry --limit=100')->everyMinute()->withoutOverlapping(10);
++        $schedule->command('network:provider-crm:deliver --limit=100')->everyMinute()->withoutOverlapping(10);
++        $schedule->command('network:provider-payables:reconcile --limit=100')->everyMinute()->withoutOverlapping(10);
+         $schedule->command('rastreo:automatico')->hourly();
+ 
+         $schedule
+diff --git a/config/provider_crm.php b/config/provider_crm.php
+new file mode 100644
+index 00000000..c0759063
+--- /dev/null
++++ b/config/provider_crm.php
+@@ -0,0 +1,6 @@
++<?php
++
++use App\Domain\Network\Providers\Crm\DisabledProviderCrmAdapter;
++
++return ['adapters' => ['disabled' => DisabledProviderCrmAdapter::class],
++    'lease_seconds' => 120, 'max_attempts' => 6];
+diff --git a/routes/api.php b/routes/api.php
+index 0bc47caa..d9e6f2e8 100644
+--- a/routes/api.php
++++ b/routes/api.php
+@@ -451,6 +451,14 @@ Route::domain(config('zigo_api_hub.host'))->prefix('hub/v1')->name('api.hub.v1.'
+     ->middleware(['zigo.api.v1.request','zigo.api.v1.auth','zigo.api.v1.meter'])
+     ->group(function (): void {
+         Route::get('/postal-codes/{postalCode}', [V1PostalController::class, 'show'])->middleware('zigo.api.v1.scope:postal:read')->where('postalCode','[0-9]{5}')->name('postal.show');
++        Route::prefix('provider')->name('provider.')->middleware(\App\Http\Middleware\AuthorizeProviderApi::class)->group(function():void {
++            $controller=\App\Http\Controllers\API\Hub\V1\ProviderFulfillmentApiController::class;
++            Route::get('/fulfillments',[$controller,'index'])->middleware('zigo.api.v1.scope:provider:fulfillment:read')->name('index');
++            Route::get('/fulfillments/{fulfillment}',[$controller,'show'])->whereUuid('fulfillment')->middleware('zigo.api.v1.scope:provider:fulfillment:read')->name('show');
++            foreach(\App\Domain\Network\Providers\ProviderApiOperations::SCOPES as $action=>$scope){
++                Route::post('/fulfillments/{fulfillment}/'.$action,[$controller,'command'])->whereUuid('fulfillment')->defaults('provider_action',$action)->middleware('zigo.api.v1.scope:'.$scope)->name($action);
++            }
++        });
+         Route::post('/quotes', [V1QuoteController::class, 'store'])->middleware('zigo.api.v1.scope:quotes:write')->name('quotes.store');
+         Route::post('/shipments', [V1ShipmentController::class, 'store'])->middleware('zigo.api.v1.scope:shipments:write')->name('shipments.store');
+         Route::get('/shipments/{shipment}', [V1ShipmentController::class, 'show'])->middleware('zigo.api.v1.scope:shipments:read')->name('shipments.show');
+diff --git a/routes/network.php b/routes/network.php
+index 12cb914d..57c67db5 100644
+--- a/routes/network.php
++++ b/routes/network.php
+@@ -123,6 +123,14 @@ Route::middleware(['zigo.surface.host:network', 'network.auth', 'network.superad
+         Route::delete('/security/users/{user}/two-factor', [NetworkTwoFactorController::class, 'reset'])->middleware('throttle:3,1')->name('two-factor.reset');
+         Route::get('/topology', NetworkTopologyController::class)->name('topology');
+         Route::get('/dashboard', NetworkDashboardController::class)->name('dashboard');
++        Route::get('/provider-settlements', [\App\Http\Controllers\Network\ProviderSettlementController::class, 'index'])->name('provider-settlements.index');
++        Route::get('/provider-settlements/{payable}', [\App\Http\Controllers\Network\ProviderSettlementController::class, 'show'])->whereUuid('payable')->name('provider-settlements.show');
++        Route::post('/provider-settlements/{payable}', [\App\Http\Controllers\Network\ProviderSettlementController::class, 'store'])->whereUuid('payable')->name('provider-settlements.store');
++        Route::get('/provider-connections', [\App\Http\Controllers\Network\ProviderConnectionController::class, 'index'])->name('provider-connections.index');
++        Route::get('/provider-connections/create', [\App\Http\Controllers\Network\ProviderConnectionController::class, 'create'])->name('provider-connections.create');
++        Route::post('/provider-connections', [\App\Http\Controllers\Network\ProviderConnectionController::class, 'store'])->name('provider-connections.store');
++        Route::get('/provider-connections/{connection}/edit', [\App\Http\Controllers\Network\ProviderConnectionController::class, 'edit'])->name('provider-connections.edit');
++        Route::post('/provider-connections/{connection}', [\App\Http\Controllers\Network\ProviderConnectionController::class, 'update'])->name('provider-connections.update');
+         Route::get('/onboarding', [NetworkOnboardingController::class, 'index'])->name('onboarding.index');
+         Route::get('/onboarding/{uuid}', [NetworkOnboardingController::class, 'show'])->name('onboarding.show');
+         Route::post('/onboarding/{uuid}/retry', [NetworkOnboardingController::class, 'retry'])
+@@ -371,6 +379,12 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
+             Route::post('/configuracion/entregas', [TenantDeliveryProofOptionController::class, 'store'])->middleware('tenant.workspace.operational')->name('delivery-proof-options.store');
+             Route::put('/configuracion/entregas/{option}', [TenantDeliveryProofOptionController::class, 'update'])->middleware('tenant.workspace.operational')->name('delivery-proof-options.update');
+             Route::get('/operations', [TenantOperationController::class, 'index'])->middleware('tenant.workspace.operational')->name('operations.index');
++            Route::middleware(['tenant.workspace.operational', 'tenant.entitlement:LOCAL_SHIPPING'])->prefix('solicitudes-provider')->name('provider-inbox.')->group(function (): void {
++                Route::get('/', [\App\Http\Controllers\Tenant\ProviderFulfillmentInboxController::class, 'index'])->name('index');
++                Route::get('/{fulfillment}', [\App\Http\Controllers\Tenant\ProviderFulfillmentInboxController::class, 'show'])->whereUuid('fulfillment')->name('show');
++                Route::post('/{fulfillment}/accept', [\App\Http\Controllers\Tenant\ProviderFulfillmentInboxController::class, 'accept'])->whereUuid('fulfillment')->name('accept');
++                Route::post('/{fulfillment}/reject', [\App\Http\Controllers\Tenant\ProviderFulfillmentInboxController::class, 'reject'])->whereUuid('fulfillment')->name('reject');
++            });
+             Route::get('/operacion', [TenantLogisticsController::class,'index'])->middleware('tenant.workspace.operational')->name('logistics.index');
+             Route::post('/operacion/servicios', [TenantLogisticsController::class,'service'])->middleware('tenant.workspace.operational')->name('logistics.services.store');
+             Route::put('/operacion/servicios/{service}', [TenantLogisticsController::class,'updateService'])->middleware('tenant.workspace.operational')->name('logistics.services.update');
+diff --git a/routes/web.php b/routes/web.php
+index 62a3e743..ace88f7b 100644
+--- a/routes/web.php
++++ b/routes/web.php
+@@ -101,6 +101,7 @@ Route::get('/envio/recuperar', [GuestGuideRecoveryController::class, 'requestFor
+ Route::post('/envio/recuperar', [GuestGuideRecoveryController::class, 'requestLink'])->middleware('throttle:5,1')->name('guide-recovery.request');
+ Route::get('/envio/recuperar/{token}', [GuestGuideRecoveryController::class, 'show'])->middleware('throttle:20,1')->name('guide-recovery.show');
+ Route::get('/envio/recuperar/{token}/pdf', [GuestGuideRecoveryController::class, 'download'])->middleware('throttle:10,1')->name('guide-recovery.download');
++Route::get('/envio/recuperar/{token}/evidencia/{kind}', [GuestGuideRecoveryController::class, 'evidence'])->where('kind', 'photo|signature')->middleware('throttle:20,1')->name('guide-recovery.evidence');
+ 
+ Route::post('/b2c/cotizacion/{cotizacion}/seleccionar', [CotizacionPublicaController::class, 'seleccionar'])
+     ->name('b2c.seleccionar');
+@@ -992,6 +993,13 @@ Route::get('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'c
+ Route::post('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'procesarCheckout'])
+     ->name('b2c.checkout.procesar');
+ 
++Route::get('/b2c/envio-local/{contract:uuid}', [\App\Http\Controllers\B2C\ProviderFulfillmentController::class, 'publicShow'])
++    ->name('b2c.provider-fulfillment');
++Route::get('/b2c/envio-local/{contract:uuid}/guia', [\App\Http\Controllers\B2C\ProviderFulfillmentController::class, 'publicGuide'])
++    ->name('b2c.provider-fulfillment.guide');
++Route::get('/b2c/envio-local/{contract:uuid}/evidencia/{kind}', [\App\Http\Controllers\B2C\ProviderFulfillmentController::class, 'evidence'])
++    ->where('kind', 'photo|signature')->middleware('throttle:20,1')->name('b2c.provider-fulfillment.evidence');
++
+ Route::get('/proximamente', [WaitlistController::class, 'index'])
+     ->name('waitlist.index');
+ 

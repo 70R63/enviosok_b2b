@@ -10,10 +10,13 @@
     <p role="status">{{ $trackingProjection['status_label'] ?? 'Solicitud enviada al operador logístico' }}</p>
     <p>Folio / guía: {{ $shipment->tracking_number }}</p>
     <p>Operado por {{ $shipment->guide_snapshot['provider'] }}</p>
+    @php
+$providerIdentity = app(\App\Domain\Network\Providers\ProviderPresentation::class)->identity($shipment->tenant);
+@endphp
+    @if($providerIdentity['logo'])<img src="{{ $providerIdentity['logo'] }}" alt="{{ $shipment->guide_snapshot['provider'] }}" style="max-width:160px;max-height:70px">@else<span aria-hidden="true">📦</span>@endif
     <p>Servicio: {{ $shipment->guide_snapshot['service_name'] }}</p>
     <p>Total cliente: {{ number_format((float) $cotizacion->precio, 2) }} {{ $cotizacion->providerContract->snapshot->currency }}</p>
     <p>Recolección solicitada: {{ $shipment->created_at->format('d/m/Y H:i') }}</p>
-    <p>{{ ['READY_FOR_PICKUP' => 'Listo para recolectar', 'PICKED_UP' => 'Recolectado', 'IN_TRANSIT' => 'En tránsito', 'OUT_FOR_DELIVERY' => 'En reparto', 'DELIVERED' => 'Entregado', 'DELIVERY_FAILED' => 'Entrega no realizada'][$shipment->status] ?? 'En preparación' }}</p>
     @foreach(['Recolección' => $shipment->sender_snapshot, 'Destino' => $shipment->recipient_snapshot] as $title => $party)
         <section><h2>{{ $title }}</h2>
         @foreach(\App\Support\Presentation\AddressPresenter::lines($party) as $line)<p>{{ $line }}</p>@endforeach
