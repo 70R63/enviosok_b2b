@@ -19,6 +19,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Tests\Support\ProviderContractFixture;
 use Tests\Support\ProviderFulfillmentFixture;
+use Tests\Support\ProviderAcceptanceFixture;
+use App\Domain\Network\Providers\ProviderFulfillmentDecisionService;
+use App\Domain\Network\Providers\Models\ProviderFulfillmentDecision;
+use App\Domain\Network\Tenancy\Models\TenantMembership;
+use App\Models\User;
+use Illuminate\Validation\ValidationException;
 
 $worker = ($argv[1] ?? '') === 'worker';
 if ($worker) {
@@ -27,10 +33,12 @@ if ($worker) {
     $port = $state['port'];
     $directory = $state['directory'];
     $fulfillment = $state['fulfillment'] ?? false;
+    $decisionMode = $state['decision_mode'] ?? '';
 } else {
     $port = (int) ($argv[1] ?? 0);
     $directory = $argv[2] ?? '';
-    $fulfillment = ($argv[3] ?? '') === 'fulfillment';
+    $decisionMode = in_array($argv[3] ?? '', ['decision-accept', 'decision-conflict'], true) ? $argv[3] : '';
+    $fulfillment = ($argv[3] ?? '') === 'fulfillment' || $decisionMode !== '';
 }
 $expected = realpath($directory);
 $temp = realpath(sys_get_temp_dir());
@@ -78,8 +86,8 @@ if ($worker) {
     session()->put('tenant_provider_quote_nonce', $state['nonce']);
     if (($argv[3] ?? '') === 'hold') {
         $held = false;
-        DB::listen(function ($query) use (&$held, $statePath) {
-            if (! $held && str_contains($query->sql, 'from `b2c_cotizaciones`') && str_contains($query->sql, 'for update')) {
+        DB::listen(function ($query) use (&$held, $statePath, $decisionMode) {
+            if (! $held && str_contains($query->sql, $decisionMode ? 'from `network_tenants`' : 'from `b2c_cotizaciones`') && str_contains($query->sql, 'for update')) {
                 $held = true;
                 file_put_contents($statePath.'.locked', 'locked');
                 usleep(1000000);
@@ -87,6 +95,17 @@ if ($worker) {
         });
     }
     $started = microtime(true);
+    if ($decisionMode) {
+        $status = $decisionMode === 'decision-conflict' && ($argv[3] ?? '') !== 'hold' ? 'REJECTED' : 'ACCEPTED';
+        try {
+            $decision = app(ProviderFulfillmentDecisionService::class)->decide(Tenant::findOrFail($state['provider_id']),
+                $state['fulfillment_uuid'], User::findOrFail(($argv[3] ?? '') === 'hold' ? $state['actor_id'] : $state['second_actor_id']), $status);
+            echo json_encode(['contract_uuid' => $decision->uuid, 'seconds' => microtime(true) - $started, 'status' => $decision->status], JSON_THROW_ON_ERROR);
+        } catch (ValidationException) {
+            echo json_encode(['contract_uuid' => 'CONFLICT', 'seconds' => microtime(true) - $started, 'status' => 'CONFLICT'], JSON_THROW_ON_ERROR);
+        }
+        exit;
+    }
     $contract = $fulfillment
         ? app(ProviderFulfillmentService::class)->fulfill(B2cCotizacion::findOrFail($state['quote_id']))
         : app(ProviderContractSelectionService::class)->select(B2cCotizacion::findOrFail($state['quote_id']), $state['offer_uuid']);
@@ -94,7 +113,9 @@ if ($worker) {
     exit;
 }
 
-if ($fulfillment) {
+if ($decisionMode) {
+    ProviderAcceptanceFixture::schema();
+} elseif ($fulfillment) {
     ProviderFulfillmentFixture::schema();
 } else {
     ProviderContractFixture::schema();
@@ -114,10 +135,19 @@ if ($fulfillment) {
         'payment_verified_amount' => 145, 'payment_verified_currency' => 'MXN',
         'payment_verified_external_reference' => 'B2C-'.$fixture['quote']->id])->save());
 }
+$decisionState = [];
+if ($decisionMode) {
+    $bridge = app(ProviderFulfillmentService::class)->fulfill($fixture['quote']->fresh());
+    $actor = User::create(['name' => 'Native Operator', 'email' => 'operator@example.test', 'password' => 'unused']);
+    TenantMembership::create(['tenant_id' => $fixture['provider']->id, 'user_id' => $actor->id, 'role' => 'operator', 'status' => 'active']);
+    $secondActor = User::create(['name' => 'Second Native Operator', 'email' => 'second@example.test', 'password' => 'unused']);
+    TenantMembership::create(['tenant_id' => $fixture['provider']->id, 'user_id' => $secondActor->id, 'role' => 'admin', 'status' => 'active']);
+    $decisionState = ['provider_id' => $fixture['provider']->id, 'actor_id' => $actor->id, 'second_actor_id' => $secondActor->id, 'fulfillment_uuid' => $bridge->uuid];
+}
 $statePath = $expected.'/concurrency-'.bin2hex(random_bytes(4)).'.json';
-file_put_contents($statePath, json_encode(['port' => $port, 'directory' => $expected, 'database' => $database,
+file_put_contents($statePath, json_encode(array_merge($decisionState, ['port' => $port, 'directory' => $expected, 'database' => $database, 'decision_mode' => $decisionMode,
     'fulfillment' => $fulfillment, 'username' => $username, 'password' => $password, 'consumer_id' => $fixture['consumer']->id, 'quote_id' => $fixture['quote']->id,
-    'offer_uuid' => $offer['provider_snapshot_uuid'], 'nonce' => session('tenant_provider_quote_nonce')], JSON_THROW_ON_ERROR));
+    'offer_uuid' => $offer['provider_snapshot_uuid'], 'nonce' => session('tenant_provider_quote_nonce')]), JSON_THROW_ON_ERROR));
 $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
 $first = proc_open([PHP_BINARY, __FILE__, 'worker', $statePath, 'hold'], $descriptors, $firstPipes);
 if (! is_resource($first)) {
@@ -148,9 +178,26 @@ foreach ([[$first, $firstPipes], [$second, $secondPipes]] as [$process, $pipes])
     }
     $results[] = json_decode($output, true, flags: JSON_THROW_ON_ERROR);
 }
-if ($results[0]['contract_uuid'] !== $results[1]['contract_uuid'] || ProviderContract::count() !== 1
+if (($decisionMode === 'decision-conflict' ? ($results[0]['status'] !== 'ACCEPTED' || $results[1]['status'] !== 'CONFLICT') : $results[0]['contract_uuid'] !== $results[1]['contract_uuid']) || ProviderContract::count() !== 1
     || $results[1]['seconds'] < 0.2) {
     throw new RuntimeException('Concurrent idempotency/lock validation failed.');
+}
+if ($decisionMode) {
+    $decision = ProviderFulfillmentDecision::firstOrFail();
+    if (ProviderFulfillmentDecision::count() !== 1 || $decision->status !== 'ACCEPTED'
+        || (int) $decision->actor_user_id !== (int) $actor->id || ! $decision->decided_at) {
+        throw new RuntimeException('Decision concurrency/audit failed.');
+    }
+    try {
+        DB::table('network_provider_fulfillments')->where('id', $bridge->id)->delete();
+        throw new RuntimeException('Decision FK allowed deleting fulfillment.');
+    } catch (\Illuminate\Database\QueryException) {}
+    $decisionMigration = require database_path('migrations/2026_10_13_130000_create_network_provider_fulfillment_decisions.php');
+    $decisionMigration->down();
+    if (ProviderFulfillment::count() !== 1 || DB::table('local_shipments')->count() !== 1) throw new RuntimeException('Decision rollback damaged logistics.');
+    $decisionMigration->up();
+    $decisionMigration->down();
+    echo 'Decision race '.$decisionMode.': one immutable audited decision; loser retries safely or receives conflict; FK and rollback OK. '.PHP_EOL;
 }
 if ($fixture['quote']->fresh()->precio !== '145.00' || DB::table('local_shipments')->count() !== ($fulfillment ? 1 : 0)
     || DB::table('local_tracking_events')->count() !== ($fulfillment ? 2 : 0) || DB::table('network_tenant_operations')->count() !== ($fulfillment ? 1 : 0)) {

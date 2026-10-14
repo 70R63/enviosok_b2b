@@ -43,7 +43,7 @@ final class ProviderFulfillmentController extends Controller
             return $this->pdf($cotizacion, $bridge, route('b2c.provider-fulfillment', $cotizacion->providerContract->uuid));
         }
 
-        return response()->view('b2c.provider-fulfillment', ['cotizacion' => $cotizacion, 'shipment' => $shipment, 'recoveryToken' => $token])
+        return response()->view('b2c.provider-fulfillment', ['cotizacion' => $cotizacion, 'shipment' => $shipment, 'bridge' => $bridge, 'recoveryToken' => $token])
             ->header('Cache-Control', 'private, no-store')->header('Referrer-Policy', 'no-referrer');
     }
 
@@ -52,7 +52,7 @@ final class ProviderFulfillmentController extends Controller
         $bridge = $this->authorized($cotizacion);
         $shipment = $bridge?->shipment;
 
-        return response()->view('b2c.provider-fulfillment', compact('cotizacion', 'shipment'))
+        return response()->view('b2c.provider-fulfillment', compact('cotizacion', 'shipment', 'bridge'))
             ->header('Cache-Control', 'private, no-store');
     }
 

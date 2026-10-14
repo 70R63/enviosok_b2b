@@ -20,6 +20,7 @@ final class DriverAssignmentService
         return DB::transaction(function () use ($tenant, $shipment, $driver, $actorId): DriverAssignment {
             $shipment = LocalShipment::query()->whereKey($shipment->id)->where('tenant_id', $tenant->id)->lockForUpdate()->firstOrFail();
             abort_unless($shipment->status === 'READY_FOR_PICKUP', 422, 'Sólo se pueden asignar recolecciones pendientes.');
+            abort_unless(app(\App\Domain\Network\Providers\ProviderDispatchEligibility::class)->allows($shipment), 422, 'La solicitud aún no está aceptada.');
             $current = DriverAssignment::query()->where('active_shipment_id', $shipment->id)->lockForUpdate()->first();
             if ($current && (int) $current->driver_profile_id === (int) $driver->id) {
                 return $current;

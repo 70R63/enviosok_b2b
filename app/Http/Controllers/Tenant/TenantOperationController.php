@@ -25,7 +25,7 @@ final class TenantOperationController extends Controller
         $this->authorizeOperator($context);
         $tenant = $context->tenant()->load('branding');
 
-        $query = TenantOperation::where('tenant_id', $tenant->id);
+        $query = TenantOperation::where('tenant_id', $tenant->id)->where(fn ($q) => $q->whereNull('source_type')->orWhere('source_type', '!=', 'provider_contract'));
         if (Schema::hasTable('tenant_customer_checkouts')) $query->with('customerCheckout');
         if (Schema::hasTable('local_shipments')) $query->with('localShipment');
         $query->when($request->string('status')->toString(), fn ($q, $status) => $q->where('status', $status));
@@ -47,6 +47,10 @@ final class TenantOperationController extends Controller
     {
         $this->authorizeOperator($context);
         $item = TenantOperation::where('tenant_id', $context->tenant()->id)->where('uuid', $operation)->firstOrFail();
+        if ($item->source_type === 'provider_contract') {
+            $bridge = \App\Domain\Network\Providers\Models\ProviderFulfillment::where('provider_tenant_id', $context->id())->where('tenant_operation_id', $item->id)->firstOrFail();
+            return redirect()->route('tenant.admin.provider-inbox.show', $bridge->uuid);
+        }
         if (Schema::hasTable('tenant_customer_checkouts')) $item->load(['customerProfile.user','customerCheckout']);
         else $item->setRelation('customerCheckout', null);
 

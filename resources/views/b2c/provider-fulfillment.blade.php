@@ -6,7 +6,12 @@
 <body><main>
 @if($shipment)
     <h1>{{ data_get($shipment->guide_snapshot, 'branding.brand_name') }} · Envío local</h1>
-    <p>Tu envío fue confirmado. La recolección será realizada en la dirección origen.</p>
+    @if($bridge?->acceptanceStatus() === 'REJECTED')
+        <p>Tu compra fue confirmada.</p>
+    @else
+        <p>Tu envío fue confirmado. La recolección será realizada en la dirección origen.</p>
+    @endif
+    <p>{{ $bridge?->consumerStatusLabel() ?? 'Solicitud enviada al operador logístico' }}</p>
     <p>Folio / guía: {{ $shipment->tracking_number }}</p>
     <p>Operado por {{ $shipment->guide_snapshot['provider'] }}</p>
     <p>Servicio: {{ $shipment->guide_snapshot['service_name'] }}</p>

@@ -57,7 +57,7 @@ final class TenantDriverController extends Controller
     public function dispatchQueue(TenantContext $context, TenantAccessService $access)
     {
         $this->authorizeView($access);
-        $shipments = LocalShipment::query()
+        $shipments = app(\App\Domain\Network\Providers\ProviderDispatchEligibility::class)->scope(LocalShipment::query())
             ->with(['operation', 'activeDriverAssignment.driverProfile.user', 'events' => fn ($query) => $query->where('status', 'READY_FOR_PICKUP')])
             ->where('tenant_id', $context->id())
             ->where('status', 'READY_FOR_PICKUP')

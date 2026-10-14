@@ -7,6 +7,7 @@ use App\Domain\Shipping\Local\Models\LocalShipment;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 final class ProviderFulfillment extends Model
@@ -47,5 +48,25 @@ final class ProviderFulfillment extends Model
     public function operation(): BelongsTo
     {
         return $this->belongsTo(TenantOperation::class, 'tenant_operation_id');
+    }
+
+    public function decision(): HasOne
+    {
+        return $this->hasOne(ProviderFulfillmentDecision::class, 'provider_fulfillment_id');
+    }
+
+    public function acceptanceStatus(): string
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('network_provider_fulfillment_decisions')) return 'PENDING_PROVIDER';
+        return $this->decision?->status ?? 'PENDING_PROVIDER';
+    }
+
+    public function consumerStatusLabel(): string
+    {
+        return match ($this->acceptanceStatus()) {
+            'ACCEPTED' => 'Recolección confirmada',
+            'REJECTED' => 'Estamos revisando tu envío',
+            default => 'Solicitud enviada al operador logístico',
+        };
     }
 }

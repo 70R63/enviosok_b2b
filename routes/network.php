@@ -371,6 +371,12 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
             Route::post('/configuracion/entregas', [TenantDeliveryProofOptionController::class, 'store'])->middleware('tenant.workspace.operational')->name('delivery-proof-options.store');
             Route::put('/configuracion/entregas/{option}', [TenantDeliveryProofOptionController::class, 'update'])->middleware('tenant.workspace.operational')->name('delivery-proof-options.update');
             Route::get('/operations', [TenantOperationController::class, 'index'])->middleware('tenant.workspace.operational')->name('operations.index');
+            Route::middleware(['tenant.workspace.operational', 'tenant.entitlement:LOCAL_SHIPPING'])->prefix('solicitudes-provider')->name('provider-inbox.')->group(function (): void {
+                Route::get('/', [\App\Http\Controllers\Tenant\ProviderFulfillmentInboxController::class, 'index'])->name('index');
+                Route::get('/{fulfillment}', [\App\Http\Controllers\Tenant\ProviderFulfillmentInboxController::class, 'show'])->whereUuid('fulfillment')->name('show');
+                Route::post('/{fulfillment}/accept', [\App\Http\Controllers\Tenant\ProviderFulfillmentInboxController::class, 'accept'])->whereUuid('fulfillment')->name('accept');
+                Route::post('/{fulfillment}/reject', [\App\Http\Controllers\Tenant\ProviderFulfillmentInboxController::class, 'reject'])->whereUuid('fulfillment')->name('reject');
+            });
             Route::get('/operacion', [TenantLogisticsController::class,'index'])->middleware('tenant.workspace.operational')->name('logistics.index');
             Route::post('/operacion/servicios', [TenantLogisticsController::class,'service'])->middleware('tenant.workspace.operational')->name('logistics.services.store');
             Route::put('/operacion/servicios/{service}', [TenantLogisticsController::class,'updateService'])->middleware('tenant.workspace.operational')->name('logistics.services.update');

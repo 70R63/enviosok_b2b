@@ -40,7 +40,7 @@ final class DriverDispatchService
 
     public function manualCandidates(Tenant $tenant, LocalShipment $shipment): Collection
     {
-        if ((int) $shipment->tenant_id !== (int) $tenant->id || ! $this->entitlements->has($tenant, 'DRIVER')) {
+        if ((int) $shipment->tenant_id !== (int) $tenant->id || ! app(\App\Domain\Network\Providers\ProviderDispatchEligibility::class)->allows($shipment) || ! $this->entitlements->has($tenant, 'DRIVER')) {
             return collect();
         }
 
@@ -59,6 +59,7 @@ final class DriverDispatchService
             if ($shipment->status !== 'READY_FOR_PICKUP') {
                 return null;
             }
+            if (! app(\App\Domain\Network\Providers\ProviderDispatchEligibility::class)->allows($shipment)) return null;
             $existing = DriverAssignment::query()->where('active_shipment_id', $shipment->id)->lockForUpdate()->first();
             if ($existing) {
                 return $existing;
@@ -82,6 +83,7 @@ final class DriverDispatchService
     private function dispatchUsable(Tenant $tenant, LocalShipment $shipment): bool
     {
         return (int) $shipment->tenant_id === (int) $tenant->id
+            && app(\App\Domain\Network\Providers\ProviderDispatchEligibility::class)->allows($shipment)
             && $shipment->status === 'READY_FOR_PICKUP'
             && $this->subscriptions->activeForTenant($tenant) !== null
             && $this->entitlements->has($tenant, 'DRIVER');
