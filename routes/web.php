@@ -992,6 +992,11 @@ Route::get('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'c
 Route::post('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'procesarCheckout'])
     ->name('b2c.checkout.procesar');
 
+Route::get('/b2c/envio-local/{contract:uuid}', [\App\Http\Controllers\B2C\ProviderFulfillmentController::class, 'publicShow'])
+    ->name('b2c.provider-fulfillment');
+Route::get('/b2c/envio-local/{contract:uuid}/guia', [\App\Http\Controllers\B2C\ProviderFulfillmentController::class, 'publicGuide'])
+    ->name('b2c.provider-fulfillment.guide');
+
 Route::get('/proximamente', [WaitlistController::class, 'index'])
     ->name('waitlist.index');
 

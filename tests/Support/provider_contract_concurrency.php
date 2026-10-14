@@ -5,15 +5,20 @@
 require dirname(__DIR__, 2).'/vendor/autoload.php';
 
 use App\Domain\Network\Providers\Models\ProviderContract;
+use App\Domain\Network\Providers\Models\ProviderFulfillment;
 use App\Domain\Network\Providers\ProviderContractSelectionService;
+use App\Domain\Network\Providers\ProviderFulfillmentService;
 use App\Domain\Network\Providers\ProviderQuotePublisher;
 use App\Domain\Network\Providers\TenantProviderQuoteSource;
 use App\Domain\Network\Tenancy\Models\Tenant;
 use App\Domain\Network\Tenancy\TenantContext;
 use App\Models\B2cCotizacion;
+use App\Services\Shipping\GuideRecoveryService;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Tests\Support\ProviderContractFixture;
+use Tests\Support\ProviderFulfillmentFixture;
 
 $worker = ($argv[1] ?? '') === 'worker';
 if ($worker) {
@@ -21,9 +26,11 @@ if ($worker) {
     $state = json_decode(file_get_contents($statePath), true, flags: JSON_THROW_ON_ERROR);
     $port = $state['port'];
     $directory = $state['directory'];
+    $fulfillment = $state['fulfillment'] ?? false;
 } else {
     $port = (int) ($argv[1] ?? 0);
     $directory = $argv[2] ?? '';
+    $fulfillment = ($argv[3] ?? '') === 'fulfillment';
 }
 $expected = realpath($directory);
 $temp = realpath(sys_get_temp_dir());
@@ -80,20 +87,36 @@ if ($worker) {
         });
     }
     $started = microtime(true);
-    $contract = app(ProviderContractSelectionService::class)->select(B2cCotizacion::findOrFail($state['quote_id']), $state['offer_uuid']);
+    $contract = $fulfillment
+        ? app(ProviderFulfillmentService::class)->fulfill(B2cCotizacion::findOrFail($state['quote_id']))
+        : app(ProviderContractSelectionService::class)->select(B2cCotizacion::findOrFail($state['quote_id']), $state['offer_uuid']);
     echo json_encode(['contract_uuid' => $contract->uuid, 'seconds' => microtime(true) - $started], JSON_THROW_ON_ERROR);
     exit;
 }
 
-ProviderContractFixture::schema();
+if ($fulfillment) {
+    ProviderFulfillmentFixture::schema();
+} else {
+    ProviderContractFixture::schema();
+}
 $fixture = ProviderContractFixture::seed();
+if ($fulfillment) {
+    ProviderFulfillmentFixture::operational($fixture);
+}
 app(TenantContext::class)->set($fixture['consumer']);
 session()->put('cotizacion_publica_id', $fixture['quote']->id);
 $options = app(TenantProviderQuoteSource::class)->options($fixture['quote'], 'anonymous');
 $offer = app(ProviderQuotePublisher::class)->publish($fixture['quote'], $options)[0];
+if ($fulfillment) {
+    app(ProviderContractSelectionService::class)->select($fixture['quote'], $offer['provider_snapshot_uuid']);
+    B2cCotizacion::withoutEvents(fn () => $fixture['quote']->refresh()->forceFill(['estatus' => 'PAGADA',
+        'payment_status' => 'approved', 'payment_verification_status' => 'VERIFIED', 'payment_verified_at' => now(),
+        'payment_verified_amount' => 145, 'payment_verified_currency' => 'MXN',
+        'payment_verified_external_reference' => 'B2C-'.$fixture['quote']->id])->save());
+}
 $statePath = $expected.'/concurrency-'.bin2hex(random_bytes(4)).'.json';
 file_put_contents($statePath, json_encode(['port' => $port, 'directory' => $expected, 'database' => $database,
-    'username' => $username, 'password' => $password, 'consumer_id' => $fixture['consumer']->id, 'quote_id' => $fixture['quote']->id,
+    'fulfillment' => $fulfillment, 'username' => $username, 'password' => $password, 'consumer_id' => $fixture['consumer']->id, 'quote_id' => $fixture['quote']->id,
     'offer_uuid' => $offer['provider_snapshot_uuid'], 'nonce' => session('tenant_provider_quote_nonce')], JSON_THROW_ON_ERROR));
 $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
 $first = proc_open([PHP_BINARY, __FILE__, 'worker', $statePath, 'hold'], $descriptors, $firstPipes);
@@ -129,9 +152,35 @@ if ($results[0]['contract_uuid'] !== $results[1]['contract_uuid'] || ProviderCon
     || $results[1]['seconds'] < 0.2) {
     throw new RuntimeException('Concurrent idempotency/lock validation failed.');
 }
-if ($fixture['quote']->fresh()->precio !== '145.00' || DB::table('local_shipments')->count() !== 0
-    || DB::table('local_tracking_events')->count() !== 0 || DB::table('network_tenant_operations')->count() !== 0) {
+if ($fixture['quote']->fresh()->precio !== '145.00' || DB::table('local_shipments')->count() !== ($fulfillment ? 1 : 0)
+    || DB::table('local_tracking_events')->count() !== ($fulfillment ? 2 : 0) || DB::table('network_tenant_operations')->count() !== ($fulfillment ? 1 : 0)) {
     throw new RuntimeException('Frozen price or no-operations validation failed.');
+}
+if ($fulfillment) {
+    $length = DB::selectOne("SELECT CHARACTER_MAXIMUM_LENGTH AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'b2c_cotizaciones' AND COLUMN_NAME = 'remitente_referencias'")->n;
+    if ((int) $length !== 255) {
+        throw new RuntimeException('Checkout reference length differs from validated contract.');
+    }
+    if (ProviderFulfillment::count() !== 1 || DB::table('network_usage_events')->count() !== 1
+        || ProviderFulfillment::firstOrFail()->shipment->status !== 'READY_FOR_PICKUP'
+        || (int) ProviderFulfillment::firstOrFail()->shipment->tenant_id !== (int) $fixture['provider']->id
+        || (int) ProviderFulfillment::firstOrFail()->operation->tenant_id !== (int) $fixture['provider']->id) {
+        throw new RuntimeException('Concurrent fulfillment duplicated pickup/usage or lost ownership.');
+    }
+    // Exercise the reused legacy token schema on real SQL, never a real transport.
+    Mail::fake();
+    $recovery = app(GuideRecoveryService::class);
+    $plain = $recovery->issue($fixture['quote']->fresh(), 'native@example.test');
+    $hash = hash('sha256', $plain);
+    $expiry = DB::table('b2c_guide_recovery_tokens')->where('token_hash', $hash)->value('expires_at');
+    if (! $recovery->resolve($plain) || ! $recovery->resolve($plain)
+        || $expiry !== DB::table('b2c_guide_recovery_tokens')->where('token_hash', $hash)->value('expires_at')) {
+        throw new RuntimeException('Legacy token expiry changed during guest recovery.');
+    }
+    $migration = require database_path('migrations/2026_10_13_120000_create_network_provider_fulfillments.php');
+    $migration->down();
+    $migration->up();
+    $migration->down();
 }
 if (DB::selectOne('SELECT COUNT(*) AS n FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE()')->n != 0) {
     throw new RuntimeException('Unexpected provider triggers.');
@@ -145,4 +194,6 @@ $migration = require database_path('migrations/2026_10_13_110000_create_network_
 $migration->down();
 $migration->up();
 $migration->down();
-echo 'SQL '.DB::selectOne('SELECT VERSION() AS version')->version.": concurrent selectors returned one contract; row lock verified; frozen total, no operations, no TRIGGER grant and up/down/up/down OK.\n";
+echo 'SQL '.DB::selectOne('SELECT VERSION() AS version')->version.($fulfillment
+    ? ': concurrent fulfillments returned one bridge, operation, shipment, pickup and usage event; '
+    : ': concurrent selectors returned one contract, no operations; ')."row lock, frozen total, no TRIGGER grant and up/down/up/down OK.\n";

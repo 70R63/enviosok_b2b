@@ -14,7 +14,7 @@ final class LocalGuidePdfRenderer
     {
         $guide = is_array($shipment->guide_snapshot) ? $shipment->guide_snapshot : [];
         $brand = $this->text(data_get($guide, 'branding.brand_name'), 'ZIGO Local');
-        $service = $this->text($guide['service_code'] ?? null, $shipment->service_code ?: 'Directo');
+        $service = $this->text($guide['service_name'] ?? $guide['service_code'] ?? null, $shipment->service_code ?: 'Directo');
         $provider = $this->text($guide['provider'] ?? null, 'ZIGO Local');
         $pdf = new TCPDF('P', 'mm', [101.6, 152.4], true, 'UTF-8', false);
         $pdf->SetCreator('ZIGO Platform');
@@ -44,7 +44,7 @@ final class LocalGuidePdfRenderer
         $pdf->write2DBarcode($trackingUrl, 'QRCODE,M', 78, 26, 17, 17, ['border' => false, 'padding' => 0]);
         $pdf->SetXY(6, 43);
         $pdf->SetFont('helvetica', 'B', 6.5);
-        $pdf->Cell(89, 3.5, 'RASTREA TU ENVÍO', 0, 1, 'C');
+        $pdf->Cell(89, 3.5, $guide['tracking_label'] ?? 'RASTREA TU ENVÍO', 0, 1, 'C');
         $pdf->SetFont('helvetica', '', 5.8);
         $pdf->Cell(89, 3, $trackingUrl, 0, 1, 'C');
 
@@ -53,7 +53,8 @@ final class LocalGuidePdfRenderer
         $this->package($pdf, 107, $guide['package'] ?? [], $guide['reference'] ?? null);
         $pdf->SetXY(6, 135);
         $pdf->SetFont('helvetica', 'B', 7);
-        $pdf->Cell(89, 5, 'Servicio: '.$service.'     Proveedor: '.$provider, 1, 1, 'C');
+        $operator = isset($guide['service_name']) ? 'Operado por '.$provider : 'Proveedor: '.$provider;
+        $pdf->Cell(89, 5, 'Servicio: '.$service.'     '.$operator, 1, 1, 'C');
         try {
             $issued = data_get($guide, 'issued_at') ? \Carbon\Carbon::parse(data_get($guide, 'issued_at'))->format('d/m/Y H:i') : now()->format('d/m/Y H:i');
         } catch (Throwable) {

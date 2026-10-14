@@ -41,6 +41,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot()
     {
+        \App\Models\B2cCotizacion::observe(\App\Domain\Network\Providers\ProviderPaymentObserver::class);
         app(\App\Services\Security\StageSafetyGuard::class)->enforce();
         \App\Domain\Shipping\Local\Models\LocalTrackingEvent::created(function ($event): void { try { app(\App\Domain\ApiHub\ApiWebhookPublisher::class)->tracking($event); } catch (\Throwable $exception) { \Illuminate\Support\Facades\Log::warning('api_hub.webhook_queue_failed',['tracking_event_id'=>$event->id]); } });
         Schema::defaultStringLength(191);

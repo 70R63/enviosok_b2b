@@ -787,6 +787,10 @@ public function procesarCheckout(
         return $redirect;
     }
 
+    if ($cotizacion->provider === 'tenant_provider_local' && $cotizacion->hasAccreditedPayment()) {
+        return redirect()->route('b2c.provider-fulfillment', $cotizacion->providerContract->uuid);
+    }
+
     $isPublicCheckout = !auth()->check();
 
     $data = $request->validate([
@@ -802,6 +806,10 @@ public function procesarCheckout(
             'max:30',
         ],
 
+        ...($cotizacion->provider === 'tenant_provider_local' ? [
+            'remitente_referencias' => ['nullable', 'string', 'max:255'],
+            'destinatario_referencias' => ['nullable', 'string', 'max:255'],
+        ] : []),
         'remitente_email' => [
             'required',
             'email',
@@ -1198,7 +1206,9 @@ public function procesarCheckout(
         $datosCotizacion['guardar_origen'],
         $datosCotizacion['guardar_destino'],
         $datosCotizacion['alias_origen'],
-        $datosCotizacion['alias_destino']
+        $datosCotizacion['alias_destino'],
+        $datosCotizacion['remitente_referencias'],
+        $datosCotizacion['destinatario_referencias']
     );
 
     $userId = auth()->id();
@@ -1226,6 +1236,9 @@ public function procesarCheckout(
             $cpOrigen,
             $cpDestino
         ) {
+            if ($cotizacion->provider === 'tenant_provider_local') {
+                $cotizacion->forceFill(array_intersect_key($data, array_flip(['remitente_referencias', 'destinatario_referencias'])));
+            }
             $cotizacion->update([
                 ...$datosCotizacion,
 
@@ -1651,6 +1664,9 @@ public function pagoSuccess(
             true
         )
     ) {
+        if ($cotizacion->provider === 'tenant_provider_local') {
+            return redirect()->route('b2c.provider-fulfillment', $cotizacion->providerContract->uuid);
+        }
         return view('b2c.pago-success', compact('cotizacion'));
     }
 
@@ -2252,6 +2268,10 @@ public function detalleEnvioB2c(
         !== $userId
     ) {
         abort(403);
+    }
+
+    if ($cotizacion->provider === 'tenant_provider_local') {
+        return redirect()->route('b2c.provider-fulfillment', $cotizacion->providerContract->uuid);
     }
 
     $fiscalProfile =

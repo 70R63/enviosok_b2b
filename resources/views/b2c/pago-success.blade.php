@@ -1,3 +1,6 @@
+@if($cotizacion->provider === 'tenant_provider_local')
+    @include('b2c.provider-fulfillment', ['shipment' => \App\Domain\Network\Providers\Models\ProviderFulfillment::where('provider_contract_id', $cotizacion->providerContract?->id)->first()?->shipment])
+@else
 @include('b2c.pago-estado', [
     'titulo' => $cotizacion->payment_status === 'saldo_prepago'
     ? 'Pago con saldo confirmado'
@@ -9,3 +12,4 @@
     'cotizacion' => $cotizacion,
     'mostrarGuia' => true
 ])
+@endif

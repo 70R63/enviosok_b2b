@@ -15,31 +15,44 @@ final class LocalShipmentService
 {
     public function __construct(private DeliveryRequirementService $requirements) {}
 
-    public function create(Tenant $tenant, TenantOperation $operation, array $data, ?int $userId = null): LocalShipment
+    public function create(Tenant $tenant, TenantOperation $operation, array $data, ?int $userId = null, ?Tenant $commercialTenant = null): LocalShipment
     {
         abort_unless((int) $operation->tenant_id === (int) $tenant->id, 404);
         abort_unless($operation->status === 'confirmed' && strtoupper((string) $operation->provider) === 'ZIGO_LOCAL', 422);
 
-        return DB::transaction(function () use ($tenant, $operation, $data, $userId) {
+        return DB::transaction(function () use ($tenant, $operation, $data, $userId, $commercialTenant) {
             $operation = TenantOperation::query()->whereKey($operation->id)->lockForUpdate()->firstOrFail();
             abort_unless((int) $operation->tenant_id === (int) $tenant->id, 404);
             abort_unless($operation->status === 'confirmed' && strtoupper((string) $operation->provider) === 'ZIGO_LOCAL', 422);
+            if ($commercialTenant) {
+                abort_unless($operation->source_type === 'provider_contract'
+                    && (int) ($operation->metadata['consumer_tenant_id'] ?? 0) === (int) $commercialTenant->id, 422);
+            }
             $existing = LocalShipment::where('tenant_operation_id', $operation->id)->lockForUpdate()->first();
             if ($existing) {
                 if (Schema::hasTable('local_shipment_delivery_requirements')) $this->requirements->forShipment($existing);
                 return $existing;
             }
             $contractRequirement = $data['delivery_requirement_snapshot'] ?? null;
-            $proofOption = ! $contractRequirement && Schema::hasTable('tenant_delivery_proof_options') ? $this->requirements->option($tenant, $data['delivery_proof_option_uuid'] ?? null) : null;
+            $proofOption = ! $commercialTenant && ! $contractRequirement && Schema::hasTable('tenant_delivery_proof_options') ? $this->requirements->option($tenant, $data['delivery_proof_option_uuid'] ?? null) : null;
             $branding = $tenant->loadMissing('branding')->branding;
+            $commercialBranding = $commercialTenant?->loadMissing('branding')->branding;
             $tracking = $this->trackingNumber();
             $guide = [
                 'tracking_number' => $tracking, 'issued_at' => now()->toIso8601String(),
                 'service_code' => $operation->service_code, 'provider' => config('zigo_local.provider_name', 'ZIGO Local'),
                 'sender' => $data['sender'], 'recipient' => $data['recipient'], 'package' => $data['package'],
                 'reference' => $data['reference'] ?? null,
-                'branding' => ['brand_name' => $branding?->brand_name ?? $tenant->name, 'logo_path' => $this->snapshotLogo($tenant, $branding?->logo_path), 'primary_color' => $branding?->primary_color],
+                'branding' => ['brand_name' => $branding?->brand_name ?? $tenant->name, 'logo_path' => $commercialTenant ? null : $this->snapshotLogo($tenant, $branding?->logo_path), 'primary_color' => $branding?->primary_color],
             ];
+            if ($commercialTenant) {
+                $guide['provider'] = $branding?->brand_name ?: $tenant->name;
+                $guide['service_name'] = $data['service_name'] ?? $operation->service_code;
+                // Consumer logo rendering is deferred; preserve existing provider logo isolation.
+                $guide['branding'] = ['brand_name' => $commercialBranding?->brand_name ?: $commercialTenant->name,
+                    'logo_path' => null, 'primary_color' => $commercialBranding?->primary_color];
+                $guide['tracking_label'] = 'CONSULTA TU ENVÍO';
+            }
             $shipment = LocalShipment::create([
                 'tenant_id' => $tenant->id, 'tenant_operation_id' => $operation->id, 'tracking_number' => $tracking,
                 'service_code' => (string) $operation->service_code, 'status' => 'CREATED',

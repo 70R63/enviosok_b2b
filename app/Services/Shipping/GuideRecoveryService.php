@@ -36,6 +36,7 @@ final class GuideRecoveryService
 
     public function issue(B2cCotizacion $q, string $email, string $mailKind='pending'): string
     {
+        if ($q->provider === 'tenant_provider_local') return $this->sendProviderConfirmation($q, $email);
         $plain=Str::random(80); $normalized=Str::lower(trim($email));
         $token = B2cGuideRecoveryToken::create(['cotizacion_id'=>$q->id,'email_hash'=>hash('sha256',$normalized),'token_hash'=>hash('sha256',$plain),'expires_at'=>now()->addHours((int)config('zigo_guide_recovery.token_hours',48)),'max_attempts'=>(int)config('zigo_guide_recovery.max_attempts',10)]);
         $this->audit($q, 'TOKEN_ISSUED', 'SUCCESS', ['token_id' => $token->id]);
@@ -112,15 +113,83 @@ final class GuideRecoveryService
 
     public function guideAvailable(B2cCotizacion $q, string $email): void
     {
+        if ($q->provider === 'tenant_provider_local') {
+            $this->providerFulfillmentAvailable($q, $email);
+            return;
+        }
         if (!$q->guia_id && !$q->tracking_number && !$q->documento) return;
         B2cGuideRecoveryCase::where('cotizacion_id', $q->id)->update(['status' => 'RESOLVED']);
         if ($q->fresh()->guide_generated_email_sent_at !== null) return;
         $this->issue($q, $email, 'generated');
     }
 
+    private function providerFulfillmentAvailable(B2cCotizacion $q, string $email): void
+    {
+        $bridge = \App\Domain\Network\Providers\Models\ProviderFulfillment::where('provider_contract_id', $q->providerContract?->id)->first();
+        if (! $bridge || ! filter_var($email, FILTER_VALIDATE_EMAIL)) return;
+        // Reuse the existing B2C notification claim and configured Laravel mailer.
+        $claimTime = now();
+        $claimed = B2cCotizacion::whereKey($q->id)->whereNull('guide_generated_email_sent_at')
+            ->where(fn ($query) => $query->whereNull('provider_confirmation_claimed_at')->orWhere('provider_confirmation_claimed_at', '<=', now()->subMinutes(10)))
+            ->update(['provider_confirmation_claimed_at' => $claimTime]);
+        if ($claimed !== 1) return;
+        try {
+            $this->sendProviderConfirmation($q, $email);
+            B2cCotizacion::whereKey($q->id)->where('provider_confirmation_claimed_at', $claimTime)
+                ->update(['guide_generated_email_sent_at' => now(), 'provider_confirmation_claimed_at' => null]);
+        } catch (Throwable $exception) {
+            B2cCotizacion::whereKey($q->id)->where('provider_confirmation_claimed_at', $claimTime)->update(['provider_confirmation_claimed_at' => null]);
+            Log::warning('provider_fulfillment.mail_pending', ['quote_id' => $q->id, 'exception' => get_class($exception)]);
+        }
+    }
+
+    private function sendProviderConfirmation(B2cCotizacion $q, string $email): string
+    {
+        $bridge = \App\Domain\Network\Providers\Models\ProviderFulfillment::where('provider_contract_id', $q->providerContract?->id)->first();
+        if (! $bridge || ! filter_var($email, FILTER_VALIDATE_EMAIL)) throw new \DomainException('LOCAL_GUIDE_NOT_AVAILABLE');
+        $shipment = $bridge->shipment;
+        $domain = \App\Domain\Network\Tenancy\Models\TenantDomain::where('tenant_id', $bridge->consumer_tenant_id)->where('status', 'verified')->orderBy('id')->value('domain');
+        $root = $domain ? 'https://'.$domain : rtrim((string) (config('zigo_domains.portals.b2c.url') ?: config('app.url')), '/');
+        $plain = '';
+        $token = null;
+        if ($q->user_id === null) {
+            $plain = Str::random(80);
+            $token = B2cGuideRecoveryToken::create(['cotizacion_id' => $q->id, 'email_hash' => hash('sha256', Str::lower(trim($email))),
+                'token_hash' => hash('sha256', $plain), 'expires_at' => now()->addHours((int) config('zigo_guide_recovery.token_hours', 48)),
+                'max_attempts' => (int) config('zigo_guide_recovery.max_attempts', 10)]);
+        }
+        try {
+            Mail::to($email)->send(new \App\Mail\ProviderFulfillmentConfirmedMail([
+                'folio' => $shipment->tracking_number, 'service' => $shipment->guide_snapshot['service_name'], 'provider' => $shipment->guide_snapshot['provider'],
+                'pickup' => \App\Support\Presentation\AddressPresenter::lines($shipment->sender_snapshot),
+                'delivery' => \App\Support\Presentation\AddressPresenter::lines($shipment->recipient_snapshot),
+                'url' => $root.($token ? '/envio/recuperar/'.$plain : '/b2c/envio-local/'.$q->providerContract->uuid),
+            ]));
+        } catch (Throwable $exception) {
+            $token?->forceFill(['revoked_at' => now()])->save();
+            throw $exception;
+        }
+        return $plain;
+    }
+
     public function resolve(string $plain): ?B2cGuideRecoveryToken
     {
         $token=B2cGuideRecoveryToken::where('token_hash',hash('sha256',$plain))->first();
+        if ($token?->cotizacion?->provider === 'tenant_provider_local') {
+            return DB::transaction(function () use ($token): ?B2cGuideRecoveryToken {
+                $locked = B2cGuideRecoveryToken::whereKey($token->id)->lockForUpdate()->first();
+                if (! $locked || $locked->revoked_at || $locked->expires_at->isPast() || $locked->attempts >= $locked->max_attempts) return null;
+                // Legacy TIMESTAMP may have implicit ON UPDATE semantics. Assign the
+                // original expiry explicitly while atomically counting a local read.
+                DB::table('b2c_guide_recovery_tokens')->where('id', $locked->id)->update([
+                    'attempts' => $locked->attempts + 1, 'last_used_at' => now(), 'updated_at' => now(),
+                    'expires_at' => $locked->expires_at,
+                ]);
+                $locked->refresh();
+                $this->audit($locked->cotizacion, 'OPEN_LINK', 'SUCCESS');
+                return $locked;
+            });
+        }
         if(!$token || $token->revoked_at || $token->expires_at->isPast() || $token->attempts >= $token->max_attempts)return null;
         $token->forceFill(['attempts'=>$token->attempts+1,'last_used_at'=>now()])->save();
         $this->audit($token->cotizacion,'OPEN_LINK','SUCCESS'); return $token;

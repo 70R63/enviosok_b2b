@@ -652,6 +652,9 @@
                                     <label>Número interior</label>
                                     <input type="text" name="remitente_num_int" placeholder="Opcional">
                                 </div>
+                                @if($cotizacion->provider === 'tenant_provider_local')
+                                    <div><label>Referencias de recolección</label><input type="text" name="remitente_referencias" maxlength="255" value="{{ old('remitente_referencias', $cotizacion->remitente_referencias) }}"></div>
+                                @endif
 
                                 <div>
                                     <label>Ciudad origen</label>
@@ -782,6 +785,9 @@
                                     <label>Número interior</label>
                                     <input type="text" name="destinatario_num_int" placeholder="Opcional">
                                 </div>
+                                @if($cotizacion->provider === 'tenant_provider_local')
+                                    <div><label>Referencias de entrega</label><input type="text" name="destinatario_referencias" maxlength="255" value="{{ old('destinatario_referencias', $cotizacion->destinatario_referencias) }}"></div>
+                                @endif
 
                                 <div>
                                     <label>Ciudad destino</label>
@@ -1298,6 +1304,7 @@
             }
 
             function llenarOrigen(direccion) {
+                asignar('remitente_referencias', direccion.referencias);
                 asignar(
                     'remitente_nombre',
                     direccion.nombre
@@ -1340,6 +1347,7 @@
             }
 
             function llenarDestino(direccion) {
+                asignar('destinatario_referencias', direccion.referencias);
                 asignar(
                     'destinatario_nombre',
                     direccion.nombre
