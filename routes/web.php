@@ -82,6 +82,13 @@ Route::middleware('zigo.corporate.host')->prefix('agentes-ia')->name('agentes-ia
 
 Route::domain(config('zigo_domains.portals.b2c.host'))
     ->group(function () {
+        Route::middleware('guest')->group(function () {
+            Route::get('/ingresar', [\App\Http\Controllers\Auth\AuthenticatedSessionController::class, 'create'])
+                ->name('b2c.login');
+            Route::post('/ingresar', [\App\Http\Controllers\Auth\AuthenticatedSessionController::class, 'store'])
+                ->name('b2c.login.store');
+        });
+
         Route::get('/', [CotizacionPublicaController::class, 'index'])
             ->name('home');
 
