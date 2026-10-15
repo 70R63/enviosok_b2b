@@ -15,6 +15,12 @@ final class ShipmentStatusPresenter
         'CANCELED' => 'Cancelado',
     ];
 
+    public static function eventLabel(mixed $event): string
+    {
+        return data_get($event, 'event_code') === 'PICKUP_CONFIRMED'
+            ? 'Recolección confirmada' : self::label(data_get($event, 'status'));
+    }
+
     public static function label(?string $status): string
     {
         return self::LABELS[$status] ?? 'Actualización de envío';

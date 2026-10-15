@@ -4,19 +4,23 @@
 <style>body{font-family:Arial,sans-serif;background:#f3f4f6;color:#111827;padding:1rem}main{max-width:850px;margin:auto;background:white;padding:1.5rem;border-radius:16px}section{border:1px solid #dbe2ea;border-radius:12px;padding:1rem;margin:1rem 0}a{display:inline-block;min-height:44px;line-height:44px}p{overflow-wrap:anywhere}</style>
 </head>
 <body><main>
+@include('b2c.partials.post-purchase-nav')
 @if($shipment)
     <h1>{{ data_get($shipment->guide_snapshot, 'branding.brand_name') }} · Envío local</h1>
     <p>Tu compra fue confirmada.</p>
     <p role="status">{{ $trackingProjection['status_label'] ?? 'Solicitud enviada al operador logístico' }}</p>
     <p>Folio / guía: {{ $shipment->tracking_number }}</p>
-    <p>Operado por {{ $shipment->guide_snapshot['provider'] }}</p>
     @php
-$providerIdentity = app(\App\Domain\Network\Providers\ProviderPresentation::class)->identity($shipment->tenant);
-@endphp
-    @if($providerIdentity['logo'])<img src="{{ $providerIdentity['logo'] }}" alt="{{ $shipment->guide_snapshot['provider'] }}" style="max-width:160px;max-height:70px">@else<span aria-hidden="true">📦</span>@endif
+        $presentation = app(\App\Domain\Network\Providers\ProviderPresentation::class);
+        $providerIdentity = $presentation->snapshotIdentity($shipment->guide_snapshot ?? []);
+        $providerLogo = $presentation->snapshotLogoUrl($providerIdentity['logo_path']);
+    @endphp
+    <p>Operador logístico: {{ $providerIdentity['display_name'] }}</p>
+    @if($providerLogo)<img src="{{ $providerLogo }}" alt="{{ $providerIdentity['display_name'] }}" style="max-width:160px;max-height:70px">@endif
     <p>Servicio: {{ $shipment->guide_snapshot['service_name'] }}</p>
     <p>Total cliente: {{ number_format((float) $cotizacion->precio, 2) }} {{ $cotizacion->providerContract->snapshot->currency }}</p>
-    <p>Recolección solicitada: {{ $shipment->created_at->format('d/m/Y H:i') }}</p>
+    <p>Solicitud enviada: {{ $bridge?->pickup_requested_at?->format('d/m/Y H:i') }}</p>
+    <p>Preferencia de recolección: {{ app(\App\Domain\Network\Providers\ProviderPickupPreference::class)->label(data_get($bridge?->operation?->metadata, 'pickup_request')) }}</p>
     @foreach(['Recolección' => $shipment->sender_snapshot, 'Destino' => $shipment->recipient_snapshot] as $title => $party)
         <section><h2>{{ $title }}</h2>
         @foreach(\App\Support\Presentation\AddressPresenter::lines($party) as $line)<p>{{ $line }}</p>@endforeach
@@ -24,8 +28,7 @@ $providerIdentity = app(\App\Domain\Network\Providers\ProviderPresentation::clas
         @if(data_get($party, 'address.references'))<p>Referencias: {{ data_get($party, 'address.references') }}</p>@endif
         </section>
     @endforeach
-    <a href="{{ isset($recoveryToken) ? route('guide-recovery.download', $recoveryToken) : route('b2c.provider-fulfillment.guide', $cotizacion->providerContract->uuid) }}">Descargar guía</a>
-    @if($trackingProjection)
+    @if($trackingProjection ?? null)
     <section><h2>Seguimiento de tu envío</h2><ol>
     @foreach($trackingProjection['timeline'] as $event)
         <li><strong>{{ $event['label'] }}</strong> · <time datetime="{{ $event['occurred_at'] }}">{{ \Carbon\Carbon::parse($event['occurred_at'])->format('d/m/Y H:i') }}</time></li>
@@ -42,6 +45,6 @@ $providerIdentity = app(\App\Domain\Network\Providers\ProviderPresentation::clas
     @endif
     @endif
 @else
-    <h1>Envío local</h1><p>La preparación del envío está pendiente. Si tu pago fue confirmado, no necesitas volver a pagar.</p>
+    <h1>Envío local</h1><p>Estamos preparando tu envío. Si tu pago fue confirmado, no necesitas volver a pagar.</p>
 @endif
 </main></body></html>

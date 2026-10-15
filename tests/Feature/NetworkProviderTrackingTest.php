@@ -536,7 +536,7 @@ final class NetworkProviderTrackingTest extends TestCase
         $assignment = $this->ready();
         $this->out($assignment);
         $labels = array_column($this->projection()['timeline'], 'label');
-        $this->assertLessThan(array_search('Paquete recolectado', $labels), array_search('Recolección confirmada', $labels));
+        $this->assertLessThan(array_search('Paquete recolectado', $labels), array_search('Solicitud aceptada por Provider Delivery', $labels));
     }
 
     public function test_provider_cannot_read_another_provider_inbox(): void

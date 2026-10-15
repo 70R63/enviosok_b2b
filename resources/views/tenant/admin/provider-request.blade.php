@@ -5,8 +5,31 @@
 <p>Recibida: {{ $fulfillment->created_at->format('d/m/Y H:i') }}</p>
 <p>{{ data_get($shipment->guide_snapshot,'branding.brand_name') }} · {{ data_get($shipment->guide_snapshot,'service_name') }}</p>
 <p>Decisión: {{ ['PENDING_PROVIDER'=>'Pendiente','ACCEPTED'=>'Aceptada','REJECTED'=>'Rechazada'][$fulfillment->acceptanceStatus()] }}</p>
+@php
+    $pickupPreference = app(\App\Domain\Network\Providers\ProviderPickupPreference::class);
+    $pickupRequested = data_get($fulfillment->operation->metadata, 'pickup_request');
+    $pickupConfirmation = data_get($fulfillment->operation->metadata, 'pickup_confirmation');
+@endphp
+<section class="z-card"><h2>Preferencia cliente</h2><p>{{ $pickupPreference->label($pickupRequested) }}</p></section>
+@if($fulfillment->acceptanceStatus() === 'ACCEPTED')
+    <section class="z-card"><h2>{{ $pickupConfirmation ? 'Recolección confirmada' : 'Solicitud aceptada · recolección por confirmar' }}</h2>
+    @if($pickupConfirmation)
+        <p>{{ $pickupPreference->label($pickupConfirmation) }}</p>
+    @elseif($shipment->status === 'READY_FOR_PICKUP')
+        <form method="POST" action="{{ route('tenant.admin.provider-inbox.pickup-confirmation', $fulfillment->uuid) }}">
+            @csrf
+            <label>Atención<select name="pickup_confirmation[mode]" required><option value="">Selecciona una opción</option><option value="ASAP">Lo antes posible</option><option value="WINDOW">Programar ventana</option></select></label>
+            <p>Para programar ventana, completa fecha e inicio/fin ({{ config('app.timezone') }}).</p>
+            <label>Fecha confirmada<input type="date" name="pickup_confirmation[confirmed_date]" min="{{ now(config('app.timezone'))->toDateString() }}"></label>
+            <label>Hora inicio<input type="time" name="pickup_confirmation[window_start]"></label>
+            <label>Hora fin<input type="time" name="pickup_confirmation[window_end]"></label>
+            <button class="z-btn">Confirmar recolección</button>
+        </form>
+    @endif
+    </section>
+@endif
 <p>Estado logístico: {{ str_replace('_',' ',$shipment->status) }}</p>
-<section class="z-card"><h2>Avance operativo</h2><ol>@foreach($shipment->events as $event)<li>{{ ['CREATED'=>'Envío creado','READY_FOR_PICKUP'=>'Recolección solicitada','PICKED_UP'=>'Paquete recolectado','IN_TRANSIT'=>'En tránsito','OUT_FOR_DELIVERY'=>'En reparto','DELIVERED'=>'Entregado','DELIVERY_FAILED'=>'Entrega no realizada'][$event->status] ?? 'Actualización' }} · {{ $event->occurred_at->format('d/m/Y H:i') }}</li>@endforeach</ol></section>
+<section class="z-card"><h2>Avance operativo</h2><ol>@foreach($shipment->events as $event)<li>{{ $event->event_code === 'PICKUP_CONFIRMED' ? 'Recolección confirmada' : (['CREATED'=>'Envío creado','READY_FOR_PICKUP'=>'Recolección solicitada','PICKED_UP'=>'Paquete recolectado','IN_TRANSIT'=>'En tránsito','OUT_FOR_DELIVERY'=>'En reparto','DELIVERED'=>'Entregado','DELIVERY_FAILED'=>'Entrega no realizada'][$event->status] ?? 'Actualización') }} · {{ $event->occurred_at->format('d/m/Y H:i') }}</li>@endforeach</ol></section>
 @foreach(['Recolección'=>$shipment->sender_snapshot,'Entrega'=>$shipment->recipient_snapshot] as $title=>$party)
 <section class="z-card"><h2>{{ $title }}</h2>@foreach(\App\Support\Presentation\AddressPresenter::lines($party) as $line)<p>{{ $line }}</p>@endforeach<p>Teléfono: {{ $party['phone'] }}</p>@if(data_get($party,'address.references'))<p>Referencias: {{ data_get($party,'address.references') }}</p>@endif</section>
 @endforeach

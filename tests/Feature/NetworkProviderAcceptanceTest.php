@@ -222,7 +222,8 @@ final class NetworkProviderAcceptanceTest extends TestCase
     public function test_accepted_consumer_projection(): void
     {
         $this->decide();
-        $this->assertStringContainsString('Recolección confirmada', $this->customerHtml());
+        $this->assertStringContainsString('Solicitud aceptada', $this->customerHtml());
+        $this->assertStringNotContainsString('Recolección confirmada', $this->customerHtml());
     }
 
     public function test_provider_inbox_ownership_and_private_view(): void

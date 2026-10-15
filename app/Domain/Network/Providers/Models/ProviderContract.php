@@ -39,6 +39,11 @@ final class ProviderContract extends Model
         throw new \LogicException('Provider contracts are immutable.');
     }
 
+    public function fulfillment(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(ProviderFulfillment::class, 'provider_contract_id');
+    }
+
     public function snapshot(): BelongsTo
     {
         return $this->belongsTo(ProviderQuoteSnapshot::class, 'quote_snapshot_id');

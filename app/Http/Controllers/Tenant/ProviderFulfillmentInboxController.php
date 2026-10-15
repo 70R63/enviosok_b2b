@@ -50,6 +50,14 @@ final class ProviderFulfillmentInboxController extends Controller
     {
         $service->decide($context->tenant(), $fulfillment, $request->user(), 'ACCEPTED');
 
+        return redirect()->route('tenant.admin.provider-inbox.show', $fulfillment)->with('success', 'Solicitud aceptada · recolección por confirmar.');
+    }
+
+    public function confirmPickup(Request $request, string $fulfillment, TenantContext $context)
+    {
+        $item = ProviderFulfillment::where('provider_tenant_id', $context->id())->where('uuid', $fulfillment)->firstOrFail();
+        app(\App\Domain\Network\Providers\ProviderPickupConfirmationService::class)
+            ->confirm($context->tenant(), $item, $request->user(), (array) $request->input('pickup_confirmation', []));
         return redirect()->route('tenant.admin.provider-inbox.show', $fulfillment)->with('success', 'Recolección confirmada.');
     }
 

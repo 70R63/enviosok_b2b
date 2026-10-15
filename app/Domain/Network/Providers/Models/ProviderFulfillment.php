@@ -64,7 +64,7 @@ final class ProviderFulfillment extends Model
     public function consumerStatusLabel(): string
     {
         return match ($this->acceptanceStatus()) {
-            'ACCEPTED' => 'Recolección confirmada',
+            'ACCEPTED' => 'Solicitud aceptada por el operador logístico · recolección por confirmar',
             'REJECTED' => 'Estamos revisando tu envío',
             default => 'Solicitud enviada al operador logístico',
         };

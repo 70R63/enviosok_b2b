@@ -96,7 +96,8 @@ final class ProviderFulfillmentService
                 'channel' => 'b2c', 'status' => 'quoted', 'source_type' => 'provider_contract', 'source_id' => $contract->id,
                 'provider' => 'ZIGO_LOCAL', 'service_code' => $offer->service_snapshot['code'],
                 'external_reference' => $contract->uuid, 'created_by_user_id' => null, 'customer_profile_id' => null,
-                'metadata' => ['consumer_tenant_id' => $consumer->id, 'provider_contract_uuid' => $contract->uuid]]);
+                'metadata' => ['consumer_tenant_id' => $consumer->id, 'provider_contract_uuid' => $contract->uuid,
+                    'pickup_request' => data_get($quote->guia_request_snapshot, 'pickup_request')]]);
             $operation = $this->operations->confirm($provider, $operation);
             $shipment = $this->shipments->create($provider, $operation, ['sender' => $sender, 'recipient' => $recipient,
                 'package' => $package, 'pricing' => ['provider_cost' => $offer->provider_cost, 'currency' => $offer->currency,

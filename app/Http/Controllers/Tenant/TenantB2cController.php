@@ -169,6 +169,7 @@ final class TenantB2cController extends Controller
                 'status' => $shipment->status,
                 'events' => $shipment->events->map(fn ($event) => [
                     'status' => $event->status,
+                    'event_code' => $event->event_code,
                     'occurred_at' => $event->occurred_at,
                 ]),
             ],

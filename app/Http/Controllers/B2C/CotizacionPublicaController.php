@@ -448,9 +448,11 @@ class CotizacionPublicaController extends Controller
 
 public function checkout(B2cCotizacion $cotizacion)
 {
+    $cotizacion->refresh();
     if ($redirect = $this->guardConditionalCheckout($cotizacion)) {
         return $redirect;
     }
+    if ($cotizacion->provider === 'tenant_provider_local' && ($response = $this->localPurchaseDestination($cotizacion))) return $response;
 
     $ubicacionOrigen = $this->resolverUbicacionPostal(
         $cotizacion->cp_origen,
@@ -582,6 +584,13 @@ public function confirmarEnvio(
         abort(403);
     }
 
+    if ($cotizacion->provider === 'tenant_provider_local') {
+        $cotizacion->refresh();
+        app(\App\Domain\Network\Providers\ProviderContractSelectionService::class)->assertCheckoutScope($cotizacion);
+        if ($response = $this->localPurchaseDestination($cotizacion)) return $response;
+        $this->validateLocalPickupBeforePayment($cotizacion);
+    }
+
     if (
         !$cotizacion->logistico ||
         !$cotizacion->servicio ||
@@ -669,6 +678,13 @@ public function procesarConfirmacion(
         abort(403);
     }
 
+    if ($cotizacion->provider === 'tenant_provider_local') {
+        $cotizacion->refresh();
+        app(\App\Domain\Network\Providers\ProviderContractSelectionService::class)->assertCheckoutScope($cotizacion);
+        if ($response = $this->localPurchaseDestination($cotizacion)) return $response;
+        $this->validateLocalPickupBeforePayment($cotizacion);
+    }
+
     try {
         $identityGuideAccessService->assertCanProceed(
             (int) auth()->id(),
@@ -732,9 +748,17 @@ public function procesarConfirmacion(
             );
     }
 
-    $cotizacion->update([
-        'estatus' => 'CHECKOUT_COMPLETO',
-    ]);
+    if ($cotizacion->provider === 'tenant_provider_local') {
+        $processed = DB::transaction(function () use ($cotizacion) {
+            $locked = B2cCotizacion::whereKey($cotizacion->id)->lockForUpdate()->firstOrFail();
+            if ($locked->hasAccreditedPayment() || $locked->hasGeneratedGuide()) return true;
+            $locked->update(['estatus' => 'CHECKOUT_COMPLETO']);
+            return false;
+        });
+        if ($processed) return $this->localPurchaseDestination($cotizacion->fresh());
+    } else {
+        $cotizacion->update(['estatus' => 'CHECKOUT_COMPLETO']);
+    }
 
     $paymentSummary =
         $checkoutDebtService->reserveForCotizacion(
@@ -787,7 +811,8 @@ public function procesarCheckout(
         return $redirect;
     }
 
-    if ($cotizacion->provider === 'tenant_provider_local' && $cotizacion->hasAccreditedPayment()) {
+    $cotizacion->refresh();
+    if ($cotizacion->provider === 'tenant_provider_local' && ($cotizacion->hasAccreditedPayment() || $cotizacion->hasGeneratedGuide())) {
         return redirect()->route('b2c.provider-fulfillment', $cotizacion->providerContract->uuid);
     }
 
@@ -945,6 +970,10 @@ public function procesarCheckout(
             'max:100',
         ],
     ]);
+
+    $pickupRequest = $cotizacion->provider === 'tenant_provider_local'
+        ? app(\App\Domain\Network\Providers\ProviderPickupPreference::class)->normalize((array) $request->input('pickup_request', []))
+        : null;
 
     $normalizarCp = static function (
         ?string $valor
@@ -1234,9 +1263,14 @@ public function procesarCheckout(
             $aliasDestino,
             $data,
             $cpOrigen,
-            $cpDestino
+            $cpDestino,
+            $pickupRequest
         ) {
+            if ($cotizacion->provider === 'tenant_provider_local') $cotizacion = B2cCotizacion::whereKey($cotizacion->id)->lockForUpdate()->firstOrFail();
+            if ($cotizacion->provider === 'tenant_provider_local' && ($cotizacion->hasAccreditedPayment() || $cotizacion->hasGeneratedGuide())) return;
             if ($cotizacion->provider === 'tenant_provider_local') {
+                $snapshot = $cotizacion->guia_request_snapshot ?? [];
+                $cotizacion->guia_request_snapshot = array_replace($snapshot, ['pickup_request' => [...$pickupRequest, 'requested_at' => now()->toIso8601String()]]);
                 $cotizacion->forceFill(array_intersect_key($data, array_flip(['remitente_referencias', 'destinatario_referencias'])));
             }
             $cotizacion->update([
@@ -1380,6 +1414,12 @@ public function pago(
     IdentityGuideAccessService $identityGuideAccessService,
     B2cCheckoutDebtService $checkoutDebtService
 ) {
+    $cotizacion->refresh();
+    if ($cotizacion->provider === 'tenant_provider_local') {
+        app(\App\Domain\Network\Providers\ProviderContractSelectionService::class)->assertCheckoutScope($cotizacion);
+        if ($response = $this->localPurchaseDestination($cotizacion)) return $response;
+        $this->validateLocalPickupBeforePayment($cotizacion);
+    }
     $hasOwner = !empty($cotizacion->user_id);
 
     if (
@@ -1477,6 +1517,9 @@ public function pago(
         }
     }
 
+    if ($cotizacion->provider === 'tenant_provider_local' && ($response = $this->localPurchaseDestination($cotizacion->fresh()))) return $response;
+    if ($cotizacion->provider === 'tenant_provider_local') $this->validateLocalPickupBeforePayment($cotizacion->fresh());
+
     $paymentSummary =
         $checkoutDebtService->reserveForCotizacion(
             $cotizacion->fresh()
@@ -1536,6 +1579,7 @@ public function pago(
     $preference->notification_url =
         $baseUrl . '/api/webhooks/mercadopago';
 
+    if ($cotizacion->provider === 'tenant_provider_local') $this->validateLocalPickupBeforePayment($cotizacion->fresh());
     try {
         $preference->save();
     } catch (\Throwable $exception) {
@@ -1610,6 +1654,16 @@ public function pago(
             );
     }
 
+    if ($cotizacion->provider === 'tenant_provider_local') {
+        // Payment may have been verified while Mercado Pago prepared the preference.
+        return DB::transaction(function () use ($cotizacion, $hasOwner, $preference) {
+            $locked = B2cCotizacion::whereKey($cotizacion->id)->lockForUpdate()->firstOrFail();
+            if ($response = $this->localPurchaseDestination($locked)) return $response;
+            if (! $hasOwner) $locked->update(['estatus' => 'PAGO_INICIADO']);
+            return redirect($preference->init_point)->header('Cache-Control', 'private, no-store');
+        });
+    }
+
     if (!$hasOwner) {
         $cotizacion->update([
             'estatus' => 'PAGO_INICIADO',
@@ -1617,6 +1671,27 @@ public function pago(
     }
 
     return redirect($preference->init_point);
+}
+
+private function validateLocalPickupBeforePayment(B2cCotizacion $quote): void
+{
+    try {
+        app(\App\Domain\Network\Providers\ProviderPickupPreference::class)->validateForPayment($quote);
+    } catch (\Illuminate\Validation\ValidationException $exception) {
+        throw $exception->redirectTo(route('b2c.checkout', $quote));
+    }
+}
+
+/** A read-only destination decision; never authorizes fulfillment creation. */
+private function localPurchaseDestination(B2cCotizacion $quote)
+{
+    $contract = $quote->providerContract;
+    $bridge = $contract ? \App\Domain\Network\Providers\Models\ProviderFulfillment::where('provider_contract_id', $contract->id)->first() : null;
+    if ($bridge || $quote->hasAccreditedPayment() || $quote->hasGeneratedGuide()) {
+        abort_unless($contract, 404);
+        return redirect()->route('b2c.provider-fulfillment', $contract->uuid)->header('Cache-Control', 'private, no-store');
+    }
+    return null;
 }
 
 public function pagoSuccess(
@@ -1631,6 +1706,12 @@ public function pagoSuccess(
         return $guard;
     }
 
+    if ($cotizacion->provider === 'tenant_provider_local') {
+        $cotizacion->refresh();
+        app(\App\Domain\Network\Providers\ProviderContractSelectionService::class)->assertCheckoutScope($cotizacion);
+        if ($response = $this->localPurchaseDestination($cotizacion)) return $response;
+    }
+
     $cotizacion = $this->verifyMercadoPagoCallback(
         $request,
         $cotizacion,
@@ -1638,6 +1719,8 @@ public function pagoSuccess(
         'RETURN_SUCCESS'
     );
 
+
+    if ($cotizacion->provider === 'tenant_provider_local' && ($response = $this->localPurchaseDestination($cotizacion))) return $response;
     session()->forget([
         'cotizacion_publica_id',
         'login_required',
@@ -1712,6 +1795,12 @@ public function pagoFailure(
     B2cCotizacion $cotizacion,
     PaymentVerificationService $verificationService
 ) {
+    if ($cotizacion->provider === 'tenant_provider_local') {
+        $cotizacion->refresh();
+        app(\App\Domain\Network\Providers\ProviderContractSelectionService::class)->assertCheckoutScope($cotizacion);
+        if ($response = $this->localPurchaseDestination($cotizacion)) return $response;
+    }
+
     $cotizacion = $this->verifyMercadoPagoCallback(
         $request,
         $cotizacion,
@@ -1719,6 +1808,8 @@ public function pagoFailure(
         'RETURN_FAILURE'
     );
 
+
+    if ($cotizacion->provider === 'tenant_provider_local' && ($response = $this->localPurchaseDestination($cotizacion))) return $response;
     if (
         in_array(
             $cotizacion->estatus,
@@ -1741,6 +1832,12 @@ public function pagoPending(
     B2cCotizacion $cotizacion,
     PaymentVerificationService $verificationService
 ) {
+    if ($cotizacion->provider === 'tenant_provider_local') {
+        $cotizacion->refresh();
+        app(\App\Domain\Network\Providers\ProviderContractSelectionService::class)->assertCheckoutScope($cotizacion);
+        if ($response = $this->localPurchaseDestination($cotizacion)) return $response;
+    }
+
     $cotizacion = $this->verifyMercadoPagoCallback(
         $request,
         $cotizacion,
@@ -1748,6 +1845,8 @@ public function pagoPending(
         'RETURN_PENDING'
     );
 
+
+    if ($cotizacion->provider === 'tenant_provider_local' && ($response = $this->localPurchaseDestination($cotizacion))) return $response;
     if (
         in_array(
             $cotizacion->estatus,
@@ -2087,27 +2186,28 @@ private function buildEstafetaPayload(B2cCotizacion $cotizacion): array
     ];
 }
 
-public function rastreoPublico()
+public function rastreoPublico(Request $request)
 {
+    if ($request->filled('tracking_number')) return $this->buscarRastreoPublico($request);
     return view('b2c.rastreo');
 }
 
 public function buscarRastreoPublico(Request $request)
 {
-    $request->validate([
-        'tracking_number' => ['required', 'string', 'max:100'],
-    ]);
-
+    $request->validate(['tracking_number' => ['required', 'string', 'max:100']]);
     $tracking = trim($request->tracking_number);
-
-    $cotizacion = B2cCotizacion::where('tracking_number', $tracking)
-        ->orWhere('documento', $tracking)
-        ->first();
-
-    return view('b2c.rastreo', [
-        'tracking' => $tracking,
-        'cotizacion' => $cotizacion,
-    ]);
+    $cotizacion = B2cCotizacion::where(function ($q) use ($tracking) {
+        $q->where('tracking_number', $tracking)->orWhere('documento', $tracking);
+    })->first();
+    if ($cotizacion?->provider === 'tenant_provider_local') {
+        $consumer = app(\App\Domain\Network\Providers\ProviderConsumerResolver::class)->current();
+        $bridge = $consumer && $cotizacion->providerContract
+            ? \App\Domain\Network\Providers\Models\ProviderFulfillment::where('provider_contract_id', $cotizacion->providerContract->id)
+                ->where('consumer_tenant_id', $consumer->id)->first() : null;
+        $publicTracking = $bridge ? app(\App\Domain\Network\Providers\ProviderTrackingProjection::class)->publicProject($bridge, $consumer) : null;
+        return response()->view('b2c.provider-tracking-public', compact('tracking', 'publicTracking'))->header('Cache-Control', 'private, no-store');
+    }
+    return view('b2c.rastreo', compact('tracking', 'cotizacion'));
 }
 
 public function registroB2c()
@@ -2252,6 +2352,7 @@ public function dashboardB2c(
 public function misEnviosB2c()
 {
     $envios = B2cCotizacion::where('user_id', auth()->id())
+        ->with('providerContract.fulfillment.shipment')
         ->latest()
         ->get();
 
@@ -3183,6 +3284,12 @@ public function pagarConSaldo(
         abort(403);
     }
 
+    if ($cotizacion->provider === 'tenant_provider_local') {
+        app(\App\Domain\Network\Providers\ProviderContractSelectionService::class)->assertCheckoutScope($cotizacion);
+        if ($response = $this->localPurchaseDestination($cotizacion->fresh())) return $response;
+        $this->validateLocalPickupBeforePayment($cotizacion);
+    }
+
     if ($cotizacion->estatus !== 'CHECKOUT_COMPLETO') {
         return redirect()
             ->route(
@@ -3216,6 +3323,9 @@ public function pagarConSaldo(
                         ->whereKey($cotizacion->id)
                         ->lockForUpdate()
                         ->firstOrFail();
+
+                if ($lockedCotizacion->provider === 'tenant_provider_local' && ($lockedCotizacion->hasAccreditedPayment() || $lockedCotizacion->hasGeneratedGuide())) return;
+                $this->validateLocalPickupBeforePayment($lockedCotizacion);
 
                 $reference =
                     'COTIZACION-'
@@ -4324,6 +4434,7 @@ public function opcionesB2c(B2cCotizacion $cotizacion)
 
         $nueva = $cotizacion->replicate();
 
+        if ($cotizacion->provider === 'tenant_provider_local') $nueva->resetLocalPurchaseState();
         $nueva->estatus = 'DIRECCION_CAPTURADA';
         $nueva->guia_estatus = 'SIN_GUIA';
         $nueva->tracking_number = null;
@@ -4648,7 +4759,7 @@ private function getAvailableOptions(B2cCotizacion $cotizacion): array
 
     public function limpiarCotizacion()
     {
-        session()->forget('cotizacion_publica_id');
+        session()->forget(['cotizacion_publica_id', 'b2c_public_checkout', 'b2c_pending_checkout_id']);
 
         return redirect()->to(url('/') . '#cotizar');
     }
@@ -4800,7 +4911,7 @@ private function getAvailableOptions(B2cCotizacion $cotizacion): array
     public function limpiarCotizadorRapidoB2c()
     {
         session()->forget(
-            'b2c_cotizacion_actual_id'
+            ['b2c_cotizacion_actual_id', 'b2c_public_checkout', 'b2c_pending_checkout_id']
         );
 
         return redirect()->to(

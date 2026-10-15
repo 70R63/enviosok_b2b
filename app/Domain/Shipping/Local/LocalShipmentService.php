@@ -46,7 +46,11 @@ final class LocalShipmentService
                 'branding' => ['brand_name' => $branding?->brand_name ?? $tenant->name, 'logo_path' => $commercialTenant ? null : $this->snapshotLogo($tenant, $branding?->logo_path), 'primary_color' => $branding?->primary_color],
             ];
             if ($commercialTenant) {
-                $guide['provider'] = $branding?->brand_name ?: $tenant->name;
+                $presentation = app(\App\Domain\Network\Providers\ProviderPresentation::class);
+                $identity = $presentation->identity($tenant);
+                $guide['provider_identity'] = ['display_name' => $identity['name'],
+                    'logo_path' => $identity['logo'] ? $this->snapshotLogo($tenant, $branding?->logo_path) : null];
+                $guide['provider'] = $identity['name'];
                 $guide['service_name'] = $data['service_name'] ?? $operation->service_code;
                 $guide['branding'] = ['brand_name' => $commercialBranding?->brand_name ?: $commercialTenant->name,
                     'logo_path' => $this->snapshotLogo($commercialTenant, $commercialBranding?->logo_path), 'primary_color' => $commercialBranding?->primary_color];

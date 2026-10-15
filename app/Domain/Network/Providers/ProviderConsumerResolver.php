@@ -22,14 +22,7 @@ class ProviderConsumerResolver
 
         $host = TenantDomain::normalize(request()->getHost());
         if ($host === config('zigo_domains.portals.b2c.host')) {
-            $uuid = trim((string) config('provider_network.corporate_consumer_uuid'));
-            $slug = trim((string) config('provider_network.corporate_consumer_slug'));
-            $consumer = $uuid !== '' ? Tenant::where('uuid', $uuid)->first() : null;
-            if (! $consumer && $slug !== '') {
-                $consumer = Tenant::where('slug', $slug)->first();
-            }
-
-            return $consumer?->status === 'active' ? $consumer : null;
+            return $this->corporate();
         }
         if (! Schema::hasTable('network_tenant_domains')) {
             return null;
@@ -37,5 +30,15 @@ class ProviderConsumerResolver
 
         return TenantDomain::query()->where('domain', $host)
             ->where('status', 'verified')->whereHas('tenant', fn ($q) => $q->where('status', 'active'))->first()?->tenant;
+    }
+    /** Corporate identity resolution is independent of the request host/context. */
+    public function corporate(): ?Tenant
+    {
+        if (! Schema::hasTable('network_tenants')) return null;
+        $uuid = trim((string) config('provider_network.corporate_consumer_uuid'));
+        $slug = trim((string) config('provider_network.corporate_consumer_slug'));
+        $consumer = $uuid !== '' ? Tenant::where('uuid', $uuid)->first() : null;
+        if (! $consumer && $slug !== '') $consumer = Tenant::where('slug', $slug)->first();
+        return $consumer?->status === 'active' ? $consumer : null;
     }
 }

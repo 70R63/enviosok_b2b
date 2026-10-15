@@ -246,7 +246,7 @@ final class NetworkProviderFulfillmentTest extends TestCase
         foreach (['provider_cost', 'provider_tenant_id', 'consumer_tenant_id', 'connection_id', 'profit_amount', 'Cancelar'] as $secret) {
             $this->assertStringNotContainsString($secret, $html);
         }
-        foreach (['Consumer Store', 'Provider Delivery', 'Pickup Street', 'Delivery Street', 'Recolección solicitada'] as $text) {
+        foreach (['Consumer Store', 'Provider Delivery', 'Pickup Street', 'Delivery Street', 'Solicitud enviada'] as $text) {
             $this->assertStringContainsString($text, $html);
         }
     }
@@ -421,7 +421,7 @@ final class NetworkProviderFulfillmentTest extends TestCase
         $user = User::forceCreate(['name' => 'Buyer', 'email' => 'checkout@example.test', 'password' => 'test']);
         $this->actingAs($user);
         $this->app->instance(TenantContext::class, app(TenantContext::class));
-        $data = ProviderFulfillmentFixture::addresses() + ['remitente_email' => 'buyer@example.test',
+        $data = ProviderFulfillmentFixture::addresses() + ['pickup_request' => ['mode' => 'ASAP'], 'remitente_email' => 'buyer@example.test',
             'remitente_referencias' => 'Pickup checkout reference', 'destinatario_referencias' => 'Delivery checkout reference'];
         $this->withSession(['cotizacion_publica_id' => $this->quote->id])->post(route('b2c.checkout.procesar', $this->quote), $data)
             ->assertRedirect(route('b2c.confirmar', $this->quote));
@@ -671,7 +671,7 @@ final class NetworkProviderFulfillmentTest extends TestCase
         $this->app->instance(TenantContext::class, app(TenantContext::class));
         $this->withSession(['cotizacion_publica_id' => $quote->id, 'b2c_public_checkout' => ['id' => $quote->id,
             'tipo_envio' => 'sobre', 'fingerprint' => $quote->quote_request_fingerprint]])
-            ->post(route('b2c.checkout.procesar', $quote), ProviderFulfillmentFixture::addresses() + ['remitente_email' => 'envelope@example.test'])
+            ->post(route('b2c.checkout.procesar', $quote), ProviderFulfillmentFixture::addresses() + ['pickup_request' => ['mode' => 'ASAP'], 'remitente_email' => 'envelope@example.test'])
             ->assertRedirect(route('b2c.pago', $quote));
         $this->assertDatabaseCount('local_shipments', 0);
         app(PaymentVerificationService::class)->verifyPayload($quote->refresh(), ['id' => '456', 'status' => 'approved',

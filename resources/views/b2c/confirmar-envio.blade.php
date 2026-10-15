@@ -833,6 +833,9 @@
 
 <div class="modal" id="modal_pago">
     <div class="modal-card">
+        @if($cotizacion->provider === 'tenant_provider_local')
+            <p>Preferencia de recolección: {{ app(\App\Domain\Network\Providers\ProviderPickupPreference::class)->label(data_get($cotizacion->guia_request_snapshot, 'pickup_request')) }}. Sujeta a confirmación.</p>
+        @endif
         <h2>¿Cómo deseas pagar?</h2>
 
         <p class="modal-text">
@@ -942,5 +945,6 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
+@include('b2c.partials.revalidate-purchase')
 </body>
 </html>

@@ -114,6 +114,10 @@ final class ProviderFulfillmentController extends Controller
         if (! class_exists(TCPDF::class)) {
             require_once base_path('vendor/tecnickcom/tcpdf/tcpdf.php');
         }
+        $corporate = app(ProviderConsumerResolver::class)->corporate();
+        if ($corporate && (int) $bridge->consumer_tenant_id === (int) $corporate->id) {
+            $url = 'https://'.config('zigo_domains.portals.b2c.host').'/rastreo?'.http_build_query(['tracking_number' => $bridge->shipment->tracking_number]);
+        }
         $pdf = app(LocalGuidePdfRenderer::class)->render($bridge->shipment, $url);
 
         return response($pdf, 200, ['Content-Type' => 'application/pdf',

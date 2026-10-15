@@ -160,7 +160,7 @@ final class GuideRecoveryService
         }
         try {
             Mail::to($email)->send(new \App\Mail\ProviderFulfillmentConfirmedMail([
-                'folio' => $shipment->tracking_number, 'service' => $shipment->guide_snapshot['service_name'], 'provider' => $shipment->guide_snapshot['provider'],
+                'folio' => $shipment->tracking_number, 'service' => $shipment->guide_snapshot['service_name'], 'provider' => app(\App\Domain\Network\Providers\ProviderPresentation::class)->snapshotIdentity($shipment->guide_snapshot)['display_name'],
                 'pickup' => \App\Support\Presentation\AddressPresenter::lines($shipment->sender_snapshot),
                 'delivery' => \App\Support\Presentation\AddressPresenter::lines($shipment->recipient_snapshot),
                 'url' => $root.($token ? '/envio/recuperar/'.$plain : '/b2c/envio-local/'.$q->providerContract->uuid),

@@ -257,8 +257,8 @@
                                         <div class="actions-menu">
                                             <a
                                                 href="{{ route(
-                                                    'b2c.envios.detalle',
-                                                    $envio->id
+                                                    $envio->provider === 'tenant_provider_local' ? 'b2c.provider-fulfillment' : 'b2c.envios.detalle',
+                                                    $envio->provider === 'tenant_provider_local' ? $envio->providerContract->uuid : $envio->id
                                                 ) }}"
                                             >
                                                 Ver detalle
@@ -412,12 +412,7 @@
                                             {{-- Acciones de una guía generada --}}
                                             @if(!empty($envio->tracking_number) && strtolower((string) $envio->provider) !== 'xperta')
                                                 <a
-                                                    href="{{ url(
-                                                        '/rastreo?tracking_number='
-                                                        . urlencode(
-                                                            $envio->tracking_number
-                                                        )
-                                                    ) }}"
+                                                    href="{{ route('b2c.rastreo', ['tracking_number' => $envio->tracking_number]) }}"
                                                 >
                                                     Rastrear
                                                 </a>
@@ -427,7 +422,9 @@
                                                 <span>{{ $envio->guia_last_error_message }}</span>
                                             @endif
 
-                                            @if(!empty($envio->documento))
+                                            @if($envio->provider === 'tenant_provider_local' && $envio->providerContract?->fulfillment?->shipment)
+                                                <a href="{{ route('b2c.provider-fulfillment.guide', $envio->providerContract->uuid) }}">Descargar guía</a>
+                                            @elseif($envio->provider !== 'tenant_provider_local' && !empty($envio->documento))
                                                 <a
                                                     href="{{ strtolower((string) $envio->provider) === 'xperta' ? route('b2c.guia.etiqueta', $envio) : asset('storage/' . basename($envio->documento)) }}"
                                                     target="_blank"

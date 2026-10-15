@@ -15,7 +15,9 @@ final class LocalGuidePdfRenderer
         $guide = is_array($shipment->guide_snapshot) ? $shipment->guide_snapshot : [];
         $brand = $this->text(data_get($guide, 'branding.brand_name'), 'ZIGO Local');
         $service = $this->text($guide['service_name'] ?? $guide['service_code'] ?? null, $shipment->service_code ?: 'Directo');
-        $provider = $this->text($guide['provider'] ?? null, 'ZIGO Local');
+        $presentation = app(\App\Domain\Network\Providers\ProviderPresentation::class);
+        $identity = $presentation->snapshotIdentity($guide);
+        $provider = isset($guide['service_name']) ? $identity['display_name'] : $this->text($guide['provider'] ?? null, 'ZIGO Local');
         $pdf = new TCPDF('P', 'mm', [101.6, 152.4], true, 'UTF-8', false);
         $pdf->SetCreator('ZIGO Platform');
         $pdf->SetTitle('Guía '.$shipment->tracking_number);
@@ -37,6 +39,11 @@ final class LocalGuidePdfRenderer
         $pdf->SetXY(62, 6);
         $pdf->SetFont('helvetica', 'B', 8);
         $pdf->MultiCell(33, 4, "SERVICIO\n".$service, 1, 'C');
+        $operatorLogo = $identity['logo_path'];
+        if ($presentation->snapshotLogoUrl($operatorLogo)) {
+            // Only content-addressed local guide assets, never an arbitrary remote image.
+            try { $pdf->Image(Storage::disk('public')->path($operatorLogo), 65, 14.5, 27, 5, '', '', '', false, 300, '', false, false, 0, true); } catch (Throwable) {}
+        }
         $pdf->SetXY(6, 20);
         $pdf->SetFont('helvetica', 'B', 11);
         $pdf->Cell(89, 6, $shipment->tracking_number, 0, 1, 'C');
@@ -51,10 +58,14 @@ final class LocalGuidePdfRenderer
         $this->address($pdf, 49, 'RECOLECCIÓN / REMITENTE', $guide['sender'] ?? []);
         $this->address($pdf, 78, 'ENTREGA / DESTINATARIO', $guide['recipient'] ?? []);
         $this->package($pdf, 107, $guide['package'] ?? [], $guide['reference'] ?? null);
-        $pdf->SetXY(6, 135);
+        $pdf->SetXY(6, 133);
         $pdf->SetFont('helvetica', 'B', 7);
         $operator = isset($guide['service_name']) ? 'Operado por '.$provider : 'Proveedor: '.$provider;
-        $pdf->Cell(89, 5, 'Servicio: '.$service.'     '.$operator, 1, 1, 'C');
+        if (isset($guide['service_name'])) {
+            $pdf->MultiCell(89, 3, "Operador logístico:\n".$provider."\nServicio: ".$service, 0, 'C');
+        } else {
+            $pdf->Cell(89, 5, 'Servicio: '.$service.'     '.$operator, 1, 1, 'C');
+        }
         try {
             $issued = data_get($guide, 'issued_at') ? \Carbon\Carbon::parse(data_get($guide, 'issued_at'))->format('d/m/Y H:i') : now()->format('d/m/Y H:i');
         } catch (Throwable) {

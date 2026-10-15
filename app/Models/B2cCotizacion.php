@@ -18,10 +18,52 @@ class B2cCotizacion extends Model
         return $this->hasOne(\App\Domain\Network\Providers\Models\ProviderContract::class, 'b2c_cotizacion_id');
     }
 
+    /** Derived state belongs to one purchase; customer addresses/package stay on the copy. */
+    public const LOCAL_PURCHASE_RESET_FIELDS = [
+        'payment_id', 'payment_status', 'payment_external_reference', 'payment_collection_id',
+        'payment_verification_status', 'payment_verification_source', 'payment_verification_error',
+        'payment_verification_attempted_at', 'payment_verified_at', 'payment_verified_amount',
+        'payment_verified_currency', 'payment_verified_external_reference', 'payment_verification_payload',
+        'guia_id', 'tracking_number', 'documento', 'guia_estatus', 'guia_provider_reference',
+        'guia_provider_request_number', 'guia_generation_attempts', 'guia_generation_started_at',
+        'guia_last_attempt_at', 'guia_generated_at', 'guia_recovered_at', 'guia_last_error_code',
+        'guia_last_error_message', 'guia_request_snapshot', 'guia_response_snapshot', 'guia_provider_shipment_id',
+        'guia_provider_status', 'guia_label_format', 'guia_request_fingerprint', 'guia_generated_by',
+        'guide_processing_email_sent_at', 'guide_generated_email_sent_at', 'guide_pending_email_sent_at',
+        'guide_pdf_recovered_email_sent_at', 'provider_confirmation_claimed_at', 'provider_fulfillment_attempted_at',
+        'provider', 'carrier', 'service_code', 'quote_source', 'provider_quote_reference',
+        'quote_request_fingerprint', 'quote_correlation_id', 'quote_expires_at',
+        'logistico', 'servicio', 'precio', 'precio_sin_seguro', 'provider_base_price',
+        'provider_extended_area_price', 'provider_subtotal', 'provider_total',
+        'zigo_margin_percentage', 'zigo_fixed_fee', 'zigo_margin_amount', 'zigo_adjustment_type',
+        'zigo_adjustment_value', 'zigo_adjustment_amount', 'zigo_discount_type', 'zigo_discount_value',
+        'zigo_discount_amount', 'zigo_final_price', 'zigo_profit_amount', 'zigo_customer_segment',
+        'zigo_pricing_rule_id', 'zigo_pricing_adjustment_id', 'zigo_client_pricing_rule_id',
+    ];
+
+    public function resetLocalPurchaseState(): void
+    {
+        if ($this->exists) throw new \LogicException('Only a new unsaved copy can reset purchase state.');
+        foreach (self::LOCAL_PURCHASE_RESET_FIELDS as $field) {
+            if (array_key_exists($field, $this->getAttributes())) $this->setAttribute($field, null);
+        }
+        $this->guia_generation_attempts = 0;
+        $this->unsetRelations();
+    }
+
     protected static function booted(): void
     {
         static::updating(function (self $quote): void {
             if ($quote->getRawOriginal('provider') !== 'tenant_provider_local') return;
+            if ($quote->isDirty('guia_request_snapshot')) {
+                $paid = in_array($quote->getRawOriginal('payment_status'), ['approved', 'saldo_prepago'], true)
+                    || $quote->getRawOriginal('payment_verification_status') === 'VERIFIED'
+                    || $quote->getRawOriginal('payment_verified_at') !== null
+                    || $quote->getRawOriginal('guia_estatus') === 'GENERADA';
+                if ($paid && data_get($quote->getOriginal('guia_request_snapshot'), 'pickup_request') !== data_get($quote->guia_request_snapshot, 'pickup_request')) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['pickup_request' => 'La preferencia de recolección ya está congelada.']);
+                }
+            }
             $frozen = ['provider', 'carrier', 'service_code', 'quote_source', 'provider_quote_reference',
                 'provider_base_price', 'provider_subtotal', 'provider_total', 'precio', 'precio_sin_seguro',
                 'quote_request_fingerprint', 'quote_expires_at', 'logistico', 'servicio', 'tipo_envio',

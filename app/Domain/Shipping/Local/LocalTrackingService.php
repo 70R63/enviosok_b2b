@@ -27,7 +27,7 @@ final class LocalTrackingService
             'status_code' => $shipment->status,
             'status_label' => $labels[$shipment->status] ?? 'Actualización',
             'delivered' => $shipment->status === 'DELIVERED',
-            'events' => $shipment->events->map(fn (LocalTrackingEvent $event) => ['status_code'=>$event->status,'status_label'=>$labels[$event->status]??'Actualización','occurred_at'=>$event->occurred_at?->toIso8601String()])->values()->all(),
+            'events' => $shipment->events->filter(fn (LocalTrackingEvent $event) => $event->isPhysical())->values()->map(fn (LocalTrackingEvent $event) => ['status_code'=>$event->status,'status_label'=>$labels[$event->status]??'Actualización','occurred_at'=>$event->occurred_at?->toIso8601String()])->values()->all(),
         ];
     }
 
@@ -38,7 +38,7 @@ final class LocalTrackingService
         return DB::transaction(function () use ($shipment, $status, $userId, $description, $actorMetadata) {
             $shipment = LocalShipment::query()->whereKey($shipment->id)->lockForUpdate()->firstOrFail();
             if ($shipment->status === $status) {
-                return $shipment->events()->where('status', $status)->latest('id')->firstOrFail();
+                return $shipment->events()->physical()->where('status', $status)->reorder()->latest('id')->firstOrFail();
             }
             if (! in_array($status, self::TRANSITIONS[$shipment->status] ?? [], true)) {
                 throw new DomainException('Transición logística inválida.');

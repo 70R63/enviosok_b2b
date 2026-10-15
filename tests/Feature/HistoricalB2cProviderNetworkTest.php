@@ -135,7 +135,7 @@ final class HistoricalB2cProviderNetworkTest extends TestCase
         $option = app(ProviderQuotePublisher::class)->publish($quote,
             app(TenantProviderQuoteSource::class)->options($quote, 'anonymous'))[0];
         app(ProviderContractSelectionService::class)->select($quote, $option['provider_snapshot_uuid']);
-        $quote->refresh()->update(['estatus' => 'CHECKOUT_COMPLETO']);
+        $quote->refresh()->update(['estatus' => 'CHECKOUT_COMPLETO', 'guia_request_snapshot' => ['pickup_request' => ['mode' => 'ASAP', 'requested_date' => null, 'window_start' => null, 'window_end' => null, 'timezone' => config('app.timezone'), 'requested_at' => now()->toIso8601String()]]]);
         $this->mock(IdentityGuideAccessService::class)->shouldReceive('assertCanProceed')->andReturn([]);
         $this->mock(B2cCheckoutDebtService::class, function ($mock): void {
             $mock->shouldReceive('reserveForCotizacion')->once()->andReturn(['payment_total' => 145]);

@@ -89,6 +89,11 @@ Route::domain(config('zigo_domains.portals.b2c.host'))
                 ->name('b2c.login.store');
         });
 
+        Route::get('/rastreo', [CotizacionPublicaController::class, 'rastreoPublico'])->name('b2c.rastreo');
+        Route::post('/rastreo', [CotizacionPublicaController::class, 'buscarRastreoPublico'])->middleware('throttle:30,1')->name('b2c.rastreo.buscar');
+        Route::get('/rastrear', [CotizacionPublicaController::class, 'rastreoPublico'])->name('b2c.rastrear');
+        Route::get('/tracking', [CotizacionPublicaController::class, 'rastreoPublico'])->name('b2c.tracking');
+
         Route::get('/', [CotizacionPublicaController::class, 'index'])
             ->name('home');
 
@@ -121,27 +126,27 @@ Route::get(
     [CotizacionPublicaController::class, 'confirmarEnvio']
 )
     ->middleware('auth')
-    ->name('b2c.confirmar');
+    ->middleware(\App\Http\Middleware\PrivateCheckoutResponse::class)->name('b2c.confirmar');
 
 Route::post(
     '/b2c/confirmar/{cotizacion}',
     [CotizacionPublicaController::class, 'procesarConfirmacion']
 )
     ->middleware('auth')
-    ->name('b2c.confirmar.procesar');
+    ->middleware(\App\Http\Middleware\PrivateCheckoutResponse::class)->name('b2c.confirmar.procesar');
 
 /*provisional pago */
 Route::get('/b2c/pago/{cotizacion}', [CotizacionPublicaController::class, 'pago'])
-    ->name('b2c.pago');
+    ->middleware(\App\Http\Middleware\PrivateCheckoutResponse::class)->name('b2c.pago');
 
 Route::get('/b2c/pago/{cotizacion}/success', [CotizacionPublicaController::class, 'pagoSuccess'])
-    ->name('b2c.pago.success');
+    ->middleware(\App\Http\Middleware\PrivateCheckoutResponse::class)->name('b2c.pago.success');
 
 Route::get('/b2c/pago/{cotizacion}/failure', [CotizacionPublicaController::class, 'pagoFailure'])
-    ->name('b2c.pago.failure');
+    ->middleware(\App\Http\Middleware\PrivateCheckoutResponse::class)->name('b2c.pago.failure');
 
 Route::get('/b2c/pago/{cotizacion}/pending', [CotizacionPublicaController::class, 'pagoPending'])
-    ->name('b2c.pago.pending');
+    ->middleware(\App\Http\Middleware\PrivateCheckoutResponse::class)->name('b2c.pago.pending');
 
 Route::post('/b2c/guia/{cotizacion}/generar', [CotizacionPublicaController::class, 'generarGuia'])
     ->middleware(['auth', 'throttle:6,1'])
@@ -150,13 +155,6 @@ Route::post('/b2c/guia/{cotizacion}/generar', [CotizacionPublicaController::clas
 Route::get('/b2c/guia/{cotizacion}/etiqueta', [CotizacionPublicaController::class, 'descargarEtiquetaB2c'])
     ->middleware(['throttle:12,1'])
     ->name('b2c.guia.etiqueta');
-
-//Opciones de Rastreo
-Route::get('/rastreo', [CotizacionPublicaController::class, 'rastreoPublico'])
-    ->name('b2c.rastreo');
-
-Route::post('/rastreo', [CotizacionPublicaController::class, 'buscarRastreoPublico'])
-    ->name('b2c.rastreo.buscar');
 
 //Registro b2c
 Route::get('/b2c/register', [CotizacionPublicaController::class, 'registroB2c'])
@@ -274,7 +272,7 @@ Route::get('/b2c/prepago/{recarga}/pending', [B2cMisEnviosController::class, 're
     ->name('b2c.prepago.pending');
 
 Route::post('/b2c/pago/{cotizacion}/saldo', [CotizacionPublicaController::class, 'pagarConSaldo'])
-    ->name('b2c.pago.saldo');
+    ->middleware(\App\Http\Middleware\PrivateCheckoutResponse::class)->name('b2c.pago.saldo');
 
 // Adeudos B2C
 Route::get('/b2c/adeudos', [B2cAdeudoController::class, 'index'])
@@ -995,10 +993,10 @@ Route::view('/api-hub', 'public.api-hub')->name('public.api-hub');
 Route::view('/soporte', 'public.soporte')->name('public.soporte');
 
 Route::get('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'checkout'])
-    ->name('b2c.checkout');
+    ->middleware(\App\Http\Middleware\PrivateCheckoutResponse::class)->name('b2c.checkout');
 
 Route::post('/b2c/checkout/{cotizacion}', [CotizacionPublicaController::class, 'procesarCheckout'])
-    ->name('b2c.checkout.procesar');
+    ->middleware(\App\Http\Middleware\PrivateCheckoutResponse::class)->name('b2c.checkout.procesar');
 
 Route::get('/b2c/envio-local/{contract:uuid}', [\App\Http\Controllers\B2C\ProviderFulfillmentController::class, 'publicShow'])
     ->name('b2c.provider-fulfillment');

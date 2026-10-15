@@ -807,6 +807,26 @@
                         </div>
                     </section>
 
+                    @if($cotizacion->provider === 'tenant_provider_local')
+                    <section class="card">
+                        <h2>Preferencia de recolección</h2>
+                        <p>La fecha y ventana solicitadas están sujetas a confirmación del operador.</p>
+                        @php
+                            $pickup = data_get($cotizacion->guia_request_snapshot, 'pickup_request', []);
+                        @endphp
+                        <label>Preferencia
+                            <select name="pickup_request[mode]" required>
+                                <option value="">Selecciona una opción</option>
+                                <option value="ASAP" @selected(old('pickup_request.mode', $pickup['mode'] ?? '') === 'ASAP')>Lo antes posible</option>
+                                <option value="WINDOW" @selected(old('pickup_request.mode', $pickup['mode'] ?? '') === 'WINDOW')>Programar ventana</option>
+                            </select>
+                        </label>
+                        <p>Si eliges programar ventana, completa fecha e inicio/fin ({{ config('app.timezone') }}).</p>
+                        <label>Fecha solicitada <input type="date" name="pickup_request[requested_date]" min="{{ now(config('app.timezone'))->toDateString() }}" value="{{ old('pickup_request.requested_date', $pickup['requested_date'] ?? '') }}"></label>
+                        <label>Hora inicio <input type="time" name="pickup_request[window_start]" value="{{ old('pickup_request.window_start', $pickup['window_start'] ?? '') }}"></label>
+                        <label>Hora fin <input type="time" name="pickup_request[window_end]" value="{{ old('pickup_request.window_end', $pickup['window_end'] ?? '') }}"></label>
+                    </section>
+                    @endif
                     <section class="card package-card">
                         <h2>Contenido del paquete</h2>
 
@@ -1467,5 +1487,6 @@
     );
     </script>
     @endif
-    </body>
+    @include('b2c.partials.revalidate-purchase')
+</body>
 </html>

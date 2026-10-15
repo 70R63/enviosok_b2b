@@ -383,6 +383,7 @@ Route::middleware('tenant.resolve')->prefix('admin')->name('tenant.admin.')->gro
                 Route::get('/', [\App\Http\Controllers\Tenant\ProviderFulfillmentInboxController::class, 'index'])->name('index');
                 Route::get('/{fulfillment}', [\App\Http\Controllers\Tenant\ProviderFulfillmentInboxController::class, 'show'])->whereUuid('fulfillment')->name('show');
                 Route::post('/{fulfillment}/accept', [\App\Http\Controllers\Tenant\ProviderFulfillmentInboxController::class, 'accept'])->whereUuid('fulfillment')->name('accept');
+                Route::post('/{fulfillment}/pickup-confirmation', [\App\Http\Controllers\Tenant\ProviderFulfillmentInboxController::class, 'confirmPickup'])->whereUuid('fulfillment')->middleware('throttle:20,1')->name('pickup-confirmation');
                 Route::post('/{fulfillment}/reject', [\App\Http\Controllers\Tenant\ProviderFulfillmentInboxController::class, 'reject'])->whereUuid('fulfillment')->name('reject');
             });
             Route::get('/operacion', [TenantLogisticsController::class,'index'])->middleware('tenant.workspace.operational')->name('logistics.index');
