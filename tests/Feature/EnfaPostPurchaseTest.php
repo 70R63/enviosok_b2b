@@ -181,6 +181,7 @@ final class EnfaPostPurchaseTest extends TestCase
     {
         $bridge = $this->accepted();
         $tracking = $bridge->shipment->tracking_number;
+        auth()->logout();
         $url = $this->url($path);
         $response = $method === 'POST' ? $this->post($url, ['tracking_number' => $tracking]) : $this->get($url.'?tracking_number='.$tracking);
         $response->assertOk()->assertViewIs('b2c.provider-tracking-public')->assertSee($tracking)->assertSee('ENFA ENTREGAS URBANAS')
@@ -189,6 +190,56 @@ final class EnfaPostPurchaseTest extends TestCase
         $this->assertSame(['tracking_number', 'operator', 'service', 'status_label', 'timeline'], array_keys($response->viewData('publicTracking')));
     }
     public static function trackingPaths(): array { return [['/rastreo','GET'], ['/rastreo','POST'], ['/rastrear','GET'], ['/tracking','GET']]; }
+
+    #[DataProvider('initialTrackingPaths')]
+    public function test_b2c_tracking_initial_state_uses_new_shell_without_error(string $path): void
+    {
+        auth()->logout();
+        $this->get($this->url($path))->assertOk()->assertViewIs('b2c.provider-tracking-public')
+            ->assertSee('method="GET"', false)->assertSee('Rastrear')->assertDontSee('No encontramos información')
+            ->assertDontSee('search-box')->assertDontSee('#facc15');
+    }
+    public static function initialTrackingPaths(): array { return [['/rastreo'], ['/rastrear'], ['/tracking']]; }
+
+    #[DataProvider('trackingPaths')]
+    public function test_missing_b2c_tracking_uses_new_shell_and_retains_search(string $path, string $method): void
+    {
+        auth()->logout();
+        $tracking = 'PRUEBA-NO-EXISTE-123';
+        $response = $method === 'POST'
+            ? $this->post($this->url($path), ['tracking_number' => $tracking])
+            : $this->get($this->url($path).'?tracking_number='.$tracking);
+        $response->assertOk()->assertViewIs('b2c.provider-tracking-public')
+            ->assertSee('No encontramos información para el número de rastreo: '.$tracking)
+            ->assertSee('value="'.$tracking.'"', false)->assertSee('method="GET"', false)
+            ->assertDontSee('search-box')->assertDontSee('#facc15');
+        $this->assertNull($response->viewData('publicTracking'));
+        $this->assertNull($response->viewData('nationalTracking'));
+        $this->assertArrayNotHasKey('cotizacion', $response->original->getData());
+    }
+
+    public function test_missing_tracking_is_escaped_in_the_new_shell(): void
+    {
+        $tracking = '<script>alert(1)</script>';
+        $this->get($this->url('/rastreo?tracking_number='.rawurlencode($tracking)))
+            ->assertOk()->assertViewIs('b2c.provider-tracking-public')
+            ->assertSee($tracking)->assertDontSee($tracking, false);
+    }
+
+    public function test_existing_provider_tracking_reads_historical_snapshot_without_rewriting_it(): void
+    {
+        $bridge = $this->fulfill();
+        $snapshot = $bridge->shipment->guide_snapshot;
+        unset($snapshot['provider_identity'], $snapshot['service_name']);
+        $snapshot['provider'] = 'entregasenfa';
+        DB::table('local_shipments')->where('id', $bridge->local_shipment_id)
+            ->update(['guide_snapshot' => json_encode($snapshot)]);
+        auth()->logout();
+        $this->get($this->url('/rastreo?tracking_number='.$bridge->shipment->tracking_number))
+            ->assertOk()->assertViewIs('b2c.provider-tracking-public')
+            ->assertSee($bridge->shipment->tracking_number)->assertDontSee('search-box');
+        $this->assertSame($snapshot, $bridge->shipment->fresh()->guide_snapshot);
+    }
 
     public function test_white_label_routes_remain_and_unknown_host_has_no_zigo_consumer(): void
     {
@@ -212,11 +263,16 @@ final class EnfaPostPurchaseTest extends TestCase
     }
 
     #[DataProvider('nationalProviders')]
-    public function test_national_tracking_is_unchanged(string $provider): void
+    public function test_national_tracking_keeps_results_in_the_new_b2c_shell(string $provider): void
     {
         B2cCotizacion::create(['tracking_number' => 'NATIONAL123', 'provider' => $provider, 'logistico' => 'Estafeta', 'guia_estatus' => 'GENERADA']);
-        $this->get($this->url('/rastreo?tracking_number=NATIONAL123'))->assertOk()->assertViewIs('b2c.rastreo')->assertSee('Estafeta')->assertSee('Guía generada');
-        $this->post($this->url('/rastreo'), ['tracking_number' => 'NATIONAL123'])->assertOk()->assertViewIs('b2c.rastreo');
+        $this->get($this->url('/rastreo?tracking_number=NATIONAL123'))->assertOk()->assertViewIs('b2c.provider-tracking-public')->assertSee('Estafeta')->assertSee('Guía generada');
+        $this->post($this->url('/rastreo'), ['tracking_number' => 'NATIONAL123'])->assertOk()->assertViewIs('b2c.provider-tracking-public');
+        B2cCotizacion::create(['documento' => 'DOCUMENT123', 'provider' => $provider, 'logistico' => 'Estafeta', 'guia_estatus' => 'GENERADA']);
+        $response = $this->get($this->url('/rastreo?tracking_number=DOCUMENT123'))->assertOk()
+            ->assertViewIs('b2c.provider-tracking-public')->assertSee('DOCUMENT123')->assertSee('Guía generada');
+        $this->assertSame(['tracking_number', 'operator', 'status_label'], array_keys($response->viewData('nationalTracking')));
+        $this->assertArrayNotHasKey('cotizacion', $response->original->getData());
     }
     public static function nationalProviders(): array { return [['estafeta'], ['xperta']]; }
 

@@ -2189,6 +2189,9 @@ private function buildEstafetaPayload(B2cCotizacion $cotizacion): array
 public function rastreoPublico(Request $request)
 {
     if ($request->filled('tracking_number')) return $this->buscarRastreoPublico($request);
+    if ($request->getHost() === config('zigo_domains.portals.b2c.host')) {
+        return view('b2c.provider-tracking-public', ['tracking' => '', 'publicTracking' => null]);
+    }
     return view('b2c.rastreo');
 }
 
@@ -2206,6 +2209,23 @@ public function buscarRastreoPublico(Request $request)
                 ->where('consumer_tenant_id', $consumer->id)->first() : null;
         $publicTracking = $bridge ? app(\App\Domain\Network\Providers\ProviderTrackingProjection::class)->publicProject($bridge, $consumer) : null;
         return response()->view('b2c.provider-tracking-public', compact('tracking', 'publicTracking'))->header('Cache-Control', 'private, no-store');
+    }
+    if ($request->getHost() === config('zigo_domains.portals.b2c.host')) {
+        // Keep historical lookup, but expose only its public result in the B2C shell.
+        $nationalTracking = $cotizacion ? [
+            'tracking_number' => $cotizacion->tracking_number ?: $tracking,
+            'operator' => $cotizacion->logistico ?: 'No disponible',
+            'status_label' => match (strtoupper($cotizacion->guia_estatus ?? '')) {
+                'GENERADA' => 'Guía generada',
+                'RECOLECTADA' => 'Recolectado',
+                'EN_TRANSITO' => 'En tránsito',
+                'ENTREGADA' => 'Entregado',
+                'ERROR_PROVEEDOR' => 'No fue posible generar la guía con el proveedor. El pago está registrado, pero la guía requiere reintento.',
+                default => 'Pendiente de actualización',
+            },
+        ] : null;
+        return view('b2c.provider-tracking-public', ['tracking' => $tracking,
+            'publicTracking' => null, 'nationalTracking' => $nationalTracking]);
     }
     return view('b2c.rastreo', compact('tracking', 'cotizacion'));
 }

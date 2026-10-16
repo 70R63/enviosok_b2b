@@ -17,8 +17,12 @@
                 <li>{{ $event['label'] }} · <time datetime="{{ $event['occurred_at'] }}">{{ \Carbon\Carbon::parse($event['occurred_at'])->timezone(config('app.timezone'))->format('d/m/Y H:i') }}</time></li>
             @endforeach
         </ol>
-    @else
-        <p>No encontramos información para ese número de rastreo.</p>
+    @elseif($nationalTracking ?? null)
+        <p>Tracking: {{ $nationalTracking['tracking_number'] }}</p>
+        <p>Mensajería: {{ $nationalTracking['operator'] }}</p>
+        <p role="status">{{ $nationalTracking['status_label'] }}</p>
+    @elseif($tracking !== '')
+        <p role="status">No encontramos información para el número de rastreo: {{ $tracking }}</p>
     @endif
 </section>
 @endsection
